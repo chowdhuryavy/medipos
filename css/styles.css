@@ -789,3 +789,52 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .fee-rules { display: grid; gap: 10px; margin-top: 8px; }
 .fee-row { display: grid; grid-template-columns: minmax(120px, 1.2fr) minmax(120px, 1.4fr) repeat(3, minmax(70px, 1fr)); gap: 8px; align-items: center; }
 @media (max-width: 700px) { .fee-row { grid-template-columns: 1fr 1fr; } .fee-row > strong { grid-column: 1 / -1; } }
+
+/* ───────── Polish: modals, settings, permissions, scheduled reports (1.1.23) ───────── */
+.modal { border: 1px solid color-mix(in srgb, var(--brand) 14%, var(--border)); }
+.modal header { background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 9%, var(--surface)), var(--surface)); }
+.modal header h3 { font-size: 18px; letter-spacing: -.01em; }
+.modal-body .form-grid label, .modal-body label { font-weight: 600; font-size: 13px; color: var(--muted); }
+.modal-body .form-actions { position: sticky; bottom: -22px; background: var(--surface); padding: 12px 0 2px; margin-top: 6px; }
+
+.settings-form .card, .card.list-card, .sched-intro { border-radius: 20px; }
+.settings-form .card > .card-head, .settings-form .card > header { padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.settings-form .card > header h3 { font-size: 17px; }
+.settings-form .card > header::before { content: ""; width: 4px; height: 18px; border-radius: 4px; background: linear-gradient(180deg, var(--brand-2), var(--brand)); margin-right: 10px; }
+.settings-form .card > header { display: flex; align-items: center; }
+.sticky-actions { position: sticky; bottom: 12px; display: flex; justify-content: flex-end; z-index: 5; }
+.sticky-actions .btn { box-shadow: var(--shadow); }
+
+/* Permissions */
+.access-grid { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+.access-list { display: grid; gap: 6px; padding: 14px; position: sticky; top: 76px; }
+.access-user { display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 14px; border: 1px solid transparent; background: none; text-align: left; cursor: pointer; color: var(--text); width: 100%; }
+.access-user:hover { background: var(--surface-2); }
+.access-user.active { background: color-mix(in srgb, var(--brand) 10%, var(--surface)); border-color: color-mix(in srgb, var(--brand) 35%, transparent); }
+.access-user small { display: block; color: var(--muted); }
+.avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: #fff; background: linear-gradient(135deg, var(--brand-2), var(--brand)); flex: none; }
+.avatar.sm { width: 30px; height: 30px; font-size: 13px; }
+.access-panel { display: grid; gap: 12px; }
+.access-panel .card-head { flex-wrap: wrap; }
+.access-matrix th, .access-matrix td { text-align: center; }
+.access-matrix td:first-child, .access-matrix th:first-child { text-align: left; white-space: nowrap; }
+.access-matrix .is-mine { background: color-mix(in srgb, var(--brand) 12%, transparent); }
+.access-matrix th.is-mine { color: var(--brand); }
+.access-matrix .grp-row td { background: var(--surface-2); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); text-align: left; }
+.access-matrix .yes { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+.access-matrix .yes svg { width: 14px; height: 14px; }
+.access-matrix .no { color: var(--muted); opacity: .5; }
+@media (max-width: 900px) { .access-grid { grid-template-columns: 1fr; } .access-list { position: static; grid-auto-flow: column; overflow-x: auto; } .access-user { min-width: 180px; } }
+
+/* Scheduled reports */
+.sched-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 16px; display: grid; gap: 14px; box-shadow: var(--shadow-sm, none); }
+.sched-head { display: flex; gap: 10px; align-items: center; }
+.sched-name { flex: 1; font-size: 17px; font-weight: 700; border: none; background: transparent; padding: 6px 0; border-bottom: 2px dashed var(--border); }
+.sched-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.sched-grid .span-2 { grid-column: span 2; }
+.sched-grid label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.sched-fmt, .sched-reports { border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.sched-reports { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.sched-fmt legend, .sched-reports legend { font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 4px; }
+.sched-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 700px) { .sched-grid { grid-template-columns: 1fr; } .sched-grid .span-2 { grid-column: auto; } }

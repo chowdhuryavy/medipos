@@ -17,13 +17,16 @@ import { pushToSheets } from "../sheets.js";
 import { post } from "../api.js";
 import { DEFAULT_TEMPLATES, EMAIL_PLACEHOLDERS, DEFAULT_BRAND_COLOR } from "../email-defaults.js";
 import { DEFAULT_SERVICE_FEES, SERVICE_TYPES } from "../services.js";
+import { REPORTS } from "../report-tables.js";
 
 const TABS = [
   ["users", "Staff"],
+  ["access", "Permissions"],
   ["settings", "Shop & rules"],
   ["lists", "Lists & payments"],
   ["roles", "Role access"],
   ["branding", "Branding & email"],
+  ["reports", "Scheduled reports"],
   ["integrations", "Integrations"],
   ["audit", "Activity log"],
 ];
@@ -39,7 +42,7 @@ export async function render(el) {
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
-  const views = { users: viewUsers, settings: viewSettings, lists: viewLists, roles: viewRoles, branding: viewBranding, integrations: viewIntegrations, audit: viewAudit };
+  const views = { users: viewUsers, access: viewAccess, settings: viewSettings, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, integrations: viewIntegrations, audit: viewAudit };
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
@@ -730,6 +733,204 @@ async function viewIntegrations(body) {
 }
 
 /* ───────── Audit log ───────── */
+
+/* ───────── Permissions: pick a person, see every role's access side by side ───────── */
+
+async function viewAccess(body) {
+  const snap = await getDocs(collection(db, "users"));
+  const users = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const roleKeys = Object.keys(roles);
+  let selected = users.find((u) => u.id === session.uid)?.id || users[0]?.id;
+
+  const canOf = (roleKey, kind, key) => {
+    if (roleKey === "admin") return true;
+    const r = roles[roleKey];
+    if (!r) return false;
+    return kind === "page" ? r.pages.includes(key) : r.write.includes(key);
+  };
+
+  const paint = () => {
+    const u = users.find((x) => x.id === selected);
+    if (!u) { body.innerHTML = `<section class="card"><p class="muted center">No staff yet. Add staff first.</p></section>`; return; }
+    const current = u.role || "";
+    body.innerHTML = `
+      <div class="access-grid">
+        <aside class="card access-list">
+          <header class="card-head"><h3>Staff</h3><span class="badge">${users.length}</span></header>
+          ${users.map((x) => `
+            <button class="access-user ${x.id === selected ? "active" : ""}" data-pick="${esc(x.id)}">
+              <span class="avatar sm">${esc((x.name || "?").trim().charAt(0).toUpperCase())}</span>
+              <span><strong>${esc(x.name || "Unnamed")}</strong><small>${esc(roles[x.role]?.label || x.role || "No role")}${x.active ? "" : " · disabled"}</small></span>
+            </button>`).join("")}
+        </aside>
+        <section class="card access-panel">
+          <header class="card-head">
+            <div><h3>${esc(u.name || "Unnamed")}</h3><small class="muted">${esc(u.email || "")}</small></div>
+            <div class="row-actions">
+              <select id="ac-role" aria-label="Role for ${esc(u.name)}">${roleKeys.map((k) => `<option value="${esc(k)}" ${k === current ? "selected" : ""}>${esc(roles[k].label)}</option>`).join("")}</select>
+              <button class="btn primary sm" id="ac-save">${icon("check")}<span>Save role</span></button>
+            </div>
+          </header>
+          <p class="muted small">The highlighted column is this person's role. Each row shows what a role can do. The database enforces the same rules.</p>
+          <div class="table-wrap"><table class="matrix access-matrix">
+            <thead><tr>
+              <th>Permission</th>
+              ${roleKeys.map((k) => `<th class="${k === current ? "is-mine" : ""}">${esc(roles[k].label)}</th>`).join("")}
+            </tr></thead>
+            <tbody>
+              <tr class="grp-row"><td colspan="${roleKeys.length + 1}">Can open these pages</td></tr>
+              ${PAGE_KEYS.map((p) => `<tr><td>${esc(PAGE_NAMES[p])}</td>${roleKeys.map((k) => `<td class="c ${k === current ? "is-mine" : ""}">${canOf(k, "page", p) ? `<span class="yes">${icon("check")}</span>` : `<span class="no">–</span>`}</td>`).join("")}</tr>`).join("")}
+              <tr class="grp-row"><td colspan="${roleKeys.length + 1}">Can change data in these areas</td></tr>
+              ${WRITE_AREAS.map((a) => `<tr><td>${esc(WRITE_LABEL[a])}</td>${roleKeys.map((k) => `<td class="c ${k === current ? "is-mine" : ""}">${canOf(k, "write", a) ? `<span class="yes">${icon("check")}</span>` : `<span class="no">–</span>`}</td>`).join("")}</tr>`).join("")}
+            </tbody>
+          </table></div>
+        </section>
+      </div>`;
+    body.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", () => { selected = b.dataset.pick; paint(); }));
+    onAction(body.querySelector("#ac-save"), async () => {
+      const role = body.querySelector("#ac-role").value;
+      if (u.id === session.uid && role !== "admin") return toast("You cannot remove your own admin access", "error");
+      await updateDoc(doc(db, "users", u.id), { role, updatedAt: serverTimestamp() });
+      await audit("user.role", { id: u.id, role });
+      u.role = role;
+      toast("Role saved. It applies the next time they sign in.", "success");
+      paint();
+    });
+  };
+  paint();
+}
+
+/* ───────── Scheduled reports: send chosen reports by email at a set time each day ───────── */
+
+const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+const localTime = (tz) => {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+    const g = (t) => parts.find((p) => p.type === t).value;
+    return { date: `${g("year")}-${g("month")}-${g("day")}`, minutes: Number(g("hour")) * 60 + Number(g("minute")) };
+  } catch { return null; }
+};
+
+async function viewScheduledReports(body) {
+  const ref = doc(db, "settings", "reportSchedules");
+  const snap = await getDoc(ref);
+  let items = (snap.data()?.items || []).map((s) => ({ ...s }));
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+  const card = (s, i) => `
+    <article class="sched-card" data-i="${i}">
+      <header class="sched-head">
+        <input class="sched-name" data-k="name" value="${esc(s.name || "")}" maxlength="50" aria-label="Schedule name" />
+        <label class="switch"><input type="checkbox" data-k="enabled" ${s.enabled ? "checked" : ""} /><span>On</span></label>
+        <button type="button" class="icon-btn sm hover-danger" data-remove aria-label="Remove schedule">${icon("trash")}</button>
+      </header>
+      <div class="sched-grid">
+        <label>Send at<input type="time" data-k="time" value="${esc(s.time || "02:00")}" /></label>
+        <label>Shop time zone<input data-k="timezone" value="${esc(s.timezone || browserTz)}" /></label>
+        <fieldset class="sched-fmt"><legend>File type</legend>
+          <label class="check"><input type="checkbox" data-fmt="pdf" ${(s.formats || ["pdf"]).includes("pdf") ? "checked" : ""} /> PDF</label>
+          <label class="check"><input type="checkbox" data-fmt="xlsx" ${(s.formats || []).includes("xlsx") ? "checked" : ""} /> Excel</label>
+        </fieldset>
+        <label class="span-2">Send to (comma separated emails)
+          <input data-k="recipients" value="${esc((s.recipients || []).join(", "))}" placeholder="owner@shop.com, accounts@shop.com" />
+        </label>
+      </div>
+      <fieldset class="sched-reports"><legend>Reports to include</legend>
+        ${REPORTS.map(([k, l]) => `<label class="check"><input type="checkbox" data-rep="${k}" ${(s.reports || []).includes(k) ? "checked" : ""} /> ${esc(l)}</label>`).join("")}
+      </fieldset>
+      <footer class="sched-foot">
+        <small class="muted">${s.lastRunStatus ? esc(s.lastRunStatus) : "Not sent yet"}</small>
+        <button type="button" class="btn ghost sm" data-now>${icon("mail")}<span>Send yesterday now</span></button>
+      </footer>
+    </article>`;
+
+  const paint = () => {
+    body.innerHTML = `
+      <section class="card sched-intro">
+        <div class="toolbar wrap">
+          <div>
+            <h3>Scheduled reports by email</h3>
+            <p class="muted small">Each schedule emails the reports you tick for <strong>yesterday</strong>, at the time you set, in the shop's time zone. Sent as PDF and/or Excel files.</p>
+          </div>
+          <div class="grow"></div>
+          <button class="btn ghost" id="sc-add">${icon("plus")}<span>Add schedule</span></button>
+          <button class="btn primary" id="sc-save">${icon("check")}<span>Save schedules</span></button>
+        </div>
+      </section>
+      ${items.map(card).join("") || `<section class="card"><p class="muted center">No schedules yet. Add one to start sending reports by email.</p></section>`}`;
+    bind();
+  };
+
+  // Reads everything typed on screen into items before any change.
+  const read = () => {
+    body.querySelectorAll(".sched-card").forEach((c) => {
+      const i = Number(c.dataset.i);
+      const s = items[i];
+      if (!s) return;
+      s.name = c.querySelector('[data-k="name"]').value.trim();
+      s.enabled = c.querySelector('[data-k="enabled"]').checked;
+      s.time = c.querySelector('[data-k="time"]').value;
+      s.timezone = c.querySelector('[data-k="timezone"]').value.trim();
+      s.formats = [...c.querySelectorAll("[data-fmt]")].filter((x) => x.checked).map((x) => x.dataset.fmt);
+      s.reports = [...c.querySelectorAll("[data-rep]")].filter((x) => x.checked).map((x) => x.dataset.rep);
+      s.recipients = c.querySelector('[data-k="recipients"]').value.split(",").map((v) => v.trim()).filter(Boolean);
+    });
+  };
+
+  const validate = () => {
+    for (const s of items) {
+      if (!s.name) throw new Error("Give every schedule a name.");
+      if (!/^\d{2}:\d{2}$/.test(s.time || "")) throw new Error(`Set the send time for "${s.name}".`);
+      if (!localTime(s.timezone)) throw new Error(`"${s.timezone}" is not a valid time zone, for example Asia/Qatar.`);
+      if (!s.recipients.length) throw new Error(`Add at least one email for "${s.name}".`);
+      const bad = s.recipients.find((e) => !isEmail(e));
+      if (bad) throw new Error(`"${bad}" is not a valid email address.`);
+      if (!s.reports.length) throw new Error(`Tick at least one report for "${s.name}".`);
+      if (!s.formats.length) throw new Error(`Choose PDF or Excel for "${s.name}".`);
+    }
+  };
+
+  const save = async () => {
+    read();
+    validate();
+    // A schedule whose time has already passed today starts from tomorrow, so saving does not send a report straight away.
+    items.forEach((s) => {
+      const now = localTime(s.timezone);
+      const at = Number(s.time.slice(0, 2)) * 60 + Number(s.time.slice(3, 5));
+      if (s.enabled && now && now.minutes >= at && s.lastRunDate !== now.date) s.lastRunDate = now.date;
+    });
+    await setDoc(ref, { items, updatedAt: serverTimestamp() }, { merge: true });
+    await audit("reports.schedule", { count: items.length });
+  };
+
+  function bind() {
+    body.querySelector("#sc-add").addEventListener("click", () => {
+      read();
+      items.push({ id: `s${Date.now().toString(36)}`, name: "Daily reports", enabled: true, time: "02:00", timezone: browserTz, formats: ["pdf", "xlsx"], reports: ["sales", "daily", "pl", "expenses", "services"], recipients: [] });
+      paint();
+    });
+    onAction(body.querySelector("#sc-save"), async () => {
+      try { await save(); toast("Schedules saved", "success"); paint(); } catch (err) { toast(err.message, "error"); }
+    });
+    body.querySelectorAll("[data-remove]").forEach((b) => b.addEventListener("click", () => {
+      read();
+      const i = Number(b.closest(".sched-card").dataset.i);
+      confirmBox(`Remove "${items[i].name}"? It will not send again.`).then((ok) => { if (ok) { items.splice(i, 1); paint(); } });
+    }));
+    body.querySelectorAll("[data-now]").forEach((b) => b.addEventListener("click", async () => {
+      const i = Number(b.closest(".sched-card").dataset.i);
+      try {
+        await save();
+        const out = await post("/api/admin/report-send", { scheduleId: items[i].id }, { secure: true });
+        toast(`Sent the reports for ${out.reportDate} to ${out.to.join ? out.to.join(", ") : out.to}`, "success");
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }));
+  }
+
+  paint();
+}
 
 async function viewAudit(body) {
   const snap = await getDocs(query(collection(db, "audit"), orderBy("at", "desc"), limit(100)));

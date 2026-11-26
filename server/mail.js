@@ -19,13 +19,14 @@ export async function mailConfig() {
   };
 }
 
-export async function sendMail({ to, subject, text, html }) {
+// attachments: [{ filename, content: Uint8Array }]. to may be one address or a list.
+export async function sendMail({ to, subject, text, html, attachments = [] }) {
   const c = await mailConfig();
   const useResend = c.provider === "resend" || (!c.provider && !!c.resendApiKey);
   if (useResend) {
     if (!c.resendApiKey) throw configError("Resend is selected but no API key is saved. Add it in Administration → Integrations.");
     if (!c.from) throw configError("Set the sender address in Administration → Integrations. Use an address on your verified Resend domain.");
-    return sendWithResend({ apiKey: c.resendApiKey, from: c.from, to, subject, text, html });
+    return sendWithResend({ apiKey: c.resendApiKey, from: c.from, to, subject, text, html, attachments });
   }
   if (!c.smtpUser || !c.smtpPass) {
     throw configError("Email is not set up yet. Choose Resend or SMTP in Administration → Integrations and save it.");
@@ -36,17 +37,23 @@ export async function sendMail({ to, subject, text, html }) {
     secure: c.smtpPort === 465,
     auth: { user: c.smtpUser, pass: c.smtpPass },
   });
-  await transport.sendMail({ from: c.from || c.smtpUser, to, subject, text, html });
+  await transport.sendMail({
+    from: c.from || c.smtpUser, to: [].concat(to).join(","), subject, text, html,
+    attachments: attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content) })),
+  });
 }
 
-async function sendWithResend({ apiKey, from, to, subject, text, html }) {
+async function sendWithResend({ apiKey, from, to, subject, text, html, attachments = [] }) {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ from, to: [to], subject, text, html }),
+    body: JSON.stringify({
+      from, to: [].concat(to), subject, text, html,
+      attachments: attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString("base64") })),
+    }),
   });
   if (!res.ok) {
     const detail = (await res.text()).slice(0, 200);

@@ -161,6 +161,10 @@ service cloud.firestore {
       allow create, update: if canWrite('pos') || canWrite('accounting');
       allow delete: if false;
     }
+    match /settings/reportSchedules {
+      // Scheduled report emails: admins only. The server reads it with full rights.
+      allow read, write: if isAdmin();
+    }
     match /settings/integrations {
       // Holds the Google Sheets secret: administrators only.
       allow read, write: if isAdmin();

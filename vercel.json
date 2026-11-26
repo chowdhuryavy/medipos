@@ -42,5 +42,11 @@
     }
   ],
   "buildCommand": "node scripts/stamp-version.js",
-  "outputDirectory": "."
+  "outputDirectory": ".",
+  "crons": [
+    {
+      "path": "/api/cron/reports",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }

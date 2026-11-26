@@ -4,6 +4,7 @@
 //  • the transfer moves the wallet float (or operator float); the float can never go below zero
 //  • only the fee is income; the transfer is not a sale
 import { ACCOUNTS, round2, settings } from "./core.js";
+export { floatEffect, serviceReportRows } from "./services-report.js";
 
 export const SERVICE_TYPES = {
   recharge: { label: "Mobile recharge", providers: "rechargeOperators", providerLabel: "Operator", amountLabel: "Recharge amount", phoneRequired: true },
@@ -118,25 +119,3 @@ export function applyFloat(type, balance, transfer, provider) {
   return round2(b - T);
 }
 
-/** Effect of one service on its float (positive = float grows). */
-export const floatEffect = (type, transfer) => {
-  const T = round2(transfer);
-  return type === "cashout" ? T : type === "cashin" || type === "recharge" ? -T : 0;
-};
-
-/** Report rows for services in a list of sales: one row per service type and provider. */
-export function serviceReportRows(sales) {
-  const map = new Map();
-  for (const s of sales) {
-    for (const it of s.items || []) {
-      if (it.kind !== "service") continue;
-      const key = `${it.serviceType}|${it.provider}`;
-      const a = map.get(key) || { type: it.serviceType, provider: it.provider, count: 0, transfer: 0, fees: 0 };
-      a.count += 1;
-      a.transfer += Number(it.transfer) || 0;
-      a.fees += Number(it.lineNet) || 0;
-      map.set(key, a);
-    }
-  }
-  return [...map.values()].sort((a, b) => a.type.localeCompare(b.type) || a.provider.localeCompare(b.provider));
-}
