@@ -57,7 +57,8 @@ export async function loadSettings() {
   const r = await getDoc(doc(db, "settings", "roles"));
   const saved = r.exists() ? r.data() : {};
   // Every role in the database is loaded, including roles the admin created.
-  const keys = new Set(["admin", ...Object.keys(DEFAULT_ROLES), ...Object.keys(saved)]);
+  // Once roles are saved, the database is the only list: a role the admin deleted stays deleted.
+  const keys = new Set(["admin", ...(r.exists() ? Object.keys(saved) : Object.keys(DEFAULT_ROLES))]);
   for (const key of Object.keys(roles)) if (!keys.has(key)) delete roles[key];
   for (const key of keys) {
     // Mirror the database exactly; the rules deny anything not listed there.

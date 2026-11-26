@@ -1,14 +1,13 @@
-import { onSubmit, onAction } from "../core.js";
+import { onSubmit, onAction, canWrite } from "../core.js";
 import { db, collection, doc, getDocs, query, orderBy, limit, runTransaction, serverTimestamp, increment } from "../firebase.js";
 import {
   session, settings, money, esc, icon, toast, todayISO, round2, buildJournal, audit,
   ACCOUNTS, PURCHASE_PAYMENT_ACCOUNT, fmtDateTime,
 } from "../core.js";
 
-const CAN_POST = ["admin", "pharmacist", "storekeeper"];
 
 export async function render(el) {
-  const canPost = CAN_POST.includes(session.role);
+  const canPost = canWrite("purchasing");
   const [pSnap, sSnap] = await Promise.all([getDocs(collection(db, "products")), getDocs(collection(db, "suppliers"))]);
   const products = pSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.active !== false).sort((a, b) => a.name.localeCompare(b.name));
   const suppliers = sSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name));
