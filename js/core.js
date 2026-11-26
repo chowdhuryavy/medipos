@@ -22,6 +22,8 @@ export const DEFAULT_SETTINGS = {
   maxDiscountPct: 100,
   allowCreditSales: true,
   allowPriceChange: true,
+  walletProviders: ["bKash", "Nagad", "Rocket"],
+  rechargeOperators: ["Grameenphone", "Robi", "Banglalink", "Airtel", "Teletalk"],
   categories: ["Medicines", "OTC", "Cosmetics", "Baby care", "Medical devices", "General"],
   units: ["Pack", "Strip", "Bottle", "Box", "Piece"],
   paymentMethods: [
@@ -85,12 +87,13 @@ export async function loadSettings() {
 export const ACCOUNTS = {
   CASH: "1000", BANK: "1010", AR: "1100", INVENTORY: "1200", VAT_INPUT: "1300",
   AP: "2000", VAT_PAYABLE: "2100", EQUITY: "3000", SALES: "4000", COGS: "5000",
-  OTHER_EXPENSE: "6900",
+  OTHER_EXPENSE: "6900", WALLET_FLOAT: "1020", SERVICE_COMMISSION: "4100",
 };
 
 export const DEFAULT_ACCOUNTS = [
   { code: "1000", name: "Cash on Hand", type: "asset" },
   { code: "1010", name: "Bank Account", type: "asset" },
+  { code: "1020", name: "Mobile wallet float (bKash, Nagad…)", type: "asset" },
   { code: "1100", name: "Accounts Receivable (Customers)", type: "asset" },
   { code: "1200", name: "Inventory (Medicines & Goods)", type: "asset" },
   { code: "1300", name: "VAT Input (Recoverable)", type: "asset" },
@@ -98,6 +101,7 @@ export const DEFAULT_ACCOUNTS = [
   { code: "2100", name: "VAT Payable", type: "liability" },
   { code: "3000", name: "Owner's Equity", type: "equity" },
   { code: "4000", name: "Sales Revenue", type: "revenue" },
+  { code: "4100", name: "Service commission income", type: "revenue" },
   { code: "5000", name: "Cost of Goods Sold", type: "expense" },
   { code: "6100", name: "Salaries & Wages", type: "expense" },
   { code: "6200", name: "Rent", type: "expense" },
