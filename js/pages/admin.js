@@ -16,6 +16,7 @@ const WRITE_LABEL = {
 import { pushToSheets } from "../sheets.js";
 import { post } from "../api.js";
 import { DEFAULT_TEMPLATES, EMAIL_PLACEHOLDERS, DEFAULT_BRAND_COLOR } from "../email-defaults.js";
+import { DEFAULT_SERVICE_FEES, SERVICE_TYPES } from "../services.js";
 
 const TABS = [
   ["users", "Staff"],
@@ -300,6 +301,7 @@ async function viewLists(body) {
     units: [...settings.units],
     writeOffReasons: [...settings.writeOffReasons],
     walletProviders: [...(settings.walletProviders || [])],
+    serviceFees: JSON.parse(JSON.stringify({ ...DEFAULT_SERVICE_FEES, ...(settings.serviceFees || {}) })),
     rechargeOperators: [...(settings.rechargeOperators || [])],
     methods: settings.paymentMethods.map((m) => ({ ...m, active: m.active !== false })),
   };
@@ -310,6 +312,10 @@ async function viewLists(body) {
 
   // Read what is typed in the payment-method cards into state before anything is re-drawn.
   const syncFromDom = () => {
+    root.querySelectorAll("[data-fee]").forEach((r) => {
+      const t = r.dataset.fee, f = (k) => r.querySelector(`[data-k="${k}"]`);
+      state.serviceFees[t] = { mode: f("mode").value, value: Number(f("value").value) || 0, min: Number(f("min").value) || 0, max: Number(f("max").value) || 0 };
+    });
     root.querySelectorAll(".pm-card").forEach((c, i) => {
       const m = state.methods[i];
       if (!m) return;
@@ -375,6 +381,20 @@ async function viewLists(body) {
         ${chipSection("categories", "Product categories", "Used when adding products. Shows how many products use each one.")}
         ${chipSection("units", "Units of measure", "e.g. Pack, Strip, Bottle. Shows how many products use each one.")}
         ${chipSection("writeOffReasons", "Write-off reasons", "Used when you record stock lost, damaged or expired.")}
+        <section class="card">
+          <header class="card-head"><h3>Service fees</h3></header>
+          <p class="muted small">The till works out the fee from these rules. Percent is a share of the amount. Min and max limit the fee; leave 0 for no limit.</p>
+          <div class="fee-rules">
+            ${Object.keys(SERVICE_TYPES).map((t) => { const r = state.serviceFees[t]; return `
+              <div class="fee-row" data-fee="${t}">
+                <strong>${esc(SERVICE_TYPES[t].label)}</strong>
+                <select data-k="mode" aria-label="Fee type"><option value="percent" ${r.mode === "percent" ? "selected" : ""}>Percent of amount</option><option value="flat" ${r.mode === "flat" ? "selected" : ""}>Fixed amount</option></select>
+                <input data-k="value" type="number" step="0.01" min="0" value="${r.value}" aria-label="Fee value" />
+                <input data-k="min" type="number" step="0.01" min="0" value="${r.min}" aria-label="Minimum fee" placeholder="Min" />
+                <input data-k="max" type="number" step="0.01" min="0" value="${r.max}" aria-label="Maximum fee" placeholder="Max" />
+              </div>`; }).join("")}
+          </div>
+        </section>
         ${chipSection("walletProviders", "Mobile wallets", "e.g. bKash, Nagad, Rocket. Shown when the cashier does a wallet cash-in or cash-out.")}
         ${chipSection("rechargeOperators", "Mobile operators", "e.g. Grameenphone, Robi. Shown when the cashier sells a mobile recharge.")}
         <div class="sticky-actions">
@@ -453,7 +473,8 @@ async function viewLists(body) {
     const paymentMethods = state.methods.map((m) => ({
       key: m.key, label: m.label.trim(), account: m.account, credit: !!m.credit, active: !!m.active,
     }));
-    await saveGeneral({ categories, units, writeOffReasons, paymentMethods, walletProviders, rechargeOperators }, "Lists saved. Reloading to apply them.");
+    const serviceFees = state.serviceFees;
+    await saveGeneral({ categories, units, writeOffReasons, paymentMethods, walletProviders, rechargeOperators, serviceFees }, "Lists saved. Reloading to apply them.");
   });
 }
 

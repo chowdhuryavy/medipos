@@ -780,3 +780,12 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
   .pos-bill .totals { font-size: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { .svc-btn { transition: none; } }
+
+/* ───────── Wallet fees and float (1.1.22) ───────── */
+.svc-calc { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+.svc-rows { display: grid; gap: 6px; }
+.svc-rows > div { display: flex; justify-content: space-between; gap: 12px; }
+.svc-rows span { color: var(--muted); }
+.fee-rules { display: grid; gap: 10px; margin-top: 8px; }
+.fee-row { display: grid; grid-template-columns: minmax(120px, 1.2fr) minmax(120px, 1.4fr) repeat(3, minmax(70px, 1fr)); gap: 8px; align-items: center; }
+@media (max-width: 700px) { .fee-row { grid-template-columns: 1fr 1fr; } .fee-row > strong { grid-column: 1 / -1; } }

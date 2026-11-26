@@ -155,6 +155,12 @@ service cloud.firestore {
       // Email subject and body templates. Read by the server, edited by admins.
       allow read, write: if isAdmin();
     }
+    match /floats/{id} {
+      // Wallet and operator float balances: sales and top-ups update them; staff who sell or keep accounts can read them.
+      allow read: if canPage('pos') || canPage('accounting') || canPage('dashboard');
+      allow create, update: if canWrite('pos') || canWrite('accounting');
+      allow delete: if false;
+    }
     match /settings/integrations {
       // Holds the Google Sheets secret: administrators only.
       allow read, write: if isAdmin();

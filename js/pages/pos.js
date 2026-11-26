@@ -6,14 +6,17 @@ import {
   buildJournal, allocateFEFO, audit, round2, ACCOUNTS,
 } from "../core.js";
 import { unitsOf, unitByKey, toPieces, unitOptions, baseName } from "../packs.js";
-import { SERVICE_TYPES, serviceProviders, serviceLine, serviceJournalLines } from "../services.js";
+import { SERVICE_TYPES, serviceProviders, serviceLine, serviceJournalLines, serviceBreakdown, floatKey, applyFloat, calcFee } from "../services.js";
 
 export async function render(el) {
-  const [prodSnap, custSnap, batchSnap] = await Promise.all([
+  const [prodSnap, custSnap, batchSnap, floatSnap] = await Promise.all([
     getDocs(collection(db, "products")),
     getDocs(collection(db, "customers")),
     getDocs(query(collection(db, "batches"), where("remaining", ">", 0))),
+    getDocs(collection(db, "floats")),
   ]);
+  // Current float balance of each wallet and operator, kept up to date after every sale.
+  const floats = Object.fromEntries(floatSnap.docs.map((d) => [d.id, Number(d.data().balance) || 0]));
   const products = prodSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
     .filter((p) => p.active !== false).sort((a, b) => a.name.localeCompare(b.name));
   const customers = custSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name));
@@ -143,16 +146,19 @@ export async function render(el) {
 
   const serviceBillLine = (l) => {
     const def = SERVICE_TYPES[l.serviceType];
-    const sign = l.serviceType === "cashout" ? "Give customer" : "Customer pays";
+    const b = serviceBreakdown(l.serviceType, l.transfer, l.price);
+    const how = l.serviceType === "cashout"
+      ? `Customer sends ${money(l.transfer)} to the wallet and gets ${money(l.transfer)} cash`
+      : `Customer gives ${money(b.customerGives)}, ${money(l.transfer)} goes to the ${l.serviceType === "recharge" ? "operator" : "wallet"}`;
     return `
       <div class="bill-line svc-line">
         <div class="bl-info">
           <strong>${esc(def.label)} · ${esc(l.provider)}</strong>
-          <small>${sign} ${money(l.transfer)}${l.phone ? ` · ${esc(l.phone)}` : ""} · fee below</small>
+          <small>${esc(how)}${l.phone ? ` · ${esc(l.phone)}` : ""}</small>
         </div>
         <div class="qty"><span class="muted">1</span></div>
-        <label class="bl-price">Fee
-          <input type="number" inputmode="decimal" step="0.01" min="0" value="${l.price}" data-svc-price="${esc(l.key)}" aria-label="Service fee" />
+        <label class="bl-price">Fee (auto)
+          <input type="text" value="${money(l.price)}" readonly aria-label="Service fee, calculated" />
         </label>
         <strong class="bl-total">${money(l.price)}</strong>
         <button class="icon-btn sm hover-danger" data-rm="${esc(l.key)}" aria-label="Remove service">${icon("x")}</button>
@@ -305,15 +311,6 @@ export async function render(el) {
     paintBill();
   }
 
-  function setServiceFee(key, value) {
-    const l = st.cart.get(key);
-    if (!l) return;
-    const n = round2(Number(value) || 0);
-    if (n < 0) { toast("The fee cannot be negative", "error"); return paintBill(); }
-    l.price = n;
-    paintBill();
-  }
-
   function hold() {
     if (!st.cart.size) return toast("Add products before holding a bill", "error");
     st.holds.push({ cart: cloneCart(st.cart), disc: st.disc, customerId: st.customerId, pay: st.pay, at: new Date().toLocaleTimeString() });
@@ -365,26 +362,46 @@ export async function render(el) {
         message: `Add ${def.providerLabel.toLowerCase()}s under Administration → Lists & payments, then come back here.`,
       });
     }
+    const floatOf = (p) => money(floats[floatKey(type, p)] || 0);
     openModal(def.label, `
       <form id="svc-form" class="form-grid">
         <label class="span-2">${def.providerLabel}
           <select name="provider" required>${providers.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("")}</select>
         </label>
-        <label>${esc(def.amountLabel)}<input name="amount" type="number" inputmode="decimal" min="1" step="0.01" required /></label>
-        <label>Service fee charged<input name="fee" type="number" inputmode="decimal" min="0" step="0.01" value="0" /></label>
+        <p class="muted small span-2" id="svc-float">${def.providerLabel} float: ${floatOf(providers[0])}</p>
+        <label class="span-2">${esc(def.amountLabel)}<input name="amount" type="number" inputmode="decimal" min="1" step="0.01" required /></label>
         <label class="span-2">${def.phoneRequired ? "Mobile number to recharge" : "Customer wallet number (optional)"}
           <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="01XXXXXXXXX" ${def.phoneRequired ? "required" : ""} />
         </label>
-        <p class="muted small span-2">The amount is passed on to the customer or to the wallet. Only the fee is income for the shop.</p>
+        <div class="svc-calc span-2" id="svc-calc" aria-live="polite"></div>
         <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">${icon("plus")}<span>Add to bill</span></button></div>
       </form>`, (body, close) => {
+      const form = body.querySelector("#svc-form");
+      const calc = () => {
+        const f = new FormData(form);
+        const provider = String(f.get("provider"));
+        body.querySelector("#svc-float").textContent = `${def.providerLabel} float: ${floatOf(provider)}`;
+        const T = Number(f.get("amount")) || 0;
+        if (!(T > 0)) { body.querySelector("#svc-calc").innerHTML = `<p class="muted small">Enter the amount to see the fee and the cash to take or give.</p>`; return; }
+        const fee = calcFeePreview(type, T);
+        const b = serviceBreakdown(type, T, fee);
+        const rows = type === "cashout"
+          ? [["Customer sends to wallet", money(T)], ["Shop gives customer cash", money(T)], ["Customer pays fee in cash", money(fee)], ["Cash drawer change", money(b.cashChange)]]
+          : [["Customer gives cash", money(b.customerGives)], ["Sent from float", money(T)], ["Shop fee (income)", money(fee)]];
+        body.querySelector("#svc-calc").innerHTML = `<div class="svc-rows">${rows.map(([l, v]) => `<div><span>${esc(l)}</span><strong>${esc(v)}</strong></div>`).join("")}</div>`;
+      };
+      form.addEventListener("input", calc);
+      form.addEventListener("change", calc);
       body.querySelector("[data-cancel]").addEventListener("click", close);
-      onSubmit(body.querySelector("#svc-form"), async (e) => {
+      calc();
+      onSubmit(form, async (e) => {
         e.preventDefault();
         const f = new FormData(e.target);
+        const provider = String(f.get("provider"));
         try {
           addService(serviceLine({
-            type, provider: String(f.get("provider")), amount: f.get("amount"), fee: f.get("fee") || 0, phone: String(f.get("phone") || ""),
+            type, provider, amount: f.get("amount"), phone: String(f.get("phone") || ""),
+            balance: floats[floatKey(type, provider)] || 0,
           }));
           close();
           toast(`${def.label} added to the bill`, "success");
@@ -394,6 +411,8 @@ export async function render(el) {
       });
     });
   }
+
+  const calcFeePreview = (type, T) => calcFee(type, T);
 
   $("#p-cats").addEventListener("click", (e) => {
     const b = e.target.closest("[data-cat]");
@@ -418,7 +437,6 @@ export async function render(el) {
     const t = e.target;
     if (t.dataset.unit) setUnit(t.dataset.unit, t.value);
     else if (t.dataset.price) setPrice(t.dataset.price, t.value);
-    else if (t.dataset.svcPrice) setServiceFee(t.dataset.svcPrice, t.value);
   });
   $("#p-search").addEventListener("input", (e) => { st.q = e.target.value; paintGrid(); });
   $("#p-search").addEventListener("keydown", (e) => {
@@ -482,6 +500,7 @@ export async function render(el) {
       const sale = await completeSale({ lines, discountPct: st.disc, method, customer, tendered });
       await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: method.key, services: sale.serviceCount });
       for (const l of lines) if (!isService(l)) byId[l.id].stock = (Number(byId[l.id].stock) || 0) - l.pieces;
+      Object.assign(floats, sale.floatBalances || {});
       clearBill();
       paintGrid();
       if (sale.priceExtra > 0) {
@@ -601,7 +620,7 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
       });
     }
 
-    // Services: fee is revenue, transfer moves through the wallet float or cash.
+    // Services: fee is revenue, transfer moves through the wallet or operator float.
     const services = serviceLines.map((l) => {
       const fee = round2(l.price * l.qty);
       return {
@@ -610,6 +629,18 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
         listPrice: fee, price: fee, vatRate: 0, costPrice: 0, cogs: 0, fee,
       };
     });
+    // Float balances are read and checked here, before any write, so a sale can never send more than the float holds.
+    const floatBalances = {};
+    for (const v of services) {
+      const k = floatKey(v.serviceType, v.provider);
+      if (!(k in floatBalances)) {
+        const fs = await tx.get(doc(db, "floats", k));
+        floatBalances[k] = fs.exists() ? Number(fs.data().balance) || 0 : 0;
+      }
+      floatBalances[k] = applyFloat(v.serviceType, floatBalances[k], v.transfer, v.provider);
+      v.floatAfter = floatBalances[k];
+      v.floatKey = k;
+    }
 
     const goods = calcTotals(priced, discountPct);
     const feesTotal = round2(services.reduce((s, v) => s + v.fee, 0));
@@ -640,6 +671,7 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
     });
 
     tx.set(counterRef, { sale: seq }, { merge: true });
+    Object.entries(floatBalances).forEach(([k, b]) => tx.set(doc(db, "floats", k), { balance: b, updatedAt: serverTimestamp() }, { merge: true }));
     productWrites.forEach((w) => tx.update(w.ref, { stock: w.stock, updatedAt: serverTimestamp() }));
     batchWrites.forEach((w) => tx.update(w.ref, { remaining: w.remaining }));
     if (method.credit) tx.update(doc(db, "customers", customer.id), { balance: increment(saleTotal) });
@@ -656,6 +688,7 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
         kind: "service", serviceType: v.serviceType, provider: v.provider, phone: v.phone, transfer: v.transfer,
         name: v.name, unit: "service", qty: 1, pieces: 0, price: v.fee, listPrice: v.fee, priceExtra: 0,
         vatRate: 0, costPrice: 0, cogs: 0, lineNet: v.fee, lineVat: 0, lineTotal: v.fee, productId: null,
+        floatKey: v.floatKey, floatAfter: v.floatAfter,
       })),
     ];
     tx.set(saleRef, {
@@ -683,7 +716,7 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
           service: v.transfer ? `${v.serviceType === "cashout" ? "Cash-out" : v.serviceType === "cashin" ? "Cash-in" : "Recharge"} amount ${v.transfer}${v.phone ? ` · ${v.phone}` : ""}` : "",
         })),
       ],
-      paymentLabel: method.label, customerName: customer?.name || "Walk-in",
+      paymentLabel: method.label, customerName: customer?.name || "Walk-in", floatBalances,
       tendered: paid, change: paid === null ? null : round2(paid - collect), priceExtra,
     };
   });

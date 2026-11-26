@@ -1,6 +1,7 @@
 import { manageExpenseCategories, expenseCategories } from "../expense-categories.js";
 import { onSubmit, onAction, downloadCSV } from "../core.js";
 import { printHtml } from "../print.js";
+import { SERVICE_TYPES, serviceProviders, floatKey } from "../services.js";
 import { db, collection, doc, getDoc, getDocs, query, where, orderBy, limit, addDoc, setDoc, runTransaction, serverTimestamp } from "../firebase.js";
 import {
   session, money, esc, icon, toast, openModal, todayISO, monthStartISO, round2,
@@ -47,7 +48,7 @@ async function loadAccounts() {
 const monthKey = (d) => d.slice(0, 7);
 
 async function viewOverview(body, go) {
-  const [accounts, jSnap] = await Promise.all([loadAccounts(), getDocs(collection(db, "journal"))]);
+  const [accounts, jSnap, floatSnap] = await Promise.all([loadAccounts(), getDocs(collection(db, "journal")), getDocs(collection(db, "floats"))]);
   const entries = jSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const expenseAccounts = accounts.filter((a) => a.type === "expense");
   const all = accumulate(entries, accounts, "0000-00-00");
@@ -86,6 +87,14 @@ async function viewOverview(body, go) {
   const balanced = Math.abs(totalDr - totalCr) < 0.01;
   const recent = [...entries].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 8);
 
+  // Wallet and operator floats: each balance is kept by the sales and top-ups. Their total must match ledger account 1020.
+  const floatRows = floatSnap.docs.map((d) => ({ id: d.id, balance: round2(Number(d.data().balance) || 0) }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const floatTotal = round2(floatRows.reduce((s, f) => s + f.balance, 0));
+  const ledgerFloat = balanceOf(ACCOUNTS.WALLET_FLOAT);
+  const floatName = (id) => id.replace(/^wallet_/, "Wallet · ").replace(/^operator_/, "Operator · ").replace(/_/g, " ");
+  const floatOk = Math.abs(floatTotal - ledgerFloat) < 0.01;
+
   const kpi = (ico, label, value, tone = "") => `
     <article class="card kpi hover-lift ${tone}"><div class="kpi-ico">${icon(ico)}</div><div><small>${esc(label)}</small><strong>${esc(value)}</strong></div></article>`;
 
@@ -110,6 +119,15 @@ async function viewOverview(body, go) {
       ${kpi("reports", "Revenue this month", money(thisMonth.rev))}
       ${kpi("reports", "Expenses this month", money(thisMonth.exp))}
       ${kpi("reports", "Profit this month", money(round2(thisMonth.rev - thisMonth.exp)), thisMonth.rev >= thisMonth.exp ? "" : "tone-warn")}
+    </section>
+    <section class="card">
+      <header class="card-head"><h3>Wallet & operator floats</h3><button class="btn primary sm" data-qa="topup">${icon("plus")}<span>Add to float</span></button></header>
+      <p class="muted small">Money the shop holds to send to wallets and top up operators. Cash-in and recharge take from these; cash-out adds to them.</p>
+      <div class="recent-list">
+        ${floatRows.map((f) => `<div class="recent-row"><strong>${esc(floatName(f.id))}</strong><strong class="r ${f.balance < 0 ? "bad-text" : ""}">${money(f.balance)}</strong></div>`).join("")
+          || `<p class="muted center">No float yet. Add money to a wallet or operator to start selling these services.</p>`}
+      </div>
+      <p class="badge ${floatOk ? "ok" : "danger"}">${floatOk ? `Matches ledger account ${ACCOUNTS.WALLET_FLOAT}` : `Differs from ledger ${ACCOUNTS.WALLET_FLOAT} by ${money(Math.abs(floatTotal - ledgerFloat))}`}</p>
     </section>
     <section class="card">
       <header class="card-head"><h3>Last 6 months</h3><span class="muted small"><i class="sw sw-rev"></i> Revenue <i class="sw sw-exp"></i> Expenses</span></header>
@@ -139,8 +157,68 @@ async function viewOverview(body, go) {
     const k = b.dataset.qa;
     if (k === "manual") openManualEntry(accounts, () => viewOverview(body, go));
     else if (k === "expense") openExpenseForm(expenseAccounts, accounts, () => viewOverview(body, go));
+    else if (k === "topup") openFloatTopUp(accounts, () => viewOverview(body, go));
     else go(k);
   }));
+}
+
+/* Adds money to a wallet or operator float: cash or bank goes into the float, and the journal shows it. */
+function openFloatTopUp(accounts, reload) {
+  const payMethods = settings.paymentMethods.filter((m) => !m.credit && m.active !== false);
+  const kindOpts = [["wallet", "Wallet", settings.walletProviders || []], ["operator", "Operator", settings.rechargeOperators || []]];
+  openModal("Add to float", `
+    <form id="ftf" class="form-grid">
+      <label>Type
+        <select name="kind">${kindOpts.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+      </label>
+      <label>Provider
+        <select name="provider" required>${kindOpts[0][2].map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("")}</select>
+      </label>
+      <label>Amount<input name="amount" type="number" inputmode="decimal" min="0.01" step="0.01" required /></label>
+      <label>Paid from
+        <select name="method">${payMethods.map((m) => `<option value="${esc(m.account)}">${esc(m.label)}</option>`).join("")}</select>
+      </label>
+      <label class="span-2">Note<input name="note" /></label>
+      <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">Add to float</button></div>
+    </form>`, (body, close) => {
+    const kind = body.querySelector('[name="kind"]');
+    const prov = body.querySelector('[name="provider"]');
+    kind.addEventListener("change", () => {
+      const list = kindOpts.find(([k]) => k === kind.value)[2];
+      prov.innerHTML = list.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
+    });
+    body.querySelector("[data-cancel]").addEventListener("click", close);
+    onSubmit(body.querySelector("#ftf"), async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const amount = round2(Number(f.get("amount")) || 0);
+      const provider = String(f.get("provider"));
+      const method = String(f.get("method"));
+      if (!(amount > 0)) return toast("Enter an amount above 0", "error");
+      const type = String(f.get("kind")) === "operator" ? "recharge" : "cashin";
+      const key = floatKey(type, provider);
+      try {
+        await runTransaction(db, async (tx) => {
+          const ref = doc(db, "floats", key);
+          const snap = await tx.get(ref);
+          const before = snap.exists() ? Number(snap.data().balance) || 0 : 0;
+          tx.set(ref, { balance: round2(before + amount), kind: String(f.get("kind")), provider, updatedAt: serverTimestamp() }, { merge: true });
+          tx.set(doc(collection(db, "journal")), buildJournal({
+            date: todayISO(),
+            memo: `Float top-up · ${provider}${f.get("note") ? " · " + f.get("note") : ""}`,
+            ref: key,
+            lines: [{ account: ACCOUNTS.WALLET_FLOAT, debit: amount }, { account: method, credit: amount }],
+          }));
+        });
+        await audit("float.topup", { key, amount });
+        toast("Float updated", "success");
+        close();
+        reload();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
+  });
 }
 
 /* ───────── Journal ───────── */

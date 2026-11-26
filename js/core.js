@@ -23,6 +23,12 @@ export const DEFAULT_SETTINGS = {
   allowCreditSales: true,
   allowPriceChange: true,
   walletProviders: ["bKash", "Nagad", "Rocket"],
+  // Service fee rules. mode "percent" = % of the amount, "flat" = fixed amount. min/max 0 = no limit.
+  serviceFees: {
+    recharge: { mode: "percent", value: 0, min: 0, max: 0 },
+    cashin: { mode: "flat", value: 0, min: 0, max: 0 },
+    cashout: { mode: "percent", value: 0, min: 0, max: 0 },
+  },
   rechargeOperators: ["Grameenphone", "Robi", "Banglalink", "Airtel", "Teletalk"],
   categories: ["Medicines", "OTC", "Cosmetics", "Baby care", "Medical devices", "General"],
   units: ["Pack", "Strip", "Bottle", "Box", "Piece"],
