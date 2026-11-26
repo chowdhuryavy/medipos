@@ -209,6 +209,7 @@ export function toXlsx(sections, brand = {}) {
 // PDF text here is plain ASCII: symbols that do not exist in the font are mapped to close ASCII forms.
 export function pdfSafe(v) {
   return String(v ?? "")
+    .replace(/[\u00A0\u2007\u202F\u2009]/g, " ")
     .replace(/৳/g, "Tk").replace(/[−–—]/g, "-").replace(/[•·]/g, "-")
     .replace(/…/g, "...").replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
     .replace(/[^\x20-\x7e]/g, "?");
@@ -248,9 +249,18 @@ export function toPdf({ title, subtitle = "", footer = "", sections, brand = {} 
     if (pages.length === 1) {
       rect(0, H - BAND, W, BAND, P.main);
       rect(0, H - BAND - 3, W, 3, P.dark);
-      text(M, H - 38, shop, 18, true, P.white);
-      text(M, H - 58, title, 11.5, false, P.white);
-      if (subtitle) text(M, H - 74, subtitle, 8, false, P.soft);
+      const boxW = brand.logo ? 150 : 0, boxH = BAND - 30;
+      const textW = CW - (boxW ? boxW + 18 : 0);
+      text(M, H - 38, fitText(shop, textW, 18, true), 18, true, P.white);
+      text(M, H - 58, fitText(title, textW, 11.5, false), 11.5, false, P.white);
+      if (subtitle) text(M, H - 74, fitText(subtitle, textW, 8, false), 8, false, P.soft);
+      if (brand.logo) {
+        const L = brand.logo;
+        const sc = Math.min((boxW - 16) / L.w, (boxH - 16) / L.h);
+        const dw = L.w * sc, dh = L.h * sc, bx = W - M - boxW, by = H - BAND + 15;
+        rect(bx, by, boxW, boxH, P.white);
+        ops.push(`q ${dw.toFixed(1)} 0 0 ${dh.toFixed(1)} ${(bx + (boxW - dw) / 2).toFixed(1)} ${(by + (boxH - dh) / 2).toFixed(1)} cm /Im1 Do Q`);
+      }
       y = H - BAND - 30;
     } else {
       rect(0, H - 30, W, 30, P.main);
@@ -335,27 +345,84 @@ export function toPdf({ title, subtitle = "", footer = "", sections, brand = {} 
     right(W - M, 26, `Page ${i + 1} of ${count}`, 7.5, false, P.grey);
   });
 
-  // Objects: 1 catalog, 2 pages, 3-4 fonts, then page + content pairs.
+  // Objects: 1 catalog, 2 pages, 3-4 fonts, 5 logo image (a white pixel when there is no logo), then page + content pairs.
+  const logo = brand.logo || { w: 1, h: 1, rgb: new Uint8Array([255, 255, 255]) };
+  const firstPage = 6;
   const objs = [];
-  const kids = pages.map((_, i) => `${5 + 2 * i} 0 R`).join(" ");
-  objs[1] = "<< /Type /Catalog /Pages 2 0 R >>";
-  objs[2] = `<< /Type /Pages /Kids [${kids}] /Count ${count} >>`;
-  objs[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
-  objs[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>";
+  const kids = pages.map((_, i) => `${firstPage + 2 * i} 0 R`).join(" ");
+  objs[1] = { head: "<< /Type /Catalog /Pages 2 0 R >>" };
+  objs[2] = { head: `<< /Type /Pages /Kids [${kids}] /Count ${count} >>` };
+  objs[3] = { head: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>" };
+  objs[4] = { head: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>" };
+  objs[5] = { dict: `/Type /XObject /Subtype /Image /Width ${logo.w} /Height ${logo.h} /ColorSpace /DeviceRGB /BitsPerComponent 8`, stream: logo.rgb };
   pages.forEach((p, i) => {
-    const content = p.join("\n");
-    objs[5 + 2 * i] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${6 + 2 * i} 0 R >>`;
-    objs[6 + 2 * i] = `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+    const pn = firstPage + 2 * i;
+    objs[pn] = { head: `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << /Im1 5 0 R >> >> /Contents ${pn + 1} 0 R >>` };
+    objs[pn + 1] = { stream: enc.encode(p.join("\n")) };
   });
-  let out = "%PDF-1.4\n";
+
+  const chunks = [];
+  let size = 0;
+  const put = (b) => { chunks.push(b); size += b.length; };
+  const str = (s) => put(enc.encode(s));
+  str("%PDF-1.4\n");
   const offsets = [];
   for (let i = 1; i < objs.length; i++) {
-    offsets[i] = out.length;
-    out += `${i} 0 obj\n${objs[i]}\nendobj\n`;
+    const o = objs[i];
+    offsets[i] = size;
+    str(`${i} 0 obj\n`);
+    if (o.stream) {
+      str(`<< ${o.dict ? `${o.dict} ` : ""}/Length ${o.stream.length} >>\nstream\n`);
+      put(o.stream);
+      str("\nendstream\n");
+    } else {
+      str(`${o.head}\n`);
+    }
+    str("endobj\n");
   }
-  const xref = out.length;
-  out += `xref\n0 ${objs.length}\n0000000000 65535 f \n`;
-  for (let i = 1; i < objs.length; i++) out += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
-  out += `trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return enc.encode(out);
+  const xref = size;
+  let table = `xref\n0 ${objs.length}\n0000000000 65535 f \n`;
+  for (let i = 1; i < objs.length; i++) table += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  table += `trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  str(table);
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.length; }
+  return out;
+}
+
+/**
+ * Loads the shop logo and returns its pixels (flattened on white) for the PDF. Browser only.
+ * Returns null when there is no logo or it cannot be read, so the report still prints.
+ */
+export async function rasterLogo(src, maxW = 240, maxH = 100) {
+  if (!src || typeof document === "undefined") return null;
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = src;
+    });
+    const k = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
+    const w = Math.max(1, Math.round(img.naturalWidth * k));
+    const h = Math.max(1, Math.round(img.naturalHeight * k));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const g = canvas.getContext("2d");
+    g.fillStyle = "#ffffff";
+    g.fillRect(0, 0, w, h);
+    g.drawImage(img, 0, 0, w, h);
+    const px = g.getImageData(0, 0, w, h).data;
+    const rgb = new Uint8Array(w * h * 3);
+    for (let i = 0, j = 0; i < px.length; i += 4, j += 3) {
+      rgb[j] = px[i];
+      rgb[j + 1] = px[i + 1];
+      rgb[j + 2] = px[i + 2];
+    }
+    return { w, h, rgb };
+  } catch {
+    return null;
+  }
 }

@@ -4,7 +4,7 @@ import { session, money, esc, icon, toast, todayISO, monthStartISO, daysFromNowI
 import { pushToSheets } from "../sheets.js";
 import { printReport } from "../print.js";
 import { REPORTS, buildReportTables, toSections } from "../report-tables.js";
-import { toPdf, toXlsx } from "../export-files.js";
+import { toPdf, toXlsx, rasterLogo } from "../export-files.js";
 import { branding } from "../branding.js";
 
 const GROUPS = [["day", "Day"], ["month", "Month"], ["year", "Year"]];
@@ -102,7 +102,8 @@ export async function render(el) {
   }
 
   // File name: report, period, and the date it was made.
-  const fileName = (base, ext) => `${base}-${range().from}-to-${range().to}.${ext}`;
+  const slug = (t) => String(t).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "report";
+  const fileName = (base, ext) => `${slug(settings.shopName || "MediPOS")}_${slug(base)}_${range().from}_to_${range().to}_made_${todayISO()}.${ext}`;
   const download = (name, bytes, type) => {
     const url = URL.createObjectURL(new Blob([bytes], { type }));
     const a = document.createElement("a");
@@ -114,7 +115,7 @@ export async function render(el) {
   const shopTitle = () => `${settings.shopName || "MediPOS"}`;
   const subtitle = () => `${range().from} to ${range().to} · Made ${new Date().toLocaleString()}`;
   const brand = () => ({ shop: settings.shopName || "MediPOS", color: branding.brandColor, subtitle: subtitle() });
-  const makePdf = (keys, title) => toPdf({ title, subtitle: subtitle(), footer: `${shopTitle()} · MediPOS`, sections: sectionsFor(keys), brand: brand() });
+  const makePdf = async (keys, title) => toPdf({ title, subtitle: subtitle(), footer: `${shopTitle()} · MediPOS`, sections: sectionsFor(keys), brand: { ...brand(), logo: await rasterLogo(branding.logoUrl) } });
   const makeXlsx = (keys) => toXlsx(sectionsFor(keys), brand());
   const allKeys = () => REPORTS.map(([k]) => k);
 
@@ -122,19 +123,19 @@ export async function render(el) {
   ["#r-from", "#r-to", "#r-days"].forEach((s) => el.querySelector(s).addEventListener("change", load));
   el.querySelector("#r-group").addEventListener("change", load);
 
-  el.querySelector("#r-pdf").addEventListener("click", () => {
+  el.querySelector("#r-pdf").addEventListener("click", async () => {
     const k = kind();
-    download(fileName(k, "pdf"), makePdf([k], `${label(k)}`), "application/pdf");
+    download(fileName(label(k), "pdf"), await makePdf([k], label(k)), "application/pdf");
   });
   el.querySelector("#r-xlsx").addEventListener("click", () => {
     const k = kind();
-    download(fileName(k, "xlsx"), makeXlsx([k]), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    download(fileName(label(k), "xlsx"), makeXlsx([k]), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   });
-  el.querySelector("#r-all-pdf").addEventListener("click", () => {
-    download(fileName("all-reports", "pdf"), makePdf(allKeys(), `${shopTitle()} · All reports`), "application/pdf");
+  el.querySelector("#r-all-pdf").addEventListener("click", async () => {
+    download(fileName("All reports", "pdf"), await makePdf(allKeys(), `${shopTitle()} · All reports`), "application/pdf");
   });
   el.querySelector("#r-all-xlsx").addEventListener("click", () => {
-    download(fileName("all-reports", "xlsx"), makeXlsx(allKeys()), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    download(fileName("All reports", "xlsx"), makeXlsx(allKeys()), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   });
   el.querySelector("#r-print").addEventListener("click", () => {
     const k = kind();
