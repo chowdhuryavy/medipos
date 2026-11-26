@@ -738,3 +738,45 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .dot.ok { background:#14b8a6; }
 .dot.warn { background:#f59e0b; }
 .dot.danger { background:#ef4444; }
+
+/* ───────── Services at the till, accounts overview and mobile polish (1.1.21) ───────── */
+.service-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.svc-btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 10px 8px;
+  border-radius: 14px; border: 1px solid var(--border); background: var(--surface-2); color: var(--brand);
+  font-weight: 700; cursor: pointer; transition: transform .15s var(--ease), border-color .15s;
+}
+.svc-btn:hover { border-color: var(--brand); transform: translateY(-1px); }
+.svc-btn svg { width: 16px; height: 16px; flex: none; }
+.svc-line { border-left: 3px solid var(--accent); }
+.svc-line .bl-info small { display: block; }
+
+.chart.trend { height: 200px; }
+.chart.trend .pair { display: flex; gap: 4px; align-items: flex-end; justify-content: center; width: 100%; height: 100%; }
+.chart.trend .pair .bar { max-width: 22px; }
+.bar.rev { background: linear-gradient(180deg, var(--brand-2), var(--brand)); }
+.bar.exp { background: linear-gradient(180deg, #fbbf24, var(--accent)); }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin: 0 4px 0 10px; vertical-align: middle; }
+.sw-rev { background: var(--brand); }
+.sw-exp { background: var(--accent); }
+.kpi.tone-warn .kpi-ico { color: var(--danger); }
+
+.filter-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 6px; }
+.filter-row input[type="search"] { flex: 1 1 220px; }
+.recent-list { display: grid; gap: 8px; }
+.recent-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.recent-row small { display: block; color: var(--muted); }
+
+@media (max-width: 900px) {
+  .svc-btn span { font-size: 13px; }
+  .filter-row > * { flex: 1 1 100%; }
+  .filter-row .btn { flex: 1 1 auto; }
+  .chart.trend { height: 170px; }
+}
+@media (max-width: 600px) {
+  .service-bar { grid-template-columns: 1fr 1fr 1fr; }
+  .svc-btn { flex-direction: column; font-size: 12px; min-height: 58px; padding: 8px 4px; }
+  .svc-btn span { font-size: 12px; text-align: center; line-height: 1.15; }
+  .pos-bill .totals { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .svc-btn { transition: none; } }

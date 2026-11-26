@@ -6,8 +6,9 @@ import {
 import { pushToSheets } from "../sheets.js";
 import { printReport } from "../print.js";
 import { FINANCE_KINDS, FINANCE_GROUPS, buildFinance } from "./reports-finance.js";
+import { serviceReportRows, floatEffect } from "../services.js";
 
-const KINDS = [["sales", "Sales"], ...FINANCE_KINDS, ["productSummary", "Products"], ["stock", "Stock"], ["expiry", "Expiry"]];
+const KINDS = [["sales", "Sales"], ...FINANCE_KINDS, ["services", "Services & wallet"], ["productSummary", "Products"], ["stock", "Stock"], ["expiry", "Expiry"]];
 // Only admins can read the Sheets secret (settings/integrations), so only they can send reports.
 const CAN_SYNC = ["admin"];
 
@@ -141,7 +142,9 @@ async function build(from, to, days) {
     dailyTotals.set(s.date, (dailyTotals.get(s.date) || 0) + (s.total || 0));
     for (const it of s.items || []) {
       const profit = round2((it.lineNet || 0) - (it.cogs || 0));
-      saleRows.push([s.date, s.invoiceNo, s.customerName, it.name, it.pieces ?? it.qty, round2(it.lineNet), round2(it.lineVat), round2(it.lineTotal), round2(it.cogs || 0), profit, s.paymentLabel || s.payment]);
+      const isSvc = it.kind === "service";
+      saleRows.push([s.date, s.invoiceNo, s.customerName, it.name, isSvc ? 1 : (it.pieces ?? it.qty), round2(it.lineNet), round2(it.lineVat), round2(it.lineTotal), round2(it.cogs || 0), profit, s.paymentLabel || s.payment]);
+      if (isSvc) continue;
       const agg = byProduct.get(it.name) || { qty: 0, revenue: 0, cogs: 0 };
       agg.qty += it.pieces ?? it.qty; agg.revenue += it.lineNet || 0; agg.cogs += it.cogs || 0;
       byProduct.set(it.name, agg);
@@ -176,7 +179,32 @@ async function build(from, to, days) {
       b.expiry < today ? "Expired" : "Expiring soon",
     ]);
 
+  // Services: recharge, wallet cash-in and cash-out. Fees are income; transfers move the wallet float.
+  const svcRows = serviceReportRows(sales).map((a) => [
+    a.type === "recharge" ? "Mobile recharge" : a.type === "cashin" ? "Wallet cash-in" : "Wallet cash-out",
+    a.provider, a.count, round2(a.transfer), round2(a.fees), round2(floatEffect(a.type, a.transfer)),
+  ]);
+  const sumSvc = (type) => round2(serviceReportRows(sales).filter((a) => a.type === type).reduce((s, a) => s + a.transfer, 0));
+  const feesAll = round2(svcRows.reduce((s, r) => s + r[4], 0));
+  const floatAll = round2(svcRows.reduce((s, r) => s + r[5], 0));
+  const byProvider = new Map();
+  svcRows.forEach((r) => byProvider.set(r[1], round2((byProvider.get(r[1]) || 0) + r[4])));
+
   return {
+    services: {
+      headers: ["Service", "Provider", "Count", "Transfer amount", "Fees (income)", "Wallet float effect"],
+      numeric: [2, 3, 4, 5],
+      rows: svcRows,
+      summary: [
+        ["Services sold", svcRows.reduce((s, r) => s + r[2], 0)],
+        ["Fees earned", money(feesAll)],
+        ["Recharge amount", money(sumSvc("recharge"))],
+        ["Cash-in amount", money(sumSvc("cashin"))],
+        ["Cash-out amount", money(sumSvc("cashout"))],
+        ["Float change (+ grows)", money(floatAll)],
+        ["Commission by provider", [...byProvider.entries()].map(([p, v]) => `${p}: ${money(v)}`).join(" · ") || "—"],
+      ],
+    },
     sales: {
       headers: ["Date", "Invoice", "Customer", "Product", "Qty", "Net", "VAT", "Line total", "COGS", "Profit", "Paid by"],
       numeric: [4, 5, 6, 7, 8, 9],

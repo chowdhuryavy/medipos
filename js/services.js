@@ -1,15 +1,19 @@
 // Services that are not stock: mobile recharge, and mobile wallet cash-in and cash-out (bKash, Nagad, Rocket…).
-// Only the fee is revenue. The amount that moves through the shop is money in or out of the wallet float,
-// so it never counts as sales. Operators and wallets are lists the admin edits in settings.
+// Only the fee is revenue. The transfer amount moves through the shop's wallet float (or cash), so it never counts as sales.
+// Operators and wallets are lists the admin edits under Administration → Lists & payments.
 import { ACCOUNTS, round2, settings } from "./core.js";
 
 export const SERVICE_TYPES = {
-  recharge: { label: "Mobile recharge", providers: "rechargeOperators", providerLabel: "Operator", amountLabel: "Recharge amount" },
-  cashin:   { label: "Wallet cash-in", providers: "walletProviders", providerLabel: "Wallet", amountLabel: "Amount to send to the customer's wallet" },
-  cashout:  { label: "Wallet cash-out", providers: "walletProviders", providerLabel: "Wallet", amountLabel: "Amount to give the customer in cash" },
+  recharge: { label: "Mobile recharge", providers: "rechargeOperators", providerLabel: "Operator", amountLabel: "Recharge amount", phoneRequired: true },
+  cashin:   { label: "Wallet cash-in", providers: "walletProviders", providerLabel: "Wallet", amountLabel: "Amount sent to the customer's wallet", phoneRequired: false },
+  cashout:  { label: "Wallet cash-out", providers: "walletProviders", providerLabel: "Wallet", amountLabel: "Amount given to the customer in cash", phoneRequired: false },
 };
 
 export const serviceProviders = (type) => (settings[SERVICE_TYPES[type].providers] || []);
+
+// Bangladesh mobile numbers: 01XXXXXXXXX, optionally with +88 or 88 in front.
+export const cleanPhone = (v) => String(v || "").replace(/[\s-]/g, "");
+export const validPhone = (digits) => /^(\+?88)?01\d{9}$/.test(digits);
 
 /** Builds one cart line for a service. amount is the transfer; fee is what the customer pays for the service. */
 export function serviceLine({ type, provider, amount, fee = 0, phone = "" }) {
@@ -20,10 +24,9 @@ export function serviceLine({ type, provider, amount, fee = 0, phone = "" }) {
   const charge = round2(Number(fee) || 0);
   if (!(transfer > 0)) throw new Error("Enter an amount above 0");
   if (charge < 0) throw new Error("The fee cannot be negative");
-  const digits = String(phone || "").replace(/[\s-]/g, "");
-  if (type === "recharge" && digits && !/^(\+?88)?01\d{9}$/.test(digits)) {
-    throw new Error("Enter a valid mobile number");
-  }
+  const digits = cleanPhone(phone);
+  if (def.phoneRequired && !digits) throw new Error("Enter the mobile number to recharge");
+  if (digits && !validPhone(digits)) throw new Error("Enter a valid mobile number, for example 01712345678");
   return {
     kind: "service",
     serviceType: type,
@@ -32,18 +35,18 @@ export function serviceLine({ type, provider, amount, fee = 0, phone = "" }) {
     transfer,
     name: `${def.label} · ${provider}`,
     qty: 1,
-    price: charge,
+    price: charge,        // what the customer pays for the service (revenue); editable at the till
     listPrice: charge,
-    minPrice: charge,
+    minPrice: 0,
     vatRate: 0,
   };
 }
 
 /**
- * Journal lines for a service sale. cashAccount is the account the customer pays into (cash or bank).
- *  cashin:   customer pays transfer + fee in cash; the shop sends the transfer from its wallet float.
- *  cashout:  customer sends the transfer to the shop's wallet float and receives cash; pays the fee in cash.
- *  recharge: customer pays transfer + fee in cash; the shop tops up the operator from its float.
+ * Journal lines for one service. cashAccount is where the customer's money goes (cash or bank).
+ *  cashin:   customer pays transfer + fee; the shop sends the transfer from its wallet float.
+ *  cashout:  customer sends the transfer to the shop's wallet float and receives cash; pays the fee.
+ *  recharge: customer pays transfer + fee; the shop tops up the operator from its float.
  */
 export function serviceJournalLines(type, transfer, fee, cashAccount) {
   const T = round2(transfer);
@@ -68,10 +71,25 @@ export function serviceJournalLines(type, transfer, fee, cashAccount) {
   throw new Error("Unknown service");
 }
 
-/** Cash the shop must collect on top of the fees for a set of cart lines (cash-in and recharge only). */
-export function cashForServices(lines) {
-  return round2(lines.reduce((s, l) => {
-    if (l.kind !== "service") return s;
-    return l.serviceType === "cashin" || l.serviceType === "recharge" ? s + l.transfer : s;
-  }, 0));
+/** Effect of one service on the wallet float (positive = float grows). */
+export const floatEffect = (type, transfer) => {
+  const T = round2(transfer);
+  return type === "cashout" ? T : type === "cashin" || type === "recharge" ? -T : 0;
+};
+
+/** Report rows for services in a list of sales: one row per service type and provider. */
+export function serviceReportRows(sales) {
+  const map = new Map();
+  for (const s of sales) {
+    for (const it of s.items || []) {
+      if (it.kind !== "service") continue;
+      const key = `${it.serviceType}|${it.provider}`;
+      const a = map.get(key) || { type: it.serviceType, provider: it.provider, count: 0, transfer: 0, fees: 0 };
+      a.count += 1;
+      a.transfer += Number(it.transfer) || 0;
+      a.fees += Number(it.lineNet) || 0;
+      map.set(key, a);
+    }
+  }
+  return [...map.values()].sort((a, b) => a.type.localeCompare(b.type) || a.provider.localeCompare(b.provider));
 }

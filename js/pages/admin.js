@@ -299,6 +299,8 @@ async function viewLists(body) {
     categories: [...settings.categories],
     units: [...settings.units],
     writeOffReasons: [...settings.writeOffReasons],
+    walletProviders: [...(settings.walletProviders || [])],
+    rechargeOperators: [...(settings.rechargeOperators || [])],
     methods: settings.paymentMethods.map((m) => ({ ...m, active: m.active !== false })),
   };
 
@@ -373,6 +375,8 @@ async function viewLists(body) {
         ${chipSection("categories", "Product categories", "Used when adding products. Shows how many products use each one.")}
         ${chipSection("units", "Units of measure", "e.g. Pack, Strip, Bottle. Shows how many products use each one.")}
         ${chipSection("writeOffReasons", "Write-off reasons", "Used when you record stock lost, damaged or expired.")}
+        ${chipSection("walletProviders", "Mobile wallets", "e.g. bKash, Nagad, Rocket. Shown when the cashier does a wallet cash-in or cash-out.")}
+        ${chipSection("rechargeOperators", "Mobile operators", "e.g. Grameenphone, Robi. Shown when the cashier sells a mobile recharge.")}
         <div class="sticky-actions">
           <button class="btn primary" type="submit">${icon("check")}<span>Save lists</span></button>
         </div>
@@ -440,6 +444,7 @@ async function viewLists(body) {
   onSubmit(root.querySelector("#lf"), async () => {
     syncFromDom();
     const categories = clean(state.categories), units = clean(state.units), writeOffReasons = clean(state.writeOffReasons);
+    const walletProviders = clean(state.walletProviders), rechargeOperators = clean(state.rechargeOperators);
     if (!categories.length || !units.length) throw new Error("Keep at least one category and one unit.");
     if (state.methods.some((m) => !m.label.trim())) throw new Error("Every payment method needs a name.");
     const names = state.methods.map((m) => m.label.trim().toLowerCase());
@@ -448,7 +453,7 @@ async function viewLists(body) {
     const paymentMethods = state.methods.map((m) => ({
       key: m.key, label: m.label.trim(), account: m.account, credit: !!m.credit, active: !!m.active,
     }));
-    await saveGeneral({ categories, units, writeOffReasons, paymentMethods }, "Lists saved. Reloading to apply them.");
+    await saveGeneral({ categories, units, writeOffReasons, paymentMethods, walletProviders, rechargeOperators }, "Lists saved. Reloading to apply them.");
   });
 }
 

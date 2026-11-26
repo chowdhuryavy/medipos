@@ -1,11 +1,12 @@
 import { db, collection, doc, getDocs, query, where, runTransaction, serverTimestamp, increment } from "../firebase.js";
-import { onAction } from "../core.js";
+import { onAction, onSubmit } from "../core.js";
 import { printReceipt } from "../print.js";
 import {
   session, settings, paymentMethod, money, esc, icon, toast, openModal, alertBox, todayISO, calcTotals,
   buildJournal, allocateFEFO, audit, round2, ACCOUNTS,
 } from "../core.js";
 import { unitsOf, unitByKey, toPieces, unitOptions, baseName } from "../packs.js";
+import { SERVICE_TYPES, serviceProviders, serviceLine, serviceJournalLines } from "../services.js";
 
 export async function render(el) {
   const [prodSnap, custSnap, batchSnap] = await Promise.all([
@@ -31,14 +32,20 @@ export async function render(el) {
     cat: "All", q: "", disc: 0,
     pay: methods.find((m) => !m.credit)?.key || methods[0]?.key || "cash",
     customerId: "",
-    cart: new Map(), // "productId|unitKey" -> { key, id, unitKey, qty (in that unit), price (per unit) }
+    cart: new Map(), // product lines: "productId|unitKey"; service lines: "svc|n"
     holds: [],
+    svcSeq: 0,
   };
 
   el.innerHTML = `
     <div class="pos">
       <section class="card pos-catalog">
         <div class="search-bar">${icon("search")}<input id="p-search" type="search" inputmode="search" placeholder="Search name or SKU, or scan barcode" autocomplete="off" /></div>
+        <div class="service-bar" role="group" aria-label="Services">
+          <button class="svc-btn" data-svc="recharge">${icon("plus")}<span>Mobile recharge</span></button>
+          <button class="svc-btn" data-svc="cashin">${icon("plus")}<span>Wallet cash-in</span></button>
+          <button class="svc-btn" data-svc="cashout">${icon("plus")}<span>Wallet cash-out</span></button>
+        </div>
         <div class="chips" id="p-cats" role="tablist"></div>
         <div class="product-grid" id="p-grid"></div>
       </section>
@@ -58,7 +65,7 @@ export async function render(el) {
         </label>
         <div class="bill-lines" id="p-lines"></div>
         <p class="muted small price-rule">${allowChange
-          ? "You can raise a price. It can never go below the lowest price shown."
+          ? "You can raise a price. It can never go below the lowest price shown. Service fees can be changed."
           : "Prices are fixed by the shop. Ask an administrator to change them."}</p>
         <div class="totals" id="p-totals"></div>
         <div class="form-row">
@@ -80,11 +87,15 @@ export async function render(el) {
     <div class="mobile-charge" id="p-mobile"><span id="p-mobile-total"></span><button class="btn primary" id="p-mobile-btn">Review & charge</button></div>`;
 
   const $ = (s) => el.querySelector(s);
+  const isService = (l) => l.kind === "service";
   const piecesInCart = (id) => [...st.cart.values()].filter((l) => l.id === id)
     .reduce((s, l) => s + toPieces(unitByKey(byId[id], l.unitKey), l.qty), 0);
 
-  // Full view of a cart line: product, unit and price rules.
+  // Full view of a cart line: product, unit and price rules. Service lines carry their own name and fee.
   function lineView(l) {
+    if (isService(l)) {
+      return { ...l, unit: "service", size: 1, listPrice: l.listPrice, minPrice: 0, vatRate: 0, pieces: 0 };
+    }
     const p = byId[l.id];
     const u = unitByKey(p, l.unitKey);
     return {
@@ -93,6 +104,19 @@ export async function render(el) {
     };
   }
   const cartLines = () => [...st.cart.values()].map(lineView);
+
+  // Totals: goods get the discount and VAT. Service fees are revenue. Transfers are cash that passes through,
+  // so they are added to or taken from what the customer pays, but never counted as sales.
+  function billTotals(lines) {
+    const goods = calcTotals(lines.filter((l) => !isService(l)), st.disc);
+    const fees = round2(lines.filter(isService).reduce((s, l) => s + l.price * l.qty, 0));
+    const transfersIn = round2(lines.filter((l) => isService(l) && (l.serviceType === "cashin" || l.serviceType === "recharge"))
+      .reduce((s, l) => s + l.transfer, 0));
+    const transfersOut = round2(lines.filter((l) => isService(l) && l.serviceType === "cashout").reduce((s, l) => s + l.transfer, 0));
+    const saleTotal = round2(goods.total + fees);
+    const collect = round2(saleTotal + transfersIn - transfersOut);
+    return { goods, fees, transfersIn, transfersOut, saleTotal, collect };
+  }
 
   function paintCats() {
     const cats = ["All", ...new Set(products.map((p) => p.category || "General"))];
@@ -117,7 +141,26 @@ export async function render(el) {
     }).join("") || `<div class="empty-state small">${icon("search")}<p>No products match your search.</p></div>`;
   }
 
+  const serviceBillLine = (l) => {
+    const def = SERVICE_TYPES[l.serviceType];
+    const sign = l.serviceType === "cashout" ? "Give customer" : "Customer pays";
+    return `
+      <div class="bill-line svc-line">
+        <div class="bl-info">
+          <strong>${esc(def.label)} · ${esc(l.provider)}</strong>
+          <small>${sign} ${money(l.transfer)}${l.phone ? ` · ${esc(l.phone)}` : ""} · fee below</small>
+        </div>
+        <div class="qty"><span class="muted">1</span></div>
+        <label class="bl-price">Fee
+          <input type="number" inputmode="decimal" step="0.01" min="0" value="${l.price}" data-svc-price="${esc(l.key)}" aria-label="Service fee" />
+        </label>
+        <strong class="bl-total">${money(l.price)}</strong>
+        <button class="icon-btn sm hover-danger" data-rm="${esc(l.key)}" aria-label="Remove service">${icon("x")}</button>
+      </div>`;
+  };
+
   const billLine = (l) => {
+    if (isService(l)) return serviceBillLine(l);
     const p = byId[l.id];
     const extra = round2(l.price - l.listPrice);
     return `
@@ -142,26 +185,34 @@ export async function render(el) {
 
   function paintBill() {
     const lines = cartLines();
-    const count = lines.reduce((s, l) => s + l.qty, 0);
+    const count = lines.reduce((s, l) => s + (isService(l) ? 1 : l.qty), 0);
     $("#p-count").textContent = `${count} item${count === 1 ? "" : "s"}`;
     $("#p-lines").innerHTML = lines.length ? lines.map(billLine).join("")
-      : `<div class="empty-state small">${icon("cart")}<p>Tap a product to add it to the bill.</p></div>`;
-    const t = calcTotals(lines, st.disc);
-    const extra = round2(lines.reduce((s, l) => s + Math.max(0, l.price - l.listPrice) * l.qty, 0));
+      : `<div class="empty-state small">${icon("cart")}<p>Tap a product, or a service above, to add it to the bill.</p></div>`;
+    const t = billTotals(lines);
+    const extra = round2(lines.filter((l) => !isService(l)).reduce((s, l) => s + Math.max(0, l.price - l.listPrice) * l.qty, 0));
     $("#p-totals").innerHTML = `
-      <div><span>Subtotal</span><span>${money(t.subtotal)}</span></div>
-      <div><span>Discount</span><span>− ${money(t.discount)}</span></div>
+      <div><span>Subtotal</span><span>${money(t.goods.subtotal)}</span></div>
+      <div><span>Discount</span><span>− ${money(t.goods.discount)}</span></div>
       ${extra > 0 ? `<div class="extra-row"><span>Price increase</span><span>+ ${money(extra)}</span></div>` : ""}
-      <div><span>VAT</span><span>${money(t.vat)}</span></div>
-      <div class="grand"><span>Total</span><span class="count-up">${money(t.total)}</span></div>`;
-    $("#p-mobile-total").textContent = `${count} · ${money(t.total)}`;
+      <div><span>VAT</span><span>${money(t.goods.vat)}</span></div>
+      ${t.fees > 0 ? `<div><span>Service fees</span><span>+ ${money(t.fees)}</span></div>` : ""}
+      <div class="grand"><span>Total sale</span><span class="count-up">${money(t.saleTotal)}</span></div>
+      ${t.transfersIn ? `<div><span>Sent to wallets / operators</span><span>+ ${money(t.transfersIn)}</span></div>` : ""}
+      ${t.transfersOut ? `<div><span>Cash-out paid to customer</span><span>− ${money(t.transfersOut)}</span></div>` : ""}
+      ${t.transfersIn || t.transfersOut ? `<div class="grand"><span>${t.collect >= 0 ? "To collect" : "To pay customer"}</span><span>${money(Math.abs(t.collect))}</span></div>` : ""}`;
+    $("#p-mobile-total").textContent = `${count} · ${money(Math.abs(t.collect))}${t.collect < 0 ? " to customer" : ""}`;
     const cash = paymentMethod(st.pay).key === "cash";
-    $("#p-cashrow").hidden = !cash;
-    $("#p-change").hidden = !cash;
-    if (cash && $("#p-tender").value !== "" && count) {
-      const diff = round2(Number($("#p-tender").value) - t.total);
+    const needsTender = cash && t.collect > 0;
+    $("#p-cashrow").hidden = !needsTender;
+    $("#p-change").hidden = !(cash && count);
+    if (needsTender && $("#p-tender").value !== "") {
+      const diff = round2(Number($("#p-tender").value) - t.collect);
       $("#p-change").textContent = diff >= 0 ? `Change due: ${money(diff)}` : `Still to collect: ${money(-diff)}`;
       $("#p-change").className = `change-due ${diff >= 0 ? "ok" : "warn"}`;
+    } else if (cash && t.collect < 0) {
+      $("#p-change").textContent = `Pay the customer: ${money(-t.collect)}`;
+      $("#p-change").className = "change-due warn";
     } else {
       $("#p-change").textContent = "";
       $("#p-change").className = "change-due";
@@ -192,9 +243,16 @@ export async function render(el) {
     flash(id);
   }
 
+  function addService(line) {
+    st.svcSeq += 1;
+    const key = `svc|${st.svcSeq}`;
+    st.cart.set(key, { ...line, key });
+    paintBill();
+  }
+
   function change(key, delta) {
     const l = st.cart.get(key);
-    if (!l) return;
+    if (!l || isService(l)) return;
     const next = l.qty + delta;
     if (next <= 0) return removeLine(key);
     const p = byId[l.id];
@@ -214,7 +272,7 @@ export async function render(el) {
   // Switching unit keeps the same number of pieces, at that unit's list price.
   function setUnit(key, newKey) {
     const l = st.cart.get(key);
-    if (!l) return;
+    if (!l || isService(l)) return;
     const p = byId[l.id];
     const from = unitByKey(p, l.unitKey);
     const to = unitByKey(p, newKey);
@@ -231,7 +289,7 @@ export async function render(el) {
   // The cashier may raise a price. A price below the lowest allowed is refused and reset.
   function setPrice(key, value) {
     const l = st.cart.get(key);
-    if (!l) return;
+    if (!l || isService(l)) return;
     const p = byId[l.id];
     const u = unitByKey(p, l.unitKey);
     if (!allowChange) return paintBill();
@@ -243,6 +301,15 @@ export async function render(el) {
       });
       n = u.minPrice;
     }
+    l.price = n;
+    paintBill();
+  }
+
+  function setServiceFee(key, value) {
+    const l = st.cart.get(key);
+    if (!l) return;
+    const n = round2(Number(value) || 0);
+    if (n < 0) { toast("The fee cannot be negative", "error"); return paintBill(); }
     l.price = n;
     paintBill();
   }
@@ -261,10 +328,11 @@ export async function render(el) {
 
   function openHeld() {
     if (!st.holds.length) return toast("No bills are on hold", "info");
+    const nameOf = (l) => (isService(l) ? l.name : byId[l.id]?.name || "item");
     openModal("Held bills", `
       <div class="stack">
         ${st.holds.map((h, i) => {
-          const lines = [...h.cart.values()].map((l) => `${l.qty} × ${esc(byId[l.id]?.name || "item")}`).join(", ");
+          const lines = [...h.cart.values()].map((l) => `${isService(l) ? "" : l.qty + " × "}${esc(nameOf(l))}`).join(", ");
           return `<div class="held-row"><div><strong>Held at ${esc(h.at)}</strong><small>${lines}</small></div>
             <div class="row-actions"><button class="btn primary sm" data-resume="${i}">Resume</button><button class="btn ghost sm hover-danger" data-discard="${i}">Discard</button></div></div>`;
         }).join("")}
@@ -287,6 +355,46 @@ export async function render(el) {
   // Held bills must not share line objects with the live cart.
   const cloneCart = (m) => new Map([...m].map(([k, v]) => [k, { ...v }]));
 
+  // Recharge, cash-in and cash-out. The operator or wallet comes from the admin's lists.
+  function openServiceForm(type) {
+    const def = SERVICE_TYPES[type];
+    const providers = serviceProviders(type);
+    if (!providers.length) {
+      return alertBox({
+        title: `No ${def.providerLabel.toLowerCase()}s yet`, tone: "warn",
+        message: `Add ${def.providerLabel.toLowerCase()}s under Administration → Lists & payments, then come back here.`,
+      });
+    }
+    openModal(def.label, `
+      <form id="svc-form" class="form-grid">
+        <label class="span-2">${def.providerLabel}
+          <select name="provider" required>${providers.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("")}</select>
+        </label>
+        <label>${esc(def.amountLabel)}<input name="amount" type="number" inputmode="decimal" min="1" step="0.01" required /></label>
+        <label>Service fee charged<input name="fee" type="number" inputmode="decimal" min="0" step="0.01" value="0" /></label>
+        <label class="span-2">${def.phoneRequired ? "Mobile number to recharge" : "Customer wallet number (optional)"}
+          <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="01XXXXXXXXX" ${def.phoneRequired ? "required" : ""} />
+        </label>
+        <p class="muted small span-2">The amount is passed on to the customer or to the wallet. Only the fee is income for the shop.</p>
+        <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">${icon("plus")}<span>Add to bill</span></button></div>
+      </form>`, (body, close) => {
+      body.querySelector("[data-cancel]").addEventListener("click", close);
+      onSubmit(body.querySelector("#svc-form"), async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        try {
+          addService(serviceLine({
+            type, provider: String(f.get("provider")), amount: f.get("amount"), fee: f.get("fee") || 0, phone: String(f.get("phone") || ""),
+          }));
+          close();
+          toast(`${def.label} added to the bill`, "success");
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      });
+    });
+  }
+
   $("#p-cats").addEventListener("click", (e) => {
     const b = e.target.closest("[data-cat]");
     if (!b) return;
@@ -294,6 +402,7 @@ export async function render(el) {
     paintCats();
     paintGrid();
   });
+  el.querySelectorAll("[data-svc]").forEach((b) => b.addEventListener("click", () => openServiceForm(b.dataset.svc)));
   $("#p-grid").addEventListener("click", (e) => {
     const b = e.target.closest("[data-add]");
     if (b) add(b.dataset.add);
@@ -309,6 +418,7 @@ export async function render(el) {
     const t = e.target;
     if (t.dataset.unit) setUnit(t.dataset.unit, t.value);
     else if (t.dataset.price) setPrice(t.dataset.price, t.value);
+    else if (t.dataset.svcPrice) setServiceFee(t.dataset.svcPrice, t.value);
   });
   $("#p-search").addEventListener("input", (e) => { st.q = e.target.value; paintGrid(); });
   $("#p-search").addEventListener("keydown", (e) => {
@@ -354,11 +464,15 @@ export async function render(el) {
   async function charge() {
     if (!st.cart.size) return toast("The bill is empty. Add a product first.", "error");
     const method = paymentMethod(st.pay);
-    if (method.credit && !st.customerId) return toast("Choose a customer for an on-account sale", "error");
     const lines = cartLines();
-    const low = lines.find((l) => l.price < l.minPrice - 0.005);
+    const hasServices = lines.some(isService);
+    if (method.credit && !st.customerId) return toast("Choose a customer for an on-account sale", "error");
+    if (method.credit && hasServices) return toast("Recharge and wallet services must be paid now, not on account", "error");
+    const low = lines.find((l) => !isService(l) && l.price < l.minPrice - 0.005);
     if (low) return toast(`${low.name} can not be sold below ${money(low.minPrice)} per ${low.unit}`, "error");
-    const tendered = method.key === "cash" && $("#p-tender").value !== "" ? Number($("#p-tender").value) : null;
+    const t = billTotals(lines);
+    const cashOnBill = method.key === "cash" && t.collect > 0;
+    const tendered = cashOnBill && $("#p-tender").value !== "" ? Number($("#p-tender").value) : null;
     if (tendered !== null && tendered < 0) return toast("Cash received cannot be negative", "error");
     const btn = $("#p-charge");
     btn.disabled = true;
@@ -366,8 +480,8 @@ export async function render(el) {
     try {
       const customer = customers.find((c) => c.id === st.customerId) || null;
       const sale = await completeSale({ lines, discountPct: st.disc, method, customer, tendered });
-      await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: method.key });
-      for (const l of lines) byId[l.id].stock = (Number(byId[l.id].stock) || 0) - l.pieces;
+      await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: method.key, services: sale.serviceCount });
+      for (const l of lines) if (!isService(l)) byId[l.id].stock = (Number(byId[l.id].stock) || 0) - l.pieces;
       clearBill();
       paintGrid();
       if (sale.priceExtra > 0) {
@@ -385,7 +499,7 @@ export async function render(el) {
 
   function showReceipt(sale) {
     const rows = sale.lines.map((l) => `
-      <tr><td>${esc(l.name)}<small>${l.qty} ${esc(l.unit || "")} × ${money(l.price)}${l.price > l.listPrice ? ` (list ${money(l.listPrice)})` : ""}</small></td><td class="r">${money(l.lineTotal)}</td></tr>`).join("");
+      <tr><td>${esc(l.name)}<small>${l.service ? esc(l.service) : `${l.qty} ${esc(l.unit || "")} × ${money(l.price)}${l.price > l.listPrice ? ` (list ${money(l.listPrice)})` : ""}`}</small></td><td class="r">${money(l.lineTotal)}</td></tr>`).join("");
     openModal(`Invoice ${sale.invoiceNo}`, `
       <div class="receipt print-area">
         <div class="r-head">
@@ -401,7 +515,11 @@ export async function render(el) {
           <div><span>Discount</span><span>− ${money(sale.discount)}</span></div>
           ${sale.priceExtra > 0 ? `<div><span>Price increases</span><span>+ ${money(sale.priceExtra)}</span></div>` : ""}
           <div><span>VAT</span><span>${money(sale.vat)}</span></div>
+          ${sale.fees > 0 ? `<div><span>Service fees</span><span>${money(sale.fees)}</span></div>` : ""}
           <div class="grand"><span>Total</span><span>${money(sale.total)}</span></div>
+          ${sale.transfersIn ? `<div><span>Sent to wallets / operators</span><span>${money(sale.transfersIn)}</span></div>` : ""}
+          ${sale.transfersOut ? `<div><span>Cash-out paid to customer</span><span>${money(sale.transfersOut)}</span></div>` : ""}
+          <div class="grand"><span>${sale.collect >= 0 ? "Collected" : "Paid to customer"}</span><span>${money(Math.abs(sale.collect))}</span></div>
           <div><span>Paid by</span><span>${esc(sale.paymentLabel)}</span></div>
           ${sale.tendered != null ? `<div><span>Cash received</span><span>${money(sale.tendered)}</span></div><div><span>Change</span><span>${money(Math.max(0, sale.change))}</span></div>` : ""}
         </div>
@@ -423,11 +541,14 @@ export async function render(el) {
   paintBill();
 }
 
-/* Runs the whole sale atomically: stock in pieces (FEFO batches), lowest-price check, invoice number, journal, customer balance. */
+/* Runs the whole sale atomically: stock in pieces (FEFO batches), lowest-price check, service fees and transfers,
+   invoice number, one balanced journal, customer balance. */
 async function completeSale({ lines, discountPct, method, customer, tendered = null }) {
   const today = todayISO();
+  const productLines = lines.filter((l) => l.kind !== "service");
+  const serviceLines = lines.filter((l) => l.kind === "service");
   const candidateIds = {};
-  for (const l of lines) {
+  for (const l of productLines) {
     const snap = await getDocs(query(collection(db, "batches"), where("productId", "==", l.id)));
     candidateIds[l.id] = snap.docs.map((d) => d.id);
   }
@@ -446,7 +567,7 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
     const productWrites = [];
     const batchWrites = [];
 
-    for (const l of lines) {
+    for (const l of productLines) {
       const pRef = doc(db, "products", l.id);
       const pSnap = await tx.get(pRef);
       if (!pSnap.exists()) throw new Error(`"${l.name}" no longer exists`);
@@ -476,55 +597,94 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
       priced.push({
         ...l, name: p.name, unit: u.name, size: u.size, pieces,
         listPrice: u.price, price: l.price, vatRate: Number(p.vatRate) || 0,
-        costPrice: Number(p.costPrice) || 0, cogs: lineCogs,
+        costPrice: Number(p.costPrice) || 0, cogs: lineCogs, kind: "product",
       });
     }
 
-    const totals = calcTotals(priced, discountPct);
+    // Services: fee is revenue, transfer moves through the wallet float or cash.
+    const services = serviceLines.map((l) => {
+      const fee = round2(l.price * l.qty);
+      return {
+        kind: "service", serviceType: l.serviceType, provider: l.provider, phone: l.phone || "",
+        transfer: round2(l.transfer), name: l.name, unit: "service", size: 1, pieces: 0, qty: 1,
+        listPrice: fee, price: fee, vatRate: 0, costPrice: 0, cogs: 0, fee,
+      };
+    });
+
+    const goods = calcTotals(priced, discountPct);
+    const feesTotal = round2(services.reduce((s, v) => s + v.fee, 0));
+    const transfersIn = round2(services.filter((v) => v.serviceType === "cashin" || v.serviceType === "recharge").reduce((s, v) => s + v.transfer, 0));
+    const transfersOut = round2(services.filter((v) => v.serviceType === "cashout").reduce((s, v) => s + v.transfer, 0));
+    const saleTotal = round2(goods.total + feesTotal);
+    const saleNet = round2(goods.net + feesTotal);
+    const collect = round2(saleTotal + transfersIn - transfersOut);
     const cogsTotal = round2(cogs);
     const priceExtra = round2(priced.reduce((s, l) => s + Math.max(0, l.price - l.listPrice) * l.qty, 0));
     const invoiceNo = `${settings.invoicePrefix || "INV"}-${String(seq).padStart(6, "0")}`;
+    const paid = collect >= 0 ? tendered : null;
 
+    // Goods part of the entry, then each service's own balanced entry, all on the same bill.
+    const journalLines = [
+      { account: method.account, debit: goods.total },
+      { account: ACCOUNTS.SALES, credit: goods.net },
+      { account: ACCOUNTS.VAT_PAYABLE, credit: goods.vat },
+      { account: ACCOUNTS.COGS, debit: cogsTotal },
+      { account: ACCOUNTS.INVENTORY, credit: cogsTotal },
+      ...services.flatMap((v) => serviceJournalLines(v.serviceType, v.transfer, v.fee, method.account)),
+    ];
     const journal = buildJournal({
       date: today,
-      memo: `Sale ${invoiceNo} (${method.label})`,
+      memo: `Sale ${invoiceNo} (${method.label})${services.length ? ` + ${services.length} service${services.length === 1 ? "" : "s"}` : ""}`,
       ref: invoiceNo,
-      lines: [
-        { account: method.account, debit: totals.total },
-        { account: ACCOUNTS.SALES, credit: totals.net },
-        { account: ACCOUNTS.VAT_PAYABLE, credit: totals.vat },
-        { account: ACCOUNTS.COGS, debit: cogsTotal },
-        { account: ACCOUNTS.INVENTORY, credit: cogsTotal },
-      ],
+      lines: journalLines,
     });
 
     tx.set(counterRef, { sale: seq }, { merge: true });
     productWrites.forEach((w) => tx.update(w.ref, { stock: w.stock, updatedAt: serverTimestamp() }));
     batchWrites.forEach((w) => tx.update(w.ref, { remaining: w.remaining }));
-    if (method.credit) tx.update(doc(db, "customers", customer.id), { balance: increment(totals.total) });
+    if (method.credit) tx.update(doc(db, "customers", customer.id), { balance: increment(saleTotal) });
     tx.set(journalRef, journal);
+
+    const items = [
+      ...goods.lines.map((l) => ({
+        productId: l.id, name: l.name, unit: l.unit, unitSize: l.size, qty: l.qty, pieces: l.pieces,
+        price: l.price, listPrice: l.listPrice, priceExtra: round2(Math.max(0, l.price - l.listPrice) * l.qty),
+        vatRate: l.vatRate, costPrice: l.costPrice, cogs: l.cogs,
+        lineNet: l.lineNet, lineVat: l.lineVat, lineTotal: l.lineTotal, kind: "product",
+      })),
+      ...services.map((v) => ({
+        kind: "service", serviceType: v.serviceType, provider: v.provider, phone: v.phone, transfer: v.transfer,
+        name: v.name, unit: "service", qty: 1, pieces: 0, price: v.fee, listPrice: v.fee, priceExtra: 0,
+        vatRate: 0, costPrice: 0, cogs: 0, lineNet: v.fee, lineVat: 0, lineTotal: v.fee, productId: null,
+      })),
+    ];
     tx.set(saleRef, {
       invoiceNo, date: today,
       customerId: customer?.id || null,
       customerName: customer?.name || "Walk-in",
-      items: totals.lines.map((l) => ({
-        productId: l.id, name: l.name, unit: l.unit, unitSize: l.size, qty: l.qty, pieces: l.pieces,
-        price: l.price, listPrice: l.listPrice, priceExtra: round2(Math.max(0, l.price - l.listPrice) * l.qty),
-        vatRate: l.vatRate, costPrice: l.costPrice, cogs: l.cogs,
-        lineNet: l.lineNet, lineVat: l.lineVat, lineTotal: l.lineTotal,
-      })),
-      subtotal: totals.subtotal, discount: totals.discount, discountPct: Number(discountPct) || 0,
-      net: totals.net, vat: totals.vat, total: totals.total, cogs: cogsTotal, priceExtra,
+      items,
+      subtotal: goods.subtotal, discount: goods.discount, discountPct: Number(discountPct) || 0,
+      net: saleNet, vat: goods.vat, total: saleTotal, cogs: cogsTotal, priceExtra,
+      serviceFees: feesTotal, serviceCount: services.length, transfersIn, transfersOut, collect,
       payment: method.key, paymentLabel: method.label,
-      tendered: tendered, change: tendered === null ? null : round2(tendered - totals.total),
+      tendered: paid, change: paid === null ? null : round2(paid - collect),
       cashier: session.name, cashierUid: session.uid, journalId: journalRef.id,
       createdAt: serverTimestamp(),
     });
 
     return {
-      id: saleRef.id, invoiceNo, ...totals,
-      lines: totals.lines, paymentLabel: method.label, customerName: customer?.name || "Walk-in",
-      tendered, change: tendered === null ? null : round2(tendered - totals.total), priceExtra,
+      id: saleRef.id, invoiceNo,
+      subtotal: goods.subtotal, discount: goods.discount, net: saleNet, vat: goods.vat, total: saleTotal,
+      fees: feesTotal, transfersIn, transfersOut, collect, serviceCount: services.length,
+      lines: [
+        ...goods.lines.map((l) => ({ ...l, service: "" })),
+        ...services.map((v) => ({
+          name: v.name, qty: 1, unit: "service", price: v.fee, listPrice: v.fee, lineTotal: v.fee,
+          service: v.transfer ? `${v.serviceType === "cashout" ? "Cash-out" : v.serviceType === "cashin" ? "Cash-in" : "Recharge"} amount ${v.transfer}${v.phone ? ` · ${v.phone}` : ""}` : "",
+        })),
+      ],
+      paymentLabel: method.label, customerName: customer?.name || "Walk-in",
+      tendered: paid, change: paid === null ? null : round2(paid - collect), priceExtra,
     };
   });
 }

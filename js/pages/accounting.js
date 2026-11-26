@@ -1,5 +1,6 @@
 import { manageExpenseCategories, expenseCategories } from "../expense-categories.js";
-import { onSubmit, onAction } from "../core.js";
+import { onSubmit, onAction, downloadCSV } from "../core.js";
+import { printHtml } from "../print.js";
 import { db, collection, doc, getDoc, getDocs, query, where, orderBy, limit, addDoc, setDoc, runTransaction, serverTimestamp } from "../firebase.js";
 import {
   session, money, esc, icon, toast, openModal, todayISO, monthStartISO, round2,
@@ -7,13 +8,14 @@ import {
 } from "../core.js";
 
 const TABS = [
+  ["overview", "Overview"],
   ["journal", "Journal"],
   ["chart", "Chart of accounts"],
   ["expenses", "Expenses"],
   ["statements", "Statements"],
 ];
 
-const VIEWS = { journal: viewJournal, chart: viewChart, expenses: viewExpenses, statements: viewStatements };
+const VIEWS = { overview: viewOverview, journal: viewJournal, chart: viewChart, expenses: viewExpenses, statements: viewStatements };
 
 export async function render(el) {
   el.innerHTML = `
@@ -26,13 +28,13 @@ export async function render(el) {
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
-    await VIEWS[tab](body);
+    await VIEWS[tab](body, go);
   };
   el.querySelector(".tabs").addEventListener("click", (e) => {
     const b = e.target.closest(".tab");
     if (b) go(b.dataset.tab);
   });
-  go("journal");
+  go("overview");
 }
 
 async function loadAccounts() {
@@ -40,44 +42,177 @@ async function loadAccounts() {
   return snap.docs.map((d) => ({ code: d.id, ...d.data() })).sort((a, b) => a.code.localeCompare(b.code));
 }
 
-/* ───────── Journal ───────── */
+/* ───────── Overview ───────── */
 
-async function viewJournal(body) {
-  const [jSnap, accounts] = await Promise.all([
-    getDocs(query(collection(db, "journal"), orderBy("date", "desc"), limit(100))),
-    loadAccounts(),
-  ]);
-  const name = (code) => accounts.find((a) => a.code === code)?.name || code;
+const monthKey = (d) => d.slice(0, 7);
+
+async function viewOverview(body, go) {
+  const [accounts, jSnap] = await Promise.all([loadAccounts(), getDocs(collection(db, "journal"))]);
   const entries = jSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const expenseAccounts = accounts.filter((a) => a.type === "expense");
+  const all = accumulate(entries, accounts, "0000-00-00");
+  const byCode = Object.fromEntries(all.map((a) => [a.code, a]));
+  const balanceOf = (code) => {
+    const a = byCode[code];
+    if (!a) return 0;
+    return a.type === "liability" || a.type === "equity" || a.type === "revenue" ? round2(a.credit - a.debit) : round2(a.debit - a.credit);
+  };
+
+  // Revenue and expenses per month, from the journal. Revenue is credit-minus-debit on revenue accounts.
+  const perMonth = new Map();
+  const monthOf = (k) => perMonth.get(k) || perMonth.set(k, { rev: 0, exp: 0 }).get(k);
+  const typeOf = Object.fromEntries(accounts.map((a) => [a.code, a.type]));
+  for (const e of entries) {
+    const m = monthOf(monthKey(e.date));
+    for (const l of e.lines || []) {
+      const t = typeOf[l.account];
+      if (t === "revenue") m.rev += (l.credit || 0) - (l.debit || 0);
+      if (t === "expense") m.exp += (l.debit || 0) - (l.credit || 0);
+    }
+  }
+  const now = new Date();
+  const trend = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const m = perMonth.get(k) || { rev: 0, exp: 0 };
+    trend.push({ key: k, label: d.toLocaleString("en", { month: "short" }), rev: round2(m.rev), exp: round2(m.exp) });
+  }
+  const thisMonth = trend[trend.length - 1];
+  const tMax = Math.max(1, ...trend.flatMap((t) => [t.rev, t.exp]));
+
+  const totalDr = round2(entries.reduce((s, e) => s + (e.debit || 0), 0));
+  const totalCr = round2(entries.reduce((s, e) => s + (e.credit || 0), 0));
+  const balanced = Math.abs(totalDr - totalCr) < 0.01;
+  const recent = [...entries].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 8);
+
+  const kpi = (ico, label, value, tone = "") => `
+    <article class="card kpi hover-lift ${tone}"><div class="kpi-ico">${icon(ico)}</div><div><small>${esc(label)}</small><strong>${esc(value)}</strong></div></article>`;
 
   body.innerHTML = `
     <section class="card">
-      <div class="toolbar">
-        <h3>Latest 100 entries</h3>
+      <div class="toolbar wrap">
+        <h3>Accounts overview</h3>
+        <span class="badge ${balanced ? "ok" : "danger"}">${balanced ? "Books balance" : "Books out of balance"}</span>
+        <div class="grow"></div>
+        <button class="btn primary" data-qa="manual">${icon("plus")}<span>Manual entry</span></button>
+        <button class="btn ghost" data-qa="expense">${icon("currency")}<span>Record expense</span></button>
+        <button class="btn ghost" data-qa="statements">${icon("reports")}<span>Statements</span></button>
+      </div>
+    </section>
+    <section class="kpi-grid">
+      ${kpi("currency", "Cash on hand", money(balanceOf(ACCOUNTS.CASH)))}
+      ${kpi("accounting", "Bank", money(balanceOf(ACCOUNTS.BANK)))}
+      ${kpi("currency", "Mobile wallet float", money(balanceOf(ACCOUNTS.WALLET_FLOAT)))}
+      ${kpi("partners", "Customers owe you", money(balanceOf(ACCOUNTS.AR)))}
+      ${kpi("inventory", "Stock value", money(balanceOf(ACCOUNTS.INVENTORY)))}
+      ${kpi("partners", "You owe suppliers", money(balanceOf(ACCOUNTS.AP)))}
+      ${kpi("reports", "Revenue this month", money(thisMonth.rev))}
+      ${kpi("reports", "Expenses this month", money(thisMonth.exp))}
+      ${kpi("reports", "Profit this month", money(round2(thisMonth.rev - thisMonth.exp)), thisMonth.rev >= thisMonth.exp ? "" : "tone-warn")}
+    </section>
+    <section class="card">
+      <header class="card-head"><h3>Last 6 months</h3><span class="muted small"><i class="sw sw-rev"></i> Revenue <i class="sw sw-exp"></i> Expenses</span></header>
+      <div class="chart trend">
+        ${trend.map((t, i) => `
+          <div class="bar-col" title="${esc(t.label)}: revenue ${esc(money(t.rev))}, expenses ${esc(money(t.exp))}">
+            <div class="pair">
+              <div class="bar rev" style="--h:${Math.max(2, Math.round((t.rev / tMax) * 100))}%; --i:${i}"></div>
+              <div class="bar exp" style="--h:${Math.max(2, Math.round((t.exp / tMax) * 100))}%; --i:${i}"></div>
+            </div>
+            <span class="bar-label">${esc(t.label)}</span>
+          </div>`).join("")}
+      </div>
+    </section>
+    <section class="card">
+      <header class="card-head"><h3>Latest entries</h3><button class="btn ghost sm" data-qa="journal">View all</button></header>
+      <div class="recent-list">
+        ${recent.map((e) => `
+          <div class="recent-row">
+            <div><strong>${esc(e.memo)}</strong><small>${esc(e.date)}${e.ref ? " · " + esc(e.ref) : ""}</small></div>
+            <strong class="r">${money(e.debit)}</strong>
+          </div>`).join("") || `<p class="muted center">No entries yet. Make a sale or record an expense to see them here.</p>`}
+      </div>
+    </section>`;
+
+  body.querySelectorAll("[data-qa]").forEach((b) => b.addEventListener("click", () => {
+    const k = b.dataset.qa;
+    if (k === "manual") openManualEntry(accounts, () => viewOverview(body, go));
+    else if (k === "expense") openExpenseForm(expenseAccounts, accounts, () => viewOverview(body, go));
+    else go(k);
+  }));
+}
+
+/* ───────── Journal ───────── */
+
+async function viewJournal(body) {
+  const accounts = await loadAccounts();
+  const name = (code) => accounts.find((a) => a.code === code)?.name || code;
+  const today = todayISO();
+  body.innerHTML = `
+    <section class="card">
+      <div class="toolbar wrap">
+        <h3>Journal</h3>
         <div class="grow"></div>
         <button class="btn primary" id="j-new">${icon("plus")}<span>Manual entry</span></button>
       </div>
-      <p class="muted small">Tap an entry to see its lines.</p>
-      <div class="table-wrap"><table class="stack-mobile">
+      <div class="filter-row">
+        <label class="inline">From<input type="date" id="j-from" /></label>
+        <label class="inline">To<input type="date" id="j-to" value="${today}" /></label>
+        <input type="search" id="j-q" placeholder="Search memo, reference or account" aria-label="Search journal" />
+        <button class="btn ghost sm" id="j-apply">${icon("search")}<span>Apply</span></button>
+        <button class="btn ghost sm" id="j-clear">Reset</button>
+        <button class="btn ghost sm" id="j-csv">${icon("download")}<span>CSV</span></button>
+      </div>
+      <p class="muted small" id="j-info">Tap an entry to see its lines.</p>
+      <div class="table-wrap" id="j-table"></div>
+    </section>`;
+
+  let shown = [];
+  const load = async () => {
+    const from = body.querySelector("#j-from").value;
+    const to = body.querySelector("#j-to").value || today;
+    const q = body.querySelector("#j-q").value.trim().toLowerCase();
+    body.querySelector("#j-table").innerHTML = `<div class="skeleton"></div>`;
+    const snap = from
+      ? await getDocs(query(collection(db, "journal"), where("date", ">=", from), where("date", "<=", to), orderBy("date", "desc"), limit(500)))
+      : await getDocs(query(collection(db, "journal"), where("date", "<=", to), orderBy("date", "desc"), limit(200)));
+    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    shown = all.filter((e) => !q || [e.memo, e.ref, e.by, ...(e.lines || []).map((l) => `${l.account} ${name(l.account)}`)]
+      .some((v) => String(v || "").toLowerCase().includes(q)));
+    body.querySelector("#j-info").textContent = `${shown.length} entr${shown.length === 1 ? "y" : "ies"}${from ? ` from ${from}` : ""} to ${to}. Tap an entry to see its lines.`;
+    body.querySelector("#j-table").innerHTML = `
+      <table class="stack-mobile">
         <thead><tr><th>Date</th><th>Memo</th><th>Ref</th><th class="r">Debit</th><th class="r">Credit</th><th>By</th></tr></thead>
         <tbody>
-          ${entries.map((e) => `
+          ${shown.slice(0, 300).map((e) => `
             <tr class="expandable" data-jid="${esc(e.id)}">
               <td data-label="Date">${esc(e.date)}</td><td data-label="Memo">${esc(e.memo)}</td><td data-label="Ref">${esc(e.ref || "")}</td>
               <td data-label="Debit" class="r">${money(e.debit)}</td><td data-label="Credit" class="r">${money(e.credit)}</td><td data-label="By">${esc(e.by || "")}</td>
             </tr>
             <tr class="detail hidden" data-detail="${esc(e.id)}"><td colspan="6">
               <table class="mini">${(e.lines || []).map((l) => `<tr><td>${esc(l.account)} · ${esc(name(l.account))}</td><td class="r">${l.debit ? money(l.debit) : ""}</td><td class="r">${l.credit ? money(l.credit) : ""}</td></tr>`).join("")}</table>
-            </td></tr>`).join("") || `<tr><td colspan="6" class="muted center">No entries yet</td></tr>`}
+            </td></tr>`).join("") || `<tr><td colspan="6" class="muted center">No entries match.</td></tr>`}
         </tbody>
-      </table></div>
-    </section>`;
+      </table>`;
+  };
 
-  body.addEventListener("click", (e) => {
+  body.querySelector("#j-table").addEventListener("click", (e) => {
     const tr = e.target.closest(".expandable");
     if (tr) body.querySelector(`[data-detail="${CSS.escape(tr.dataset.jid)}"]`)?.classList.toggle("hidden");
   });
+  body.querySelector("#j-apply").addEventListener("click", load);
+  body.querySelector("#j-q").addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
+  body.querySelector("#j-clear").addEventListener("click", () => {
+    body.querySelector("#j-from").value = ""; body.querySelector("#j-to").value = today; body.querySelector("#j-q").value = ""; load();
+  });
+  body.querySelector("#j-csv").addEventListener("click", () => {
+    const rows = [["Date", "Memo", "Ref", "Account", "Account name", "Debit", "Credit"]];
+    shown.forEach((e) => (e.lines || []).forEach((l) => rows.push([e.date, e.memo, e.ref || "", l.account, name(l.account), l.debit || 0, l.credit || 0])));
+    downloadCSV(`journal-${todayISO()}.csv`, rows);
+  });
   body.querySelector("#j-new").addEventListener("click", () => openManualEntry(accounts, () => viewJournal(body)));
+  load();
 }
 
 function openManualEntry(accounts, reload) {
@@ -308,6 +443,7 @@ async function viewStatements(body) {
         <label class="inline">From<input type="date" id="st-from" value="${monthStartISO()}" /></label>
         <label class="inline">To<input type="date" id="st-to" value="${todayISO()}" /></label>
         <button class="btn primary" id="st-run">${icon("reports")}<span>Show</span></button>
+        <button class="btn ghost" id="st-print">${icon("print")}<span>Print</span></button>
       </div>
       <div id="st-out" class="statement"></div>
     </section>`;
@@ -328,6 +464,10 @@ async function viewStatements(body) {
       : trialBalance(accts, to);
   };
   body.querySelector("#st-run").addEventListener("click", run);
+  body.querySelector("#st-print").addEventListener("click", () => {
+    if (!out.innerHTML.trim()) return;
+    printHtml("Statement", out.innerHTML);
+  });
   body.querySelector("#st-kind").addEventListener("change", run);
   run();
 }
