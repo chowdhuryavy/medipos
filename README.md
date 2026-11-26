@@ -183,3 +183,45 @@ medipos/
 - **Printed invoices** use the browser's print dialog. A thermal-printer setup can be added later.
 - **Tax** is a single VAT rate per product. Multiple tax groups are not built yet.
 - **Two-factor sign-in** can be enabled in Firebase Authentication if wanted.
+
+## Server setup: staff emails, OTP and forced password change
+
+The app runs on Vercel as a static site plus small serverless functions in `api/`. They use the Firebase Admin SDK and send email through Gmail SMTP.
+
+### 1. Gmail App Password (sends the emails)
+1. Turn on 2-Step Verification for `chowdhuryavy@gmail.com`.
+2. Create an App Password at myaccount.google.com → Security → App passwords.
+3. Keep the 16-character password for step 3. Never paste it into chat or into the code.
+
+### 2. Firebase service account (lets the server create users and reset passwords)
+1. Firebase Console → Project settings → Service accounts → **Generate new private key**.
+2. Open the JSON file and copy its whole contents.
+
+### 3. Vercel environment variables (Project → Settings → Environment Variables)
+| Name | Value |
+|---|---|
+| `FIREBASE_SERVICE_ACCOUNT` | the full JSON from step 2 |
+| `SMTP_USER` | `chowdhuryavy@gmail.com` |
+| `SMTP_PASS` | the App Password from step 1 |
+| `MAIL_FROM` | `MediPOS <chowdhuryavy@gmail.com>` |
+| `APP_URL` | `https://medipos-delta.vercel.app` |
+
+Then redeploy (Deployments → ⋯ → Redeploy).
+
+### 4. Firebase Authentication settings
+- Authentication → Settings → **Password policy**: minimum 8, require uppercase, lowercase, number and symbol.
+- Authentication → Settings → **Authorized domains**: add `medipos-delta.vercel.app`.
+
+### 5. Firestore rules
+Firestore → Rules → paste the contents of `firestore.rules` → **Publish**. Vercel does not publish rules for you.
+
+### How the flows work
+- **New staff account**: the admin fills in name, email and role. The server creates the login with a generated temporary password, emails it, and the user must change it at first sign-in.
+- **Admin password reset**: the server sets a new temporary password, signs the user out everywhere, and emails it. The user must change it at next sign-in.
+- **Forgot password**: the user enters their email. If an account exists, a 6-digit code is emailed (valid 10 minutes, 5 tries, one request per minute). The code is stored only as a salted hash.
+- **Email wording**: Administration → Branding & email. The admin can change the app name, the logo and the subject and body of each email.
+- **Gmail's "Copy code" button**: Gmail decides this itself. It shows in the Gmail app on Android and iOS, not on the web. The one-time code email puts the code in the subject, the same way Vercel's security emails do.
+
+### Known limits
+- Forgot password reveals whether an email has an account. This was requested; to hide it, change the message in `api/otp/request.js`.
+- Sale totals and stock changes are still calculated in the browser. A cashier with a modified browser could write wrong totals within their permissions. Full protection needs Cloud Functions (Firebase Blaze plan).

@@ -13,13 +13,15 @@ const WRITE_LABEL = {
   partners: "Customers & suppliers", accounting: "Journal, expenses & accounts",
 };
 import { pushToSheets } from "../sheets.js";
-import { passwordProblem } from "../password.js";
+import { post } from "../api.js";
+import { DEFAULT_TEMPLATES, EMAIL_PLACEHOLDERS } from "../email-defaults.js";
 
 const TABS = [
   ["users", "Staff"],
   ["settings", "Shop & rules"],
   ["lists", "Lists & payments"],
   ["roles", "Role access"],
+  ["branding", "Branding & email"],
   ["integrations", "Google Sheets"],
   ["audit", "Activity log"],
 ];
@@ -35,7 +37,7 @@ export async function render(el) {
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
-  const views = { users: viewUsers, settings: viewSettings, lists: viewLists, roles: viewRoles, integrations: viewIntegrations, audit: viewAudit };
+  const views = { users: viewUsers, settings: viewSettings, lists: viewLists, roles: viewRoles, branding: viewBranding, integrations: viewIntegrations, audit: viewAudit };
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
@@ -83,10 +85,14 @@ async function viewUsers(body) {
     if (b.dataset.edit) return openUserForm(users.find((u) => u.id === b.dataset.edit), () => viewUsers(body));
     if (b.dataset.reset) {
       const u = users.find((x) => x.id === b.dataset.reset);
-      if (!(await confirmBox(`Send a password reset email to ${u.email}?`))) return;
-      await sendPasswordResetEmail(auth, u.email);
-      await audit("user.reset_password", { email: u.email });
-      toast("Reset email sent", "success");
+      if (!(await confirmBox(`Reset ${u.name}'s password? A temporary password will be emailed to ${u.email}, and they must change it at sign-in.`))) return;
+      try {
+        await post("/api/admin/reset-password", { uid: u.id }, { secure: true });
+        toast("Temporary password emailed", "success");
+        reload();
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
   });
 }
@@ -102,8 +108,7 @@ function openUserForm(u, reload) {
       <label class="span-2">Full name<input name="name" required value="${esc(u?.name || "")}" /></label>
       ${isNew ? `
         <label class="span-2">Email<input name="email" type="email" inputmode="email" required autocomplete="off" /></label>
-        <label class="span-2">Temporary password<input name="password" type="password" minlength="8" required autocomplete="new-password" />
-          <small class="muted">At least 8 characters. Ask the staff member to change it after first sign-in.</small></label>` : ""}
+        <p class="span-2 muted small">A temporary password is generated and emailed to the staff member. They must choose their own password at first sign-in.</p>` : ""}
       <label>Role<select name="role">${roleOptions(u?.role || "cashier")}</select></label>
       <label class="check"><input type="checkbox" name="active" ${!u || u.active ? "checked" : ""} /> <span>Account active</span></label>
       <div class="form-actions span-2">
@@ -124,12 +129,8 @@ function openUserForm(u, reload) {
       try {
         if (isNew) {
           const email = String(f.get("email") || "").trim();
-          const password = String(f.get("password") || "");
-          const problem = passwordProblem(password);
-          if (problem) return toast(problem, "error");
-          const uid = await createAuthUser(email, password);
-          await setDoc(doc(db, "users", uid), { name, email, role, active, createdAt: serverTimestamp(), createdBy: session.uid });
-          await audit("user.create", { email, role });
+          const created = await post("/api/admin/create-user", { name, email, role }, { secure: true });
+          if (!active) await updateDoc(doc(db, "users", created.uid), { active: false });
         } else {
           await updateDoc(doc(db, "users", u.id), { name, role, active, updatedAt: serverTimestamp() });
           await audit("user.update", { id: u.id, role, active });
@@ -445,4 +446,123 @@ async function viewAudit(body) {
         </tbody>
       </table></div>
     </section>`;
+}
+
+/* ───────── Branding & email ───────── */
+
+const LOGO_MAX_CHARS = 350_000;
+
+function readLogo(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) return reject(new Error("Choose an image file (PNG, JPG or WebP)."));
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 480 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.width * scale));
+      c.height = Math.max(1, Math.round(img.height * scale));
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      const url = c.toDataURL("image/png");
+      URL.revokeObjectURL(img.src);
+      if (url.length > LOGO_MAX_CHARS) return reject(new Error("That logo is too large. Use a smaller image."));
+      resolve(url);
+    };
+    img.onerror = () => reject(new Error("Could not read that image."));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function viewBranding(body) {
+  const [bSnap, eSnap] = await Promise.all([getDoc(doc(db, "branding", "public")), getDoc(doc(db, "settings", "emails"))]);
+  const brand = bSnap.exists() ? bSnap.data() : {};
+  const stored = eSnap.exists() ? eSnap.data() : {};
+  const tpl = (k) => ({ ...DEFAULT_TEMPLATES[k], ...(stored[k] || {}) });
+  let logoUrl = brand.logoUrl || "";
+  let removeLogo = false;
+
+  body.innerHTML = `
+    <form id="bf" class="settings-form">
+      <section class="card">
+        <h3>App name and logo</h3>
+        <p class="muted small">Shown on the sign-in page, in the sidebar and in every email.</p>
+        <div class="form-grid">
+          <label>App name<input name="appName" required maxlength="40" value="${esc(brand.appName || "MediPOS")}" /></label>
+          <div class="span-2 logo-editor">
+            <div class="logo-preview" id="logo-preview">${logoUrl ? `<img src="${logoUrl}" alt="Current logo" />` : `<span class="muted small">No logo yet</span>`}</div>
+            <div class="logo-actions">
+              <label class="btn ghost sm file-btn">${icon("upload")}<span>Choose logo</span>
+                <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp" hidden /></label>
+              <button type="button" class="btn ghost sm" id="logo-remove">${icon("trash")}<span>Remove</span></button>
+              <small class="muted">PNG with a transparent background works best. Max about 350 KB after resizing.</small>
+            </div>
+          </div>
+        </div>
+      </section>
+      ${Object.keys(DEFAULT_TEMPLATES).map((k) => `
+        <section class="card">
+          <h3>${esc(DEFAULT_TEMPLATES[k].label)}</h3>
+          <p class="muted small">${esc(DEFAULT_TEMPLATES[k].help)} Placeholders: ${EMAIL_PLACEHOLDERS.map((p) => `<code>{{${p}}}</code>`).join(" ")}</p>
+          <div class="form-grid">
+            <label class="span-2">Subject<input name="${k}__subject" value="${esc(tpl(k).subject)}" required /></label>
+            <label class="span-2">Message<textarea name="${k}__body" rows="6" required>${esc(tpl(k).body)}</textarea></label>
+            <label class="span-2">Button text (leave empty for no button)<input name="${k}__button" value="${esc(tpl(k).button || "")}" /></label>
+          </div>
+          <div class="form-actions"><button type="button" class="btn ghost sm" data-default="${k}">Restore default text</button></div>
+        </section>`).join("")}
+      <div class="sticky-actions">
+        <button class="btn primary" type="submit">${icon("check")}<span>Save branding & emails</span></button>
+      </div>
+    </form>`;
+
+  const form = body.querySelector("#bf");
+  body.querySelector("#logo-file").addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      logoUrl = await readLogo(file);
+      removeLogo = false;
+      body.querySelector("#logo-preview").innerHTML = `<img src="${logoUrl}" alt="New logo" />`;
+    } catch (err) {
+      toast(err.message, "error");
+    }
+    e.target.value = "";
+  });
+  body.querySelector("#logo-remove").addEventListener("click", () => {
+    logoUrl = "";
+    removeLogo = true;
+    body.querySelector("#logo-preview").innerHTML = `<span class="muted small">No logo (the default icon is used)</span>`;
+  });
+  body.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-default]");
+    if (!b) return;
+    const k = b.dataset.default;
+    form[`${k}__subject`].value = DEFAULT_TEMPLATES[k].subject;
+    form[`${k}__body`].value = DEFAULT_TEMPLATES[k].body;
+    form[`${k}__button`].value = DEFAULT_TEMPLATES[k].button || "";
+    toast("Default text restored. Save to apply it.", "info");
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(form);
+    const appName = String(f.get("appName") || "").trim() || "MediPOS";
+    const emails = {};
+    for (const k of Object.keys(DEFAULT_TEMPLATES)) {
+      emails[k] = {
+        subject: String(f.get(`${k}__subject`) || "").trim() || DEFAULT_TEMPLATES[k].subject,
+        body: String(f.get(`${k}__body`) || "").trim() || DEFAULT_TEMPLATES[k].body,
+        button: String(f.get(`${k}__button`) || "").trim(),
+      };
+    }
+    try {
+      await setDoc(doc(db, "branding", "public"), {
+        appName, shopName: settings.shopName, logoUrl: removeLogo ? "" : logoUrl, updatedAt: serverTimestamp(),
+      }, { merge: true });
+      await setDoc(doc(db, "settings", "emails"), { ...emails, updatedAt: serverTimestamp() });
+      await audit("branding.update", { appName, logo: !!logoUrl && !removeLogo });
+      toast("Branding and emails saved", "success");
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  });
 }

@@ -21,11 +21,16 @@ service cloud.firestore {
     function roleMap() {
       return get(/databases/$(database)/documents/settings/roles).data;
     }
+    // Users who must change their temporary password can do nothing else until they do.
+    function mustChange() {
+      return myProfile().get('mustChangePassword', false) == true;
+    }
     function isAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && myProfile().active == true
-        && myProfile().role == 'admin';
+        && myProfile().role == 'admin'
+        && !mustChange();
     }
     // Active staff whose role exists in settings/roles. Admins do not need the roles document,
     // so an admin can always sign in and create it.
@@ -33,6 +38,7 @@ service cloud.firestore {
       return isAdmin() || (signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && myProfile().active == true
+        && !mustChange()
         && myProfile().role in roleMap());
     }
     function canPage(page) {
@@ -49,7 +55,18 @@ service cloud.firestore {
     // ───── staff ─────
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      // Admins manage profiles. A user may only clear their own "must change password" flag.
+      allow update: if isAdmin()
+        || (request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword', 'passwordChangedAt'])
+            && request.resource.data.mustChangePassword == false);
+    }
+
+    // ───── public branding (app name, shop name, logo). Contains nothing secret. ─────
+    match /branding/public {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // ───── catalogue ─────
@@ -133,6 +150,10 @@ service cloud.firestore {
       allow read: if isActive();
       // Administrators must keep access to Administration.
       allow write: if isAdmin() && 'admin' in request.resource.data && 'admin' in request.resource.data.admin.pages;
+    }
+    match /settings/emails {
+      // Email subject and body templates. Read by the server, edited by admins.
+      allow read, write: if isAdmin();
     }
     match /settings/integrations {
       // Holds the Google Sheets secret: administrators only.
