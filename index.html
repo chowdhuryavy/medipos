@@ -31,10 +31,12 @@
       var m = document.getElementById("splash-msg");
       if (m) m.textContent = "This is taking longer than usual. Check your internet, then close and reopen the page.";
     }, 12000);
-    window.addEventListener("error", function () {
+    function showBootError(text) {
       var m = document.getElementById("splash-msg");
-      if (m && document.body.dataset.state === "boot") m.textContent = "Could not start MediPOS. Pull down to reload, or close and reopen the page.";
-    });
+      if (m && document.body.dataset.state === "boot") m.textContent = "Startup error: " + text;
+    }
+    window.addEventListener("error", function (e) { showBootError((e && e.message) || "script failed to load"); });
+    window.addEventListener("unhandledrejection", function (e) { showBootError((e && e.reason && e.reason.message) || String(e.reason)); });
   </script>
   <script type="module" src="js/app.js"></script>
 </body>

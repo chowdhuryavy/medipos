@@ -364,11 +364,37 @@ window.addEventListener("hashchange", route);
 /* ───────── boot & auth state ───────── */
 
 restoreTheme();
-const brandingReady = loadBranding().then(() => {
-  if (document.body.dataset.state === "boot") showSplash(root, "Checking your session…");
-});
+// Branding must never hold up the sign-in page: wait at most 4 seconds for it.
+const brandingReady = Promise.race([
+  loadBranding(),
+  new Promise((resolve) => setTimeout(resolve, 4000)),
+]);
+
+// Shows a startup error on the loading screen so it can be reported.
+function showStartupError(err) {
+  console.error(err);
+  setState("boot");
+  root.innerHTML = `
+    <section class="splash" role="alert">
+      <div class="splash-bg" aria-hidden="true"></div>
+      <div class="splash-core">
+        <h1 class="splash-name">MediPOS could not start</h1>
+        <p class="splash-msg">${esc(err?.message || String(err))}</p>
+        <button class="btn primary" type="button" onclick="location.reload()">Try again</button>
+      </div>
+      <p class="splash-ver">Version ${esc(APP_VERSION)}</p>
+    </section>`;
+}
 
 onAuthStateChanged(auth, async (user) => {
+  try {
+    await handleAuthChange(user);
+  } catch (err) {
+    showStartupError(err);
+  }
+});
+
+async function handleAuthChange(user) {
   if (!isConfigured()) return showSetup();
   showSplash(root, "Checking your session…");
   await brandingReady;
@@ -411,4 +437,4 @@ onAuthStateChanged(auth, async (user) => {
     pendingMessage = `Could not load your profile: ${err.message}`;
     await signOut(auth);
   }
-});
+}
