@@ -17,7 +17,7 @@ export const db = getFirestore(app);
 export {
   initializeApp, deleteApp, getAuth,
   onAuthStateChanged, signInWithEmailAndPassword, signOut,
-  createUserWithEmailAndPassword, sendPasswordResetEmail,
+  createUserWithEmailAndPassword, sendPasswordResetEmail, updatePassword,
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, runTransaction, serverTimestamp, increment,
 };
