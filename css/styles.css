@@ -713,3 +713,28 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 /* ───────── logo in the app ───────── */
 .topbar-logo { height: 32px; max-width: 120px; object-fit: contain; flex: 0 0 auto; }
 .hero-logo { height: 64px; max-width: 160px; object-fit: contain; flex: 0 0 auto; margin-right: 6px; }
+
+/* ───────── dashboard: quick actions, stock health ───────── */
+.quick-bar { display:flex; gap:10px; overflow-x:auto; padding:4px 2px 6px; margin:4px 0 6px; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+.quick-bar::-webkit-scrollbar { display:none; }
+.quick-btn { flex:0 0 auto; display:inline-flex; align-items:center; gap:10px; min-height:52px; padding:10px 16px 10px 10px; border-radius:16px; border:1px solid var(--border, #dbe4ea); background:var(--card, #fff); color:var(--text, #0f172a); font:inherit; font-weight:700; text-decoration:none; cursor:pointer; box-shadow:0 1px 2px rgba(15,23,42,.05); animation:quickIn .45s ease-out both; animation-delay:var(--d, 0ms); transition:transform .15s ease, box-shadow .15s ease; }
+.quick-btn:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,42,.08); }
+.quick-btn:active { transform:scale(.97); }
+.quick-btn.primary { background:linear-gradient(135deg,#0b4f4a,#14b8a6); color:#fff; border-color:transparent; }
+.quick-ico { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; background:#ecfdf5; color:#0f766e; }
+.quick-btn.primary .quick-ico { background:rgba(255,255,255,.2); color:#fff; }
+.quick-ico svg { width:18px; height:18px; }
+@keyframes quickIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce) { .quick-btn { animation:none; } }
+
+.health-bar { display:flex; height:14px; border-radius:999px; overflow:hidden; background:#e2e8f0; margin:6px 0 12px; }
+.health-bar i { display:block; height:100%; transition:width .6s ease; }
+.health-bar i.ok { background:#14b8a6; }
+.health-bar i.warn { background:#f59e0b; }
+.health-legend { list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:12px 18px; font-size:14px; }
+.health-legend li { display:flex; align-items:center; gap:6px; }
+.health-legend b { margin-left:2px; }
+.dot { width:9px; height:9px; border-radius:50%; display:inline-block; }
+.dot.ok { background:#14b8a6; }
+.dot.warn { background:#f59e0b; }
+.dot.danger { background:#ef4444; }

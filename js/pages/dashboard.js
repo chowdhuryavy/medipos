@@ -1,10 +1,22 @@
 import { db, collection, query, where, orderBy, limit, getDocs } from "../firebase.js";
 import {
   session, settings, money, esc, icon, todayISO, daysAgoISO, daysFromNowISO, monthStartISO,
-  animateCount, fmtDateTime,
+  animateCount, fmtDateTime, can, round2,
 } from "../core.js";
 import { branding } from "../branding.js";
 import { locationText, breakdown, baseName } from "../packs.js";
+import { printHtml } from "../print.js";
+
+// Quick buttons. Each one only appears for pages the signed-in role can open.
+const QUICK = [
+  ["pos", "Sell", "cart", "#/pos", "primary"],
+  ["purchasing", "New purchase", "plus", "#/purchasing"],
+  ["inventory", "Stock in / out", "sync", "#/inventory"],
+  ["inventory", "Order list", "cart", "#/inventory"],
+  ["partners", "Customers", "partners", "#/partners"],
+  ["accounting", "Record expense", "accounting", "#/accounting"],
+  ["reports", "Reports", "reports", "#/reports"],
+];
 
 export async function render(el) {
   const today = todayISO();
@@ -13,39 +25,71 @@ export async function render(el) {
   const from = weekStart < monthStart ? weekStart : monthStart;
   const soon = daysFromNowISO(settings.expiryWarnDays);
 
-  const [salesSnap, productSnap, batchSnap, recentSnap] = await Promise.all([
+  const [salesSnap, productSnap, batchSnap, recentSnap, expenseSnap] = await Promise.all([
     getDocs(query(collection(db, "sales"), where("date", ">=", from))),
     getDocs(collection(db, "products")),
     getDocs(query(collection(db, "batches"), where("remaining", ">", 0))),
     getDocs(query(collection(db, "sales"), orderBy("createdAt", "desc"), limit(6))),
+    getDocs(query(collection(db, "expenses"), where("date", ">=", monthStart))),
   ]);
 
   const sales = salesSnap.docs.map((d) => d.data());
   const products = productSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.active !== false);
   const batches = batchSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const expenses = expenseSnap.docs.map((d) => d.data());
   const sum = (arr, k) => arr.reduce((a, b) => a + (Number(b[k]) || 0), 0);
 
   const todaySales = sales.filter((s) => s.date === today);
   const monthSales = sales.filter((s) => s.date >= monthStart);
   const lowStock = products.filter((p) => (p.stock || 0) <= (p.reorderLevel || 0));
+  const outOfStock = products.filter((p) => (p.stock || 0) <= 0);
   const expiring = batches.filter((b) => b.expiry >= today && b.expiry <= soon);
   const expired = batches.filter((b) => b.expiry < today);
+  const onOrder = products.filter((p) => p.orderMarked);
   const newest = products
     .filter((p) => p.createdAt?.toMillis)
     .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())
     .slice(0, 5);
 
+  const todayTotal = sum(todaySales, "total");
+  const todayCash = sum(todaySales.filter((s) => s.payment === "cash"), "total");
+  const todayItems = todaySales.reduce((n, s) => n + (s.items || []).reduce((m, it) => m + (Number(it.qty) || 0), 0), 0);
+  const monthExpenses = sum(expenses, "amount");
+
   const kpis = [
-    { label: "Today's revenue", value: sum(todaySales, "total"), fmt: money, icon: "cart" },
+    { label: "Today's revenue", value: todayTotal, fmt: money, icon: "cart" },
     { label: "Bills today", value: todaySales.length, icon: "check" },
+    { label: "Average bill today", value: todaySales.length ? round2(todayTotal / todaySales.length) : 0, fmt: money, icon: "reports" },
+    { label: "Cash in today", value: todayCash, fmt: money, icon: "currency" },
+    { label: "Items sold today", value: todayItems, icon: "pos" },
     { label: "Gross profit today", value: sum(todaySales, "net") - sum(todaySales, "cogs"), fmt: money, icon: "reports" },
     { label: "Revenue this month", value: sum(monthSales, "total"), fmt: money, icon: "accounting" },
+    { label: "Expenses this month", value: monthExpenses, fmt: money, icon: "accounting" },
     { label: "Low-stock items", value: lowStock.length, icon: "alert" },
     { label: `Expiring in ${settings.expiryWarnDays} days`, value: expiring.length, icon: "alert" },
-    { label: "On order list", value: products.filter((p) => p.orderMarked).length, icon: "cart" },
+    { label: "On order list", value: onOrder.length, icon: "cart" },
   ];
 
-  // Top products and payment mix for the month
+  // Stock health: out, low and healthy products (active only).
+  const healthy = products.length - lowStock.length;
+  const healthPct = (n) => (products.length ? Math.round((n / products.length) * 100) : 0);
+
+  // Today by hour, from the first to the last hour that has a sale.
+  const hourTotals = new Map();
+  for (const s of todaySales) {
+    const at = s.createdAt?.toDate?.();
+    if (!at) continue;
+    const h = at.getHours();
+    hourTotals.set(h, (hourTotals.get(h) || 0) + (Number(s.total) || 0));
+  }
+  const hourKeys = [...hourTotals.keys()];
+  const hourFrom = hourKeys.length ? Math.min(...hourKeys) : 0;
+  const hourTo = hourKeys.length ? Math.max(...hourKeys) : 0;
+  const hours = [];
+  for (let h = hourFrom; h <= hourTo; h++) hours.push([h, hourTotals.get(h) || 0]);
+  const hourMax = Math.max(1, ...hours.map(([, v]) => v));
+
+  // Top products and payment mix for the month.
   const soldMap = new Map();
   for (const s of monthSales) for (const it of s.items || []) {
     const a = soldMap.get(it.name) || { qty: 0, revenue: 0 };
@@ -69,6 +113,7 @@ export async function render(el) {
   const hour = new Date().getHours();
   const greet = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
   const firstName = (session.name || "there").split(" ")[0];
+  const quick = QUICK.filter(([page]) => can(page));
 
   el.innerHTML = `
     <section class="card hero">
@@ -78,12 +123,21 @@ export async function render(el) {
         <h1>Good ${greet}, ${esc(firstName)}</h1>
         <p class="muted">Here is how ${esc(settings.shopName)} is doing today.</p>
       </div>
-      <a class="btn primary" href="#/pos">${icon("cart")}<span>Start a sale</span></a>
+    </section>
+
+    <section class="quick-bar" aria-label="Quick actions">
+      ${quick.map(([, label, ic, href, tone], i) => `
+        <a class="quick-btn ${tone === "primary" ? "primary" : ""}" href="${href}" style="--d:${i * 50}ms">
+          <span class="quick-ico">${icon(ic)}</span><span>${esc(label)}</span>
+        </a>`).join("")}
+      <button class="quick-btn" type="button" id="dash-print" style="--d:${quick.length * 50}ms">
+        <span class="quick-ico">${icon("print")}</span><span>Print today</span>
+      </button>
     </section>
 
     <section class="kpi-grid">
       ${kpis.map((k, i) => `
-        <article class="card kpi hover-lift" style="--d:${i * 70}ms">
+        <article class="card kpi hover-lift" style="--d:${i * 60}ms">
           <div class="kpi-ico">${icon(k.icon)}</div>
           <div><small>${esc(k.label)}</small><strong data-kpi="${i}">0</strong></div>
         </article>`).join("")}
@@ -102,13 +156,39 @@ export async function render(el) {
         </div>
       </section>
       <section class="card">
+        <header class="card-head"><h3>Today by hour</h3><span class="muted">${hours.length ? `${hourFrom}:00 – ${hourTo + 1}:00` : "No sales yet"}</span></header>
+        ${hours.length ? `
+        <div class="chart">
+          ${hours.map(([h, v], i) => `
+            <div class="bar-col" title="${h}:00: ${esc(money(v))}">
+              <span class="bar-value">${v ? Math.round(v).toLocaleString() : ""}</span>
+              <div class="bar" style="--h:${Math.max(3, Math.round((v / hourMax) * 100))}%; --d:${i * 60}ms"></div>
+              <span class="bar-label">${h}</span>
+            </div>`).join("")}
+        </div>` : `<p class="muted small">Sales by hour appear here once today's first bill is saved.</p>`}
+      </section>
+    </div>
+
+    <div class="grid-2">
+      <section class="card">
+        <header class="card-head"><h3>Stock health</h3><span class="muted">${products.length} active products</span></header>
+        <div class="health-bar" role="img" aria-label="${healthy} healthy, ${lowStock.length} low, ${outOfStock.length} out of stock">
+          <i class="ok" style="width:${healthPct(healthy)}%"></i><i class="warn" style="width:${healthPct(lowStock.length)}%"></i>
+        </div>
+        <ul class="health-legend">
+          <li><span class="dot ok"></span>Healthy <b>${healthy}</b></li>
+          <li><span class="dot warn"></span>Low <b>${lowStock.length}</b></li>
+          <li><span class="dot danger"></span>Out of stock <b>${outOfStock.length}</b></li>
+        </ul>
+      </section>
+      <section class="card">
         <header class="card-head"><h3>Needs attention</h3></header>
         <ul class="alert-list">
           ${lowStock.slice(0, 5).map((p) => `<li class="pill warn">${icon("alert")}Low stock · ${esc(p.name)} · ${esc(locationText(p))} · ${esc(breakdown(p, p.stock || 0))} left</li>`).join("")}
-          ${products.filter((p) => p.orderMarked).slice(0, 5).map((p) => `<li class="pill info">${icon("cart")}To order · ${esc(p.name)} · ${p.orderQty || 0} ${esc(baseName(p))}</li>`).join("")}
+          ${onOrder.slice(0, 5).map((p) => `<li class="pill info">${icon("cart")}To order · ${esc(p.name)} · ${p.orderQty || 0} ${esc(baseName(p))}</li>`).join("")}
           ${expired.slice(0, 5).map((b) => `<li class="pill danger">${icon("alert")}Expired · ${esc(b.productName)} · batch ${esc(b.batchNo || "-")} (${b.remaining})</li>`).join("")}
           ${expiring.slice(0, 5).map((b) => `<li class="pill info">${icon("alert")}Expires ${esc(b.expiry)} · ${esc(b.productName)}</li>`).join("")}
-          ${!lowStock.length && !expired.length && !expiring.length && !products.some((p) => p.orderMarked) ? `<li class="muted">All clear. Nothing needs attention right now.</li>` : ""}
+          ${!lowStock.length && !expired.length && !expiring.length && !onOrder.length ? `<li class="muted">All clear. Nothing needs attention right now.</li>` : ""}
         </ul>
       </section>
     </div>
@@ -168,5 +248,18 @@ export async function render(el) {
   el.querySelectorAll("[data-kpi]").forEach((n) => {
     const k = kpis[Number(n.dataset.kpi)];
     animateCount(n, k.value, k.fmt);
+  });
+
+  el.querySelector("#dash-print").addEventListener("click", () => {
+    const rows = [
+      ["Bills today", todaySales.length],
+      ["Revenue today", money(todayTotal)],
+      ["Cash today", money(todayCash)],
+      ["Items sold today", todayItems],
+      ["Gross profit today", money(round2(sum(todaySales, "net") - sum(todaySales, "cogs")))],
+      ["Expenses this month", money(monthExpenses)],
+    ];
+    printHtml(`Daily summary ${today}`, `<h2>Daily summary · ${esc(today)}</h2>
+      <table><tbody>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="r">${esc(v)}</td></tr>`).join("")}</tbody></table>`);
   });
 }
