@@ -21,7 +21,12 @@ export default handle(async (req) => {
   await adminDb().doc(`users/${uid}`).set({ mustChangePassword: true }, { merge: true });
 
   const mail = renderEmail("reset", await loadEmailConfig(), { name: profile.name || "", email: user.email, password: tempPassword });
-  await sendMail({ to: user.email, subject: mail.subject, text: mail.text, html: mail.html });
+  try {
+    await sendMail({ to: user.email, subject: mail.subject, text: mail.text, html: mail.html });
+  } catch (err) {
+    if (err.expose) throw err;
+    throw httpError(502, `The reset email could not be sent, so the password was not changed. ${err.message}`);
+  }
   await adminDb().collection("audit").add({ action: "user.password_reset", by: admin.uid, details: { uid }, at: FieldValue.serverTimestamp() });
   return { ok: true };
 });

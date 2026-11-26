@@ -1,3 +1,4 @@
+import { onAction } from "../core.js";
 import { db, collection, query, where, getDocs } from "../firebase.js";
 import {
   session, money, esc, icon, toast, todayISO, monthStartISO, daysFromNowISO, downloadCSV, round2, audit, settings,
@@ -63,10 +64,9 @@ export async function render(el) {
     downloadCSV(`${kind()}-${todayISO()}.csv`, [d.headers, ...d.rows]);
   });
 
-  el.querySelector("#r-sync")?.addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    btn.classList.add("loading");
+  const syncBtn = el.querySelector("#r-sync");
+  if (syncBtn) onAction(syncBtn, async () => {
+    const btn = syncBtn;
     try {
       for (const [k, label] of KINDS) {
         await pushToSheets(label, data[k].headers, data[k].rows);

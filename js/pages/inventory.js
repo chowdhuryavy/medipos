@@ -1,3 +1,4 @@
+import { onSubmit, onAction, onDelegated } from "../core.js";
 import { db, collection, doc, getDocs, query, where, addDoc, updateDoc, runTransaction, serverTimestamp } from "../firebase.js";
 import {
   settings, money, esc, icon, toast, openModal, confirmBox, todayISO, daysFromNowISO,
@@ -106,7 +107,7 @@ export async function render(el) {
   el.querySelector("#i-new").addEventListener("click", () => openProduct(null, reload));
   el.querySelector("#i-stock").addEventListener("click", () => openStock({ products, batches, preId: null, reload }));
 
-  tbody.addEventListener("click", async (e) => {
+  onDelegated(tbody, async (e) => {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.edit) return openProduct(rows.find((r) => r.id === b.dataset.edit), reload);
@@ -152,7 +153,7 @@ function productForm(p = {}) {
 function openProduct(p, reload) {
   openModal(p ? `Edit ${p.name}` : "New product", productForm(p || {}), (body, close) => {
     body.querySelector("[data-cancel]").addEventListener("click", close);
-    body.querySelector("#pf").addEventListener("submit", async (e) => {
+    onSubmit(body.querySelector("#pf"), async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const name = String(fd.get("name") || "").trim();
@@ -213,7 +214,7 @@ function openStock({ products, batches, preId, reload }) {
     form.addEventListener("change", sync);
     sync();
     body.querySelector("[data-cancel]").addEventListener("click", close);
-    form.addEventListener("submit", async (e) => {
+    onSubmit(form, async (e) => {
       e.preventDefault();
       const fd = new FormData(form);
       const mode = fd.get("mode");

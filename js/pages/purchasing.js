@@ -1,3 +1,4 @@
+import { onSubmit, onAction } from "../core.js";
 import { db, collection, doc, getDocs, query, orderBy, limit, runTransaction, serverTimestamp, increment } from "../firebase.js";
 import {
   session, settings, money, esc, icon, toast, todayISO, round2, buildJournal, audit,
@@ -125,7 +126,7 @@ export async function render(el) {
     paintLines();
   });
 
-  el.querySelector("#pur-save").addEventListener("click", async () => {
+  onAction(el.querySelector("#pur-save"), async () => {
     const btn = el.querySelector("#pur-save");
     const form = new FormData(el.querySelector("#pur-form"));
     const supplier = suppliers.find((s) => s.id === form.get("supplierId"));

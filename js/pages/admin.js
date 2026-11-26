@@ -1,6 +1,7 @@
+import { onSubmit, onAction, onDelegated, withBusy } from "../core.js";
 import {
   auth, db, initializeApp, deleteApp, getAuth, createUserWithEmailAndPassword, signOut,
-  sendPasswordResetEmail, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, query, orderBy, limit, serverTimestamp,
+  sendPasswordResetEmail, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, query, where, orderBy, limit, serverTimestamp,
 } from "../firebase.js";
 import { firebaseConfig } from "../config.js";
 import {
@@ -79,7 +80,7 @@ async function viewUsers(body) {
     </section>`;
 
   body.querySelector("#u-new").addEventListener("click", () => openUserForm(null, () => viewUsers(body)));
-  body.addEventListener("click", async (e) => {
+  onDelegated(body, async (e) => {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.edit) return openUserForm(users.find((u) => u.id === b.dataset.edit), () => viewUsers(body));
@@ -117,7 +118,7 @@ function openUserForm(u, reload) {
       </div>
     </form>`, (body, close) => {
     body.querySelector("[data-cancel]").addEventListener("click", close);
-    body.querySelector("#uf").addEventListener("submit", async (e) => {
+    onSubmit(body.querySelector("#uf"), async (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
       const name = String(f.get("name") || "").trim();
@@ -204,7 +205,7 @@ function viewSettings(body) {
       </div>
     </form>`;
 
-  body.querySelector("#sf").addEventListener("submit", async (e) => {
+  onSubmit(body.querySelector("#sf"), async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
     const patch = {};
@@ -219,7 +220,7 @@ function viewSettings(body) {
     await saveGeneral(patch, "Settings saved. Reloading to apply them.");
   });
 
-  body.querySelector("#s-reset").addEventListener("click", async () => {
+  onAction(body.querySelector("#s-reset"), async () => {
     if (!(await confirmBox("Restore the default shop settings? Your lists and payment methods are kept."))) return;
     const { categories, units, paymentMethods, writeOffReasons, ...rest } = DEFAULT_SETTINGS;
     await saveGeneral(rest, "Defaults restored.");
@@ -276,7 +277,7 @@ function viewLists(body) {
     if (b && list.children.length > 1) b.closest(".pm-row").remove();
   });
 
-  body.querySelector("#lf").addEventListener("submit", async (e) => {
+  onSubmit(body.querySelector("#lf"), async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
     const lines = (k) => String(f.get(k) || "").split("\n").map((s) => s.trim()).filter(Boolean);
@@ -310,72 +311,144 @@ function pmRow(m, i) {
 
 /* ───────── Role access ───────── */
 
-function viewRoles(body) {
-  const pages = Object.keys(PAGE_NAMES);
-  body.innerHTML = `
-    <form id="rf">
-    <section class="card">
-      <h3>What each role can open</h3>
-      <p class="muted small">Saved in the database. The database blocks reads and writes that a role is not allowed, even if someone changes the app.</p>
-        <div class="table-wrap"><table class="matrix">
-          <thead><tr><th>Role</th><th>Display name</th>${pages.map((p) => `<th>${esc(PAGE_NAMES[p])}</th>`).join("")}</tr></thead>
-          <tbody>
-            ${Object.keys(DEFAULT_ROLES).map((k) => `
-              <tr data-role="${k}">
-                <td><strong>${esc(k)}</strong></td>
-                <td><input name="${k}__label" value="${esc(roles[k].label)}" aria-label="Display name for ${esc(k)}" /></td>
-                ${pages.map((p) => `<td class="c"><input type="checkbox" name="${k}__${p}" ${roles[k].pages.includes(p) ? "checked" : ""} ${k === "admin" ? "disabled" : ""} aria-label="${esc(k)} can open ${esc(PAGE_NAMES[p])}" /></td>`).join("")}
-              </tr>`).join("")}
-          </tbody>
-        </table></div>
-      </section>
-      <section class="card">
-        <h3>What each role can change</h3>
-        <p class="muted small">Sales, stock, purchases, customers and accounting entries. Cashiers can change stock but not prices or costs.</p>
-        <div class="table-wrap"><table class="matrix">
-          <thead><tr><th>Role</th>${WRITE_AREAS.map((a) => `<th>${esc(WRITE_LABEL[a])}</th>`).join("")}</tr></thead>
-          <tbody>
-            ${Object.keys(DEFAULT_ROLES).map((k) => `
-              <tr>
-                <td><strong>${esc(k)}</strong></td>
-                ${WRITE_AREAS.map((a) => `<td class="c"><input type="checkbox" name="${k}__write__${a}" ${(roles[k].write || []).includes(a) ? "checked" : ""} ${k === "admin" ? "disabled" : ""} aria-label="${esc(k)} can change ${esc(WRITE_LABEL[a])}" /></td>`).join("")}
-              </tr>`).join("")}
-          </tbody>
-        </table></div>
-      </section>
-        <div class="sticky-actions">
-          <button type="button" class="btn ghost" id="r-reset">Restore defaults</button>
-          <button class="btn primary" type="submit">${icon("check")}<span>Save access</span></button>
-        </div>
-    </form>`;
+const PAGE_KEYS = Object.keys(PAGE_NAMES);
+const slugRole = (name) => String(name).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
 
-  body.querySelector("#rf").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    const out = {};
-    for (const k of Object.keys(DEFAULT_ROLES)) {
-      out[k] = {
-        label: String(f.get(`${k}__label`) || DEFAULT_ROLES[k].label).trim(),
-        pages: pages.filter((p) => f.get(`${k}__${p}`) === "on"),
+function viewRoles(body) {
+  // Working copy: edits stay here until "Save roles" is pressed.
+  const working = structuredClone(roles);
+  const removed = new Set();
+
+  const draw = () => {
+    const keys = Object.keys(working);
+    body.innerHTML = `
+      <section class="card">
+        <div class="toolbar">
+          <div>
+            <h3>Roles and permissions</h3>
+            <p class="muted small">Create a role, tick what it can open and change, and save. Staff get the role's access the next time they sign in. The database enforces it, not just the menu.</p>
+          </div>
+          <div class="grow"></div>
+          <button class="btn ghost" type="button" id="role-new">${icon("plus")}<span>New role</span></button>
+        </div>
+        <form id="rf">
+          <div class="table-wrap role-matrix-wrap"><table class="matrix role-matrix">
+            <thead>
+              <tr>
+                <th rowspan="2">Role</th>
+                <th colspan="${PAGE_KEYS.length}" class="grp">Can open these pages</th>
+                <th colspan="${WRITE_AREAS.length}" class="grp">Can change data in these areas</th>
+                <th rowspan="2"></th>
+              </tr>
+              <tr>
+                ${PAGE_KEYS.map((p) => `<th class="rot" title="${esc(PAGE_NAMES[p])}"><span>${esc(PAGE_NAMES[p])}</span></th>`).join("")}
+                ${WRITE_AREAS.map((a) => `<th class="rot" title="${esc(WRITE_LABEL[a])}"><span>${esc(WRITE_LABEL[a])}</span></th>`).join("")}
+              </tr>
+            </thead>
+            <tbody>
+              ${keys.map((k) => {
+                const isAdmin = k === "admin";
+                return `
+                <tr data-role="${esc(k)}">
+                  <td class="role-name">
+                    <input name="${esc(k)}__label" value="${esc(working[k].label)}" aria-label="Name of role ${esc(k)}" ${isAdmin ? "readonly" : ""} />
+                    <small class="muted mono">${esc(k)}</small>
+                  </td>
+                  ${PAGE_KEYS.map((p) => `<td class="c"><input type="checkbox" name="${esc(k)}__page__${p}" ${(working[k].pages || []).includes(p) || isAdmin ? "checked" : ""} ${isAdmin ? "disabled" : ""} aria-label="${esc(working[k].label)} can open ${esc(PAGE_NAMES[p])}" /></td>`).join("")}
+                  ${WRITE_AREAS.map((a) => `<td class="c"><input type="checkbox" name="${esc(k)}__write__${a}" ${(working[k].write || []).includes(a) || isAdmin ? "checked" : ""} ${isAdmin ? "disabled" : ""} aria-label="${esc(working[k].label)} can change ${esc(WRITE_LABEL[a])}" /></td>`).join("")}
+                  <td class="c">${isAdmin ? `<span class="badge">locked</span>` : `<button class="icon-btn sm hover-danger" type="button" data-del-role="${esc(k)}" aria-label="Delete role ${esc(k)}">${icon("trash")}</button>`}</td>
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table></div>
+          <p class="muted small">Administrator always has every page and every change area, so it cannot be locked out. A role that still has staff assigned cannot be deleted.</p>
+          <div class="sticky-actions">
+            <button class="btn primary" type="submit">${icon("check")}<span>Save roles</span></button>
+          </div>
+        </form>
+      </section>`;
+    bind();
+  };
+
+  const bind = () => {
+    body.querySelector("#role-new").addEventListener("click", () => openRoleName());
+    body.querySelectorAll("[data-del-role]").forEach((b) => b.addEventListener("click", () => deleteRole(b.dataset.delRole, b)));
+    body.querySelector("#rf").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const btn = e.submitter || body.querySelector("#rf button[type=submit]");
+      withBusy(btn, () => saveRoles()).catch((err) => toast(err.message, "error"));
+    });
+  };
+
+  // Reads what is ticked on screen into the working copy before any change.
+  const readScreen = () => {
+    const f = new FormData(body.querySelector("#rf"));
+    for (const k of Object.keys(working)) {
+      if (k === "admin") continue;
+      working[k] = {
+        label: String(f.get(`${k}__label`) || working[k].label).trim() || k,
+        pages: PAGE_KEYS.filter((p) => f.get(`${k}__page__${p}`) === "on"),
         write: WRITE_AREAS.filter((a) => f.get(`${k}__write__${a}`) === "on"),
       };
     }
-    // Administrators always keep every page and every write area (the rules do the same).
-    out.admin.pages = [...pages];
-    out.admin.write = [...WRITE_AREAS];
-    await setDoc(doc(db, "settings", "roles"), out);
-    await audit("roles.update", {});
-    toast("Access saved. Reloading to apply it.", "success");
-    setTimeout(() => location.reload(), 900);
+  };
+
+  const openRoleName = () => openModal("New role", `
+    <form id="nr" class="stack">
+      <label class="field"><span class="field-label">Role name</span>
+        <span class="input-wrap"><input name="name" maxlength="40" placeholder="e.g. Senior cashier" required /></span></label>
+      <p class="muted small">You will set its permissions in the table after it is created.</p>
+      <div class="form-actions"><button class="btn ghost" type="button" data-cancel>Cancel</button><button class="btn primary" type="submit"><span>Create role</span></button></div>
+    </form>`, (m, close) => {
+    m.querySelector("[data-cancel]").addEventListener("click", close);
+    onSubmit(m.querySelector("#nr"), async (e) => {
+      const name = String(new FormData(e.target).get("name") || "").trim();
+      const key = slugRole(name);
+      if (!key) throw new Error("Enter a name with letters or numbers.");
+      if (key === "admin" || key in working) throw new Error("A role with this name already exists.");
+      readScreen();
+      working[key] = { label: name, pages: ["dashboard"], write: [] };
+      removed.delete(key);
+      close();
+      draw();
+      toast(`Role "${name}" added. Set what it can do, then Save roles.`, "info");
+    });
   });
 
-  body.querySelector("#r-reset").addEventListener("click", async () => {
-    if (!(await confirmBox("Restore the default page access for all roles?"))) return;
-    await setDoc(doc(db, "settings", "roles"), structuredClone(DEFAULT_ROLES));
-    await audit("roles.reset", {});
-    toast("Defaults restored. Reloading.", "success");
+  const deleteRole = async (key, btn) => {
+    if (key === "admin") return;
+    await withBusy(btn, async () => {
+      const snap = await getDocs(query(collection(db, "users"), where("role", "==", key)));
+      const count = snap.size;
+      if (count > 0) return toast(`${count} staff member${count === 1 ? " uses" : "s use"} this role. Move them to another role first.`, "error");
+      if (!(await confirmBox(`Delete the role "${working[key].label}"? Its permissions are removed when you save.`))) return;
+      readScreen();
+      delete working[key];
+      removed.add(key);
+      draw();
+    });
+  };
+
+  async function saveRoles() {
+    readScreen();
+    const out = {};
+    for (const k of Object.keys(working)) {
+      const r = working[k];
+      if (k === "admin") {
+        out.admin = { label: r.label || "Administrator", pages: [...PAGE_KEYS], write: [...WRITE_AREAS] };
+        continue;
+      }
+      if (!r.label) throw new Error("Every role needs a name.");
+      out[k] = { label: r.label, pages: r.pages, write: r.write };
+    }
+    if (!out.admin) throw new Error("The administrator role is required.");
+    await setDoc(doc(db, "settings", "roles"), out);
+    await audit("roles.update", { roles: Object.keys(out), removed: [...removed] });
+    toast("Roles saved. Reloading to apply them.", "success");
     setTimeout(() => location.reload(), 900);
-  });
+  }
+
+  draw();
 }
 
 /* ───────── Google Sheets ───────── */
@@ -402,7 +475,7 @@ async function viewIntegrations(body) {
       <button class="btn ghost" id="coa">${icon("accounting")}<span>Add missing default accounts</span></button>
     </section>`;
 
-  body.querySelector("#if").addEventListener("submit", async (e) => {
+  onSubmit(body.querySelector("#if"), async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
     await setDoc(doc(db, "settings", "integrations"), {
@@ -413,7 +486,7 @@ async function viewIntegrations(body) {
     await audit("integrations.update", { sheets: true });
     toast("Saved", "success");
   });
-  body.querySelector("#if-test").addEventListener("click", async () => {
+  onAction(body.querySelector("#if-test"), async () => {
     try {
       await pushToSheets("Connection test", ["Check", "Time"], [["Connected", new Date().toLocaleString()]]);
       toast("Connected. Check the “Connection test” tab.", "success");
@@ -421,7 +494,7 @@ async function viewIntegrations(body) {
       toast(err.message, "error");
     }
   });
-  body.querySelector("#coa").addEventListener("click", async () => {
+  onAction(body.querySelector("#coa"), async () => {
     await ensureChartOfAccounts();
     toast("Chart of accounts is up to date", "success");
   });
@@ -542,7 +615,7 @@ async function viewBranding(body) {
     toast("Default text restored. Save to apply it.", "info");
   });
 
-  form.addEventListener("submit", async (e) => {
+  onSubmit(form, async (e) => {
     e.preventDefault();
     const f = new FormData(form);
     const appName = String(f.get("appName") || "").trim() || "MediPOS";

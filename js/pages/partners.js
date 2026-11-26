@@ -1,3 +1,4 @@
+import { onSubmit, onAction, onDelegated } from "../core.js";
 import { db, collection, doc, getDocs, addDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp } from "../firebase.js";
 import { settings, money, esc, icon, toast, openModal, confirmBox, round2, buildJournal, audit, ACCOUNTS, can, session } from "../core.js";
 
@@ -58,7 +59,7 @@ function paint(body, type, list, reload) {
   body.querySelector("#pt-q").addEventListener("input", draw);
   body.querySelector("#pt-new").addEventListener("click", () => openForm(type, null, reload));
 
-  tbody.addEventListener("click", async (e) => {
+  onDelegated(tbody, async (e) => {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.edit) return openForm(type, list.find((r) => r.id === b.dataset.edit), reload);
@@ -91,7 +92,7 @@ function openForm(type, p, reload) {
       </div>
     </form>`, (body, close) => {
     body.querySelector("[data-cancel]").addEventListener("click", close);
-    body.querySelector("#ptf").addEventListener("submit", async (e) => {
+    onSubmit(body.querySelector("#ptf"), async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const data = {
@@ -134,7 +135,7 @@ function openSettle(type, p, reload) {
       </div>
     </form>`, (body, close) => {
     body.querySelector("[data-cancel]").addEventListener("click", close);
-    body.querySelector("#sf").addEventListener("submit", async (e) => {
+    onSubmit(body.querySelector("#sf"), async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const amount = round2(Number(fd.get("amount")) || 0);

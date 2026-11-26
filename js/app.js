@@ -1,3 +1,4 @@
+import { onSubmit, onAction } from "./core.js";
 import { auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "./firebase.js";
 import { loadBranding, branding, logoHtml } from "./branding.js";
 import { passwordFields } from "./password-ui.js";
@@ -111,7 +112,7 @@ function showLogin(message = "", tone = "error") {
   });
   document.getElementById("forgot-btn").addEventListener("click", () => openForgotPassword(form.email.value.trim()));
 
-  form.addEventListener("submit", async (e) => {
+  onSubmit(form, async (e) => {
     e.preventDefault();
     const email = String(form.email.value || "").trim();
     const password = String(form.password.value || "");
@@ -182,7 +183,7 @@ function openForgotPassword(prefillEmail = "") {
       }, 1000);
     };
 
-    form.addEventListener("submit", async (e) => {
+    onSubmit(form, async (e) => {
       e.preventDefault();
       try {
         if (stage === 1) {
@@ -213,7 +214,7 @@ function openForgotPassword(prefillEmail = "") {
       }
     });
 
-    resend.addEventListener("click", async () => {
+    onAction(resend, async () => {
       resend.disabled = true;
       try {
         await post("/api/otp/request", { email: form.email.value.trim() });
@@ -248,7 +249,7 @@ function showForcePasswordChange(user) {
   const fields = passwordFields(document.getElementById("fc-pw"));
   const btn = document.getElementById("fc-btn");
   document.getElementById("fc-out").addEventListener("click", () => signOut(auth));
-  document.getElementById("fc-form").addEventListener("submit", async (e) => {
+  onSubmit(document.getElementById("fc-form"), async (e) => {
     e.preventDefault();
     if (!fields.valid()) return toast("Check the password rules and make sure both passwords match.", "error");
     btn.disabled = true;

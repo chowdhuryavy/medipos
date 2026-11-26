@@ -1,3 +1,4 @@
+import { onSubmit, onAction } from "../core.js";
 import { db, collection, doc, getDoc, getDocs, query, where, orderBy, limit, addDoc, setDoc, runTransaction, serverTimestamp } from "../firebase.js";
 import {
   session, money, esc, icon, toast, openModal, todayISO, monthStartISO, round2,
@@ -125,7 +126,7 @@ function openManualEntry(accounts, reload) {
       if (b && jl.querySelectorAll(".jl-row").length > 2) { b.closest(".jl-row").remove(); recalc(); }
     });
     body.querySelector("[data-cancel]").addEventListener("click", close);
-    body.querySelector("#me-save").addEventListener("click", async () => {
+    onAction(body.querySelector("#me-save"), async () => {
       const f = new FormData(body.querySelector("#me"));
       const lines = [...jl.querySelectorAll(".jl-row")].map((r) => ({
         account: r.querySelector('[data-k="account"]').value,
@@ -166,7 +167,7 @@ async function viewChart(body) {
         </tbody>
       </table></div>
     </section>`;
-  body.querySelector("#ch-seed").addEventListener("click", async () => {
+  onAction(body.querySelector("#ch-seed"), async () => {
     await ensureChartOfAccounts();
     toast("Default accounts loaded", "success");
     viewChart(body);
@@ -188,7 +189,7 @@ function openAccountForm(reload) {
       <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">Create</button></div>
     </form>`, (body, close) => {
     body.querySelector("[data-cancel]").addEventListener("click", close);
-    body.querySelector("#af").addEventListener("submit", async (e) => {
+    onSubmit(body.querySelector("#af"), async (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
       const code = String(f.get("code")).trim();
@@ -253,7 +254,7 @@ function openExpenseForm(expenseAccounts, accounts, reload) {
       <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">Save expense</button></div>
     </form>`, (body, close) => {
     body.querySelector("[data-cancel]").addEventListener("click", close);
-    body.querySelector("#exf").addEventListener("submit", async (e) => {
+    onSubmit(body.querySelector("#exf"), async (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
       const amount = round2(Number(f.get("amount")) || 0);

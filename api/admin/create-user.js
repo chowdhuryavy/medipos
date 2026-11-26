@@ -5,7 +5,6 @@ import { sendMail } from "../../server/mail.js";
 import { loadEmailConfig, renderEmail } from "../../server/templates.js";
 import { generateTempPassword } from "../../server/secrets.js";
 
-const ROLES = ["admin", "pharmacist", "cashier", "storekeeper", "accountant"];
 
 // Admin creates a staff account. A temporary password is emailed and must be changed at first sign-in.
 export default handle(async (req) => {
@@ -15,7 +14,8 @@ export default handle(async (req) => {
   const role = String(req.body?.role || "");
   if (!name) throw httpError(400, "Enter the staff member's name.");
   if (!/^\S+@\S+\.\S+$/.test(email)) throw httpError(400, "Enter a valid email address.");
-  if (!ROLES.includes(role)) throw httpError(400, "Choose a valid role.");
+  const roleDoc = (await adminDb().doc("settings/roles").get()).data() || {};
+  if (!role || !(role in roleDoc)) throw httpError(400, "Choose a valid role.");
 
   const tempPassword = generateTempPassword();
   let created;
@@ -32,7 +32,8 @@ export default handle(async (req) => {
   } catch (err) {
     // Do not leave an account nobody can sign in to.
     await adminAuth().deleteUser(created.uid);
-    throw httpError(502, "The welcome email could not be sent, so the account was not created. Check the email settings and try again.");
+    if (err.expose) throw err;
+    throw httpError(502, `The welcome email could not be sent, so the account was not created. ${err.message}`);
   }
 
   await adminDb().doc(`users/${created.uid}`).set({

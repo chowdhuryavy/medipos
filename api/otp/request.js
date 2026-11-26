@@ -46,7 +46,12 @@ export default handle(async (req) => {
   });
 
   const mail = renderEmail("otp", await loadEmailConfig(), { name: profile.name || "", email, code });
-  await sendMail({ to: email, subject: mail.subject, text: mail.text, html: mail.html });
+  try {
+    await sendMail({ to: email, subject: mail.subject, text: mail.text, html: mail.html });
+  } catch (err) {
+    if (err.expose) throw err;
+    throw httpError(502, `The code could not be sent by email. ${err.message}`);
+  }
 
   return { ok: true, message: "A 6-digit code has been sent to your email." };
 });

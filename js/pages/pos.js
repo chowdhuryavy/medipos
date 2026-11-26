@@ -1,4 +1,5 @@
 import { db, collection, doc, getDoc, getDocs, query, where, runTransaction, serverTimestamp, increment } from "../firebase.js";
+import { onAction } from "../core.js";
 import {
   session, settings, paymentMethod, money, esc, icon, toast, openModal, todayISO, calcTotals,
   buildJournal, allocateFEFO, audit, round2, ACCOUNTS,
@@ -182,7 +183,7 @@ export async function render(el) {
   $("#p-clear").addEventListener("click", () => {
     st.cart.clear(); st.disc = 0; $("#p-disc").value = 0; paintBill();
   });
-  $("#p-charge").addEventListener("click", charge);
+  onAction($("#p-charge"), charge);
   $("#p-mobile-btn").addEventListener("click", () => {
     $("#p-bill").scrollIntoView({ behavior: "smooth", block: "start" });
   });

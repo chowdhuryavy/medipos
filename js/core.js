@@ -56,15 +56,20 @@ export async function loadSettings() {
   Object.assign(settings, structuredClone(DEFAULT_SETTINGS), g.exists() ? g.data() : {});
   const r = await getDoc(doc(db, "settings", "roles"));
   const saved = r.exists() ? r.data() : {};
-  for (const key of Object.keys(DEFAULT_ROLES)) {
+  // Every role in the database is loaded, including roles the admin created.
+  const keys = new Set(["admin", ...Object.keys(DEFAULT_ROLES), ...Object.keys(saved)]);
+  for (const key of Object.keys(roles)) if (!keys.has(key)) delete roles[key];
+  for (const key of keys) {
     // Mirror the database exactly; the rules deny anything not listed there.
     // Admins always keep everything (the rules do the same).
     const s = saved[key] || {};
-    roles[key] = {
-      label: s.label || DEFAULT_ROLES[key].label,
-      pages: key === "admin" ? [...DEFAULT_ROLES.admin.pages] : (Array.isArray(s.pages) ? s.pages : []),
-      write: key === "admin" ? [...WRITE_AREAS] : (Array.isArray(s.write) ? s.write : []),
-    };
+    roles[key] = key === "admin"
+      ? { label: s.label || "Administrator", pages: [...DEFAULT_ROLES.admin.pages], write: [...WRITE_AREAS] }
+      : {
+          label: s.label || DEFAULT_ROLES[key]?.label || key,
+          pages: Array.isArray(s.pages) ? s.pages : [],
+          write: Array.isArray(s.write) ? s.write : [],
+        };
   }
   fmtCache = null;
   return r.exists();
@@ -307,3 +312,46 @@ export async function ensureChartOfAccounts() {
 
 /** Looks up a configured payment method by key (cash, card, credit, or any admin-added key). */
 export const paymentMethod = (key) => settings.paymentMethods.find((m) => m.key === key) || settings.paymentMethods[0];
+
+/* ───────────────────────── busy buttons ─────────────────────────
+   Every save, submit and action button shows a spinner and cannot be pressed twice while it runs. */
+
+export async function withBusy(el, fn) {
+  if (!el) return fn();
+  const wasDisabled = el.disabled;
+  el.disabled = true;
+  el.classList.add("loading");
+  try {
+    return await fn();
+  } finally {
+    if (el.isConnected) {
+      el.disabled = wasDisabled;
+      el.classList.remove("loading");
+    }
+  }
+}
+
+/** Runs an async form handler with the form's submit button busy. Errors become toasts. */
+export function onSubmit(form, handler) {
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const btn = e.submitter || form.querySelector('button[type="submit"], button:not([type])');
+    withBusy(btn, () => handler(e)).catch((err) => toast(err?.message || "Something went wrong.", "error"));
+  });
+}
+
+/** Runs an async click handler with the clicked button busy. Errors become toasts. */
+export function onAction(el, handler) {
+  el.addEventListener("click", (e) => {
+    withBusy(el, () => handler(e)).catch((err) => toast(err?.message || "Something went wrong.", "error"));
+  });
+}
+
+/** For tables and lists: the clicked button gets the spinner, not the whole table. */
+export function onDelegated(el, handler) {
+  el.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    withBusy(b, () => handler(e, b)).catch((err) => toast(err?.message || "Something went wrong.", "error"));
+  });
+}
