@@ -1,6 +1,7 @@
 import { onSubmit, onAction, canWrite } from "../core.js";
 import { unitsOf, unitByKey, toPieces, unitOptions } from "../packs.js";
 import { db, collection, doc, getDocs, query, orderBy, limit, runTransaction, serverTimestamp, increment } from "../firebase.js";
+import { productDatalist, findProduct, displayName } from "../picker.js";
 import {
   session, settings, money, esc, icon, toast, todayISO, round2, buildJournal, audit,
   ACCOUNTS, PURCHASE_PAYMENT_ACCOUNT, fmtDateTime,
@@ -19,6 +20,7 @@ export async function render(el) {
       <button class="tab ${canPost ? "" : "active"}" data-tab="hist">History</button>
     </div>
     ${canPost ? `
+    ${productDatalist(products, "pur-products")}
     <section class="card" id="pur-new">
       <form id="pur-form" class="form-grid">
         <label>Supplier
@@ -67,11 +69,10 @@ export async function render(el) {
   const tbody = el.querySelector("#pur-lines");
   const lines = [{ productId: "", unit: "piece", qty: 1, cost: 0, batchNo: "", expiry: "" }];
 
-  const rowHtml = (l, i) => `
+  const rowHtml = (l, i) => { const p0 = products.find((x) => x.id === l.productId); return `
     <tr class="row-in">
-      <td data-label="Product"><select data-i="${i}" data-f="productId"><option value="">Choose…</option>
-        ${products.map((p) => `<option value="${esc(p.id)}" ${p.id === l.productId ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
-      </select></td>
+      <td data-label="Product"><input data-i="${i}" data-f="productName" list="pur-products" autocomplete="off" value="${esc(p0 ? displayName(p0) : (l.productName || ""))}" placeholder="Type name, SKU or barcode…" />
+        <small class="muted block">${p0 ? `SOH ${p0.stock || 0} ${esc(p0.unit || "Piece")}` : "Search and choose from the list"}</small></td>
       <td data-label="Unit"><select data-i="${i}" data-f="unit">${unitOptions(products.find((x) => x.id === l.productId), l.unit || "piece")}</select></td>
       <td data-label="Qty" class="r"><input type="number" inputmode="numeric" min="1" step="1" data-i="${i}" data-f="qty" value="${l.qty}" /></td>
       <td data-label="Unit cost" class="r"><input type="number" inputmode="decimal" min="0" step="0.01" data-i="${i}" data-f="cost" value="${l.cost}" /></td>
@@ -79,7 +80,7 @@ export async function render(el) {
       <td data-label="Expiry"><input type="date" data-i="${i}" data-f="expiry" value="${esc(l.expiry)}" /></td>
       <td data-label="Line total" class="r" data-lt="${i}">${money(l.qty * l.cost)}</td>
       <td><button class="icon-btn sm hover-danger" type="button" data-rm="${i}" aria-label="Remove line">${icon("x")}</button></td>
-    </tr>`;
+    </tr>`; };
 
   function totals() {
     let net = 0, vat = 0;
@@ -101,7 +102,7 @@ export async function render(el) {
 
   tbody.addEventListener("input", (e) => {
     const t = e.target;
-    if (!t.dataset.f || ["productId", "unit"].includes(t.dataset.f)) return;
+    if (!t.dataset.f || ["productName", "unit"].includes(t.dataset.f)) return;
     const i = Number(t.dataset.i);
     lines[i][t.dataset.f] = ["qty", "cost"].includes(t.dataset.f) ? Number(t.value) || 0 : t.value;
     totals();
@@ -110,12 +111,17 @@ export async function render(el) {
     const t = e.target;
     const i = Number(t.dataset.i);
     if (t.dataset.f === "unit") { lines[i].unit = t.value; return paintLines(); }
-    if (t.dataset.f !== "productId") return;
-    const p = products.find((x) => x.id === t.value);
-    lines[i].productId = t.value;
-    lines[i].unit = "piece";
-    // Cost is shown per piece to start; the buyer changes the unit if the bill is per pack.
-    if (p) lines[i].cost = Number(p.costPrice) || 0;
+    if (t.dataset.f !== "productName") return;
+    const p = findProduct(products, t.value);
+    lines[i].productId = p ? p.id : "";
+    lines[i].productName = t.value;
+    if (p) {
+      lines[i].unit = "piece";
+      // Cost is shown per piece to start; the buyer changes the unit if the bill is per pack.
+      lines[i].cost = Number(p.costPrice) || 0;
+    } else if (t.value.trim()) {
+      toast("Choose a product from the list. Type to search.", "error");
+    }
     paintLines();
   });
   tbody.addEventListener("click", (e) => {

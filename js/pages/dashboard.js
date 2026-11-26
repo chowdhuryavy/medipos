@@ -42,6 +42,7 @@ export async function render(el) {
     { label: "Revenue this month", value: sum(monthSales, "total"), fmt: money, icon: "accounting" },
     { label: "Low-stock items", value: lowStock.length, icon: "alert" },
     { label: `Expiring in ${settings.expiryWarnDays} days`, value: expiring.length, icon: "alert" },
+    { label: "On order list", value: products.filter((p) => p.orderMarked).length, icon: "cart" },
   ];
 
   // Top products and payment mix for the month
@@ -104,9 +105,10 @@ export async function render(el) {
         <header class="card-head"><h3>Needs attention</h3></header>
         <ul class="alert-list">
           ${lowStock.slice(0, 5).map((p) => `<li class="pill warn">${icon("alert")}Low stock · ${esc(p.name)} · ${esc(locationText(p))} · ${esc(breakdown(p, p.stock || 0))} left</li>`).join("")}
+          ${products.filter((p) => p.orderMarked).slice(0, 5).map((p) => `<li class="pill info">${icon("cart")}To order · ${esc(p.name)} · ${p.orderQty || 0} ${esc(baseName(p))}</li>`).join("")}
           ${expired.slice(0, 5).map((b) => `<li class="pill danger">${icon("alert")}Expired · ${esc(b.productName)} · batch ${esc(b.batchNo || "-")} (${b.remaining})</li>`).join("")}
           ${expiring.slice(0, 5).map((b) => `<li class="pill info">${icon("alert")}Expires ${esc(b.expiry)} · ${esc(b.productName)}</li>`).join("")}
-          ${!lowStock.length && !expired.length && !expiring.length ? `<li class="muted">All clear. Nothing needs attention right now.</li>` : ""}
+          ${!lowStock.length && !expired.length && !expiring.length && !products.some((p) => p.orderMarked) ? `<li class="muted">All clear. Nothing needs attention right now.</li>` : ""}
         </ul>
       </section>
     </div>

@@ -5,10 +5,13 @@ import {
   round2, buildJournal, allocateFEFO, audit, ACCOUNTS,
 } from "../core.js";
 import { unitsOf, unitByKey, toPieces, breakdown, locationText, unitOptions, baseName } from "../packs.js";
+import { productDatalist, findProduct, displayName } from "../picker.js";
+import { orderCardHtml, bindOrderCard } from "./order-list.js";
 
 const DAY = 864e5;
 const NEW_DAYS = 7;
 const active = (p) => p.active !== false;
+let knownSubGroups = [];
 
 export async function render(el) {
   const [pSnap, bSnap] = await Promise.all([
@@ -35,6 +38,7 @@ export async function render(el) {
     };
   });
   const lowItems = rows.filter((r) => r.low);
+  knownSubGroups = [...new Set(products.map((p) => p.subGroup).filter(Boolean))].sort();
   const totalValue = rows.reduce((s, r) => s + r.value, 0);
   const kpis = [
     ["Products", rows.filter(active).length, "inventory"],
@@ -61,6 +65,8 @@ export async function render(el) {
       </ul>
       ${lowItems.length > 8 ? `<p class="muted small">Showing 8 of ${lowItems.length}. Use the Low stock filter below to see all.</p>` : ""}
     </section>` : ""}
+
+    ${orderCardHtml(products)}
 
     <section class="card">
       <div class="toolbar">
@@ -95,7 +101,7 @@ export async function render(el) {
     const q = el.querySelector("#i-search").value.trim().toLowerCase();
     const f = el.querySelector("#i-filter").value;
     const list = rows.filter((r) =>
-      (!q || [r.name, r.sku, r.barcode, r.category, r.rack, r.shelf].some((v) => String(v || "").toLowerCase().includes(q))) &&
+      (!q || [r.name, r.sku, r.barcode, r.category, r.subGroup, r.rack, r.shelf].some((v) => String(v || "").toLowerCase().includes(q))) &&
       (f === "all" ||
         (f === "low" && r.low) ||
         (f === "new" && r.isNew) ||
@@ -108,7 +114,7 @@ export async function render(el) {
           <strong>${esc(r.name)}</strong>
           ${r.isNew ? ` <span class="badge ok">New</span>` : ""}
           ${active(r) ? "" : ` <span class="badge">inactive</span>`}
-          <small class="muted block">${esc(r.category || "")}${r.sku ? " · " + esc(r.sku) : ""}</small>
+          <small class="muted block">${esc([r.category, r.subGroup].filter(Boolean).join(" › "))}${r.sku ? " · " + esc(r.sku) : ""}</small>
         </td>
         <td data-label="Rack & shelf"><span class="loc">${esc(locationText(r))}</span></td>
         <td data-label="Stock" class="r">
@@ -154,6 +160,7 @@ export async function render(el) {
   });
 
   paint();
+  bindOrderCard(el, products, () => render(el));
 }
 
 function packPrices(p) {
@@ -184,7 +191,9 @@ function productForm(p = {}) {
       <label class="span-2">Product name<input name="name" required value="${esc(p.name || "")}" /></label>
       <label>SKU<input name="sku" value="${esc(p.sku || "")}" /></label>
       <label>Barcode<input name="barcode" inputmode="numeric" value="${esc(p.barcode || "")}" /></label>
-      <label>Category<select name="category">${cats.map((c) => `<option ${c === p.category ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+      <label>Group<select name="category">${cats.map((c) => `<option ${c === p.category ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+      <label>Sub group<input name="subGroup" list="sg-list" autocomplete="off" placeholder="e.g. Antibiotics" value="${esc(p.subGroup || "")}" /></label>
+      <datalist id="sg-list">${knownSubGroups.map((s) => `<option value="${esc(s)}"></option>`).join("")}</datalist>
       <label>Smallest unit<select name="unit">${units.map((u) => `<option ${u === p.unit ? "selected" : ""}>${esc(u)}</option>`).join("")}</select></label>
       <label>Rack<input name="rack" placeholder="e.g. A" value="${esc(p.rack || "")}" /></label>
       <label>Shelf<input name="shelf" placeholder="e.g. 3" value="${esc(p.shelf || "")}" /></label>
@@ -253,6 +262,7 @@ function openProduct(p, reload) {
         sku: String(fd.get("sku") || "").trim(),
         barcode: String(fd.get("barcode") || "").trim(),
         category: String(fd.get("category") || "General"),
+        subGroup: String(fd.get("subGroup") || "").trim(),
         unit: String(fd.get("unit") || "Piece"),
         rack: String(fd.get("rack") || "").trim(),
         shelf: String(fd.get("shelf") || "").trim(),
@@ -263,6 +273,7 @@ function openProduct(p, reload) {
         vatRate: Number(fd.get("vatRate")) || 0,
         reorderLevel: parseInt(fd.get("reorderLevel"), 10) || 0,
         active: p ? active(p) : true,
+        stub: false,
         updatedAt: serverTimestamp(),
       };
       try {
@@ -293,14 +304,16 @@ const round4 = (v) => Math.round(v * 10000) / 10000;
 /* ───────── stock in / out (any unit) ───────── */
 
 function openStock({ products, batches, preId, reload }) {
-  const opts = products.map((p) => `<option value="${esc(p.id)}" ${p.id === preId ? "selected" : ""}>${esc(p.name)} (${p.stock || 0} ${esc(baseName(p))} · ${esc(locationText(p))})</option>`).join("");
+  const pre = products.find((p) => p.id === preId);
   openModal("Stock in / out", `
     <form id="sf" class="form-grid">
       <div class="seg span-2" role="radiogroup">
         <label><input type="radio" name="mode" value="in" checked /><span>Stock in</span></label>
         <label><input type="radio" name="mode" value="out" /><span>Stock out</span></label>
       </div>
-      <label class="span-2">Product<select name="productId" required>${opts}</select></label>
+      <label class="span-2">Product (type to search, shows stock on hand)<input name="productName" list="stock-products" autocomplete="off" required placeholder="Type name, SKU or barcode" value="${esc(pre ? displayName(pre) : "")}" /></label>
+      <input type="hidden" name="productId" value="${esc(preId || "")}" />
+      ${productDatalist(products, "stock-products")}
       <label>Counted in<select name="unit"></select></label>
       <label>Quantity<input name="qty" type="number" inputmode="numeric" min="1" step="1" required /></label>
       <p class="muted small span-2" id="sf-hint"></p>
@@ -337,7 +350,12 @@ function openStock({ products, batches, preId, reload }) {
       form.querySelectorAll(".mode-in").forEach((n) => n.classList.toggle("hidden", out));
       form.querySelectorAll(".mode-out").forEach((n) => n.classList.toggle("hidden", !out));
     };
-    form.elements.productId.addEventListener("change", fillUnits);
+    form.elements.productName.addEventListener("change", () => {
+      const found = findProduct(products, form.elements.productName.value);
+      form.elements.productId.value = found ? found.id : "";
+      if (!found && form.elements.productName.value.trim()) toast("Choose a product from the list", "error");
+      fillUnits();
+    });
     form.elements.unit.addEventListener("change", updateHint);
     form.elements.qty.addEventListener("input", updateHint);
     form.elements.mode.forEach((r) => r.addEventListener("change", sync));
@@ -350,6 +368,7 @@ function openStock({ products, batches, preId, reload }) {
       const fd = new FormData(form);
       const mode = fd.get("mode");
       const productId = String(fd.get("productId"));
+      if (!productId) return toast("Choose a product from the list", "error");
       const p = products.find((x) => x.id === productId);
       const u = unitByKey(p, fd.get("unit"));
       const qty = parseInt(fd.get("qty"), 10);
