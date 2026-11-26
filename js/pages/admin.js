@@ -21,7 +21,6 @@ import { REPORTS } from "../report-tables.js";
 
 const TABS = [
   ["users", "Staff"],
-  ["access", "Permissions"],
   ["settings", "Shop & rules"],
   ["lists", "Lists & payments"],
   ["roles", "Role access"],
@@ -42,7 +41,7 @@ export async function render(el) {
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
-  const views = { users: viewUsers, access: viewAccess, settings: viewSettings, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, integrations: viewIntegrations, audit: viewAudit };
+  const views = { users: viewUsers, settings: viewSettings, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, integrations: viewIntegrations, audit: viewAudit };
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
@@ -96,7 +95,7 @@ async function viewUsers(body) {
   onDelegated(body, async (e) => {
     const b = e.target.closest("button");
     if (!b) return;
-    if (b.dataset.edit) return openUserForm(users.find((u) => u.id === b.dataset.edit), () => viewUsers(body));
+    if (b.dataset.edit) return viewStaffAccess(body, b.dataset.edit);
     if (b.dataset.deleteUser) {
       const u = users.find((x) => x.id === b.dataset.deleteUser);
       if (!(await confirmBox(`Delete ${u.name}? Their sign-in is removed and they can no longer use MediPOS. Past sales keep their name.`))) return;
@@ -874,67 +873,189 @@ async function viewIntegrations(body) {
 
 /* ───────── Permissions: pick a person, see every role's access side by side ───────── */
 
-async function viewAccess(body) {
-  const snap = await getDocs(collection(db, "users"));
-  const users = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  const roleKeys = Object.keys(roles);
-  let selected = users.find((u) => u.id === session.uid)?.id || users[0]?.id;
+/* ───────── Staff page: one person's profile, role and screens/areas they can use ───────── */
 
-  const canOf = (roleKey, kind, key) => {
-    if (roleKey === "admin") return true;
-    const r = roles[roleKey];
-    if (!r) return false;
-    return kind === "page" ? r.pages.includes(key) : r.write.includes(key);
+const ACCESS_ICON = {
+  dashboard: "dashboard", pos: "cart", inventory: "inventory", purchasing: "purchase",
+  partners: "partners", accounting: "accounting", reports: "reports", admin: "admin",
+};
+const AREA_ICON = { pos: "cart", inventory: "inventory", purchasing: "purchase", partners: "partners", accounting: "accounting" };
+
+// Opens one person's page. Everything about them is changed here and saved together.
+async function viewStaffAccess(body, uid) {
+  const snap = await getDoc(doc(db, "users", uid));
+  if (!snap.exists()) throw new Error("This staff member no longer exists.");
+  const u = { id: uid, ...snap.data() };
+  const roleKeys = Object.keys(roles);
+  const isSelf = uid === session.uid;
+  const roleDefaults = (role) => ({ pages: [...(roles[role]?.pages || [])], write: [...(roles[role]?.write || [])] });
+  const hasOwn = !!u.access;
+
+  // Working copy. Nothing is saved until "Save changes".
+  const st = {
+    name: u.name || "",
+    active: u.active !== false,
+    requireOtp: !!u.requireOtp,
+    role: u.role || roleKeys[0],
+    custom: hasOwn,
+    ...(hasOwn ? { pages: [...(u.access.pages || [])], write: [...(u.access.write || [])] } : roleDefaults(u.role)),
   };
+  const isAdminRole = () => st.role === "admin";
+  const hasPage = (p) => isAdminRole() || st.pages.includes(p);
+  const hasArea = (a) => isAdminRole() || st.write.includes(a);
+
+  const summaryHtml = () => {
+    const pages = isAdminRole() ? PAGE_KEYS.length : st.pages.length;
+    const areas = isAdminRole() ? WRITE_AREAS.length : st.write.length;
+    return `<div class="sa-stat"><strong>${pages}</strong><small>of ${PAGE_KEYS.length} screens</small></div>
+            <div class="sa-stat"><strong>${areas}</strong><small>of ${WRITE_AREAS.length} data areas</small></div>`;
+  };
+
+  const tilesHtml = () => `
+    <div class="sa-tiles">
+      ${PAGE_KEYS.map((p) => `
+        <label class="sa-tile ${hasPage(p) ? "on" : ""} ${isAdminRole() ? "locked" : ""}">
+          <input type="checkbox" data-page="${p}" ${hasPage(p) ? "checked" : ""} ${isAdminRole() ? "disabled" : ""} />
+          <span class="sa-ico">${icon(ACCESS_ICON[p] || "dashboard")}</span>
+          <span class="sa-name"><strong>${esc(PAGE_NAMES[p])}</strong><small>${hasPage(p) ? "Can open" : "Hidden"}</small></span>
+          <span class="sa-switch" aria-hidden="true"></span>
+        </label>`).join("")}
+    </div>`;
+
+  const areasHtml = () => `
+    <div class="sa-tiles">
+      ${WRITE_AREAS.map((a) => `
+        <label class="sa-tile ${hasArea(a) ? "on" : ""} ${isAdminRole() ? "locked" : ""}">
+          <input type="checkbox" data-area="${a}" ${hasArea(a) ? "checked" : ""} ${isAdminRole() ? "disabled" : ""} />
+          <span class="sa-ico">${icon(AREA_ICON[a] || "inventory")}</span>
+          <span class="sa-name"><strong>${esc(WRITE_LABEL[a])}</strong><small>${hasArea(a) ? "Can change" : "View only"}</small></span>
+          <span class="sa-switch" aria-hidden="true"></span>
+        </label>`).join("")}
+    </div>`;
+
+  const roleCardsHtml = () => `
+    <div class="sa-roles">
+      ${roleKeys.map((k) => `
+        <label class="sa-role ${st.role === k ? "on" : ""}">
+          <input type="radio" name="role" value="${esc(k)}" ${st.role === k ? "checked" : ""} />
+          <strong>${esc(roles[k].label)}</strong>
+          <small>${k === "admin" ? "Everything, always" : `${(roles[k].pages || []).length} screens · ${(roles[k].write || []).length} areas`}</small>
+        </label>`).join("")}
+    </div>`;
 
   const paint = () => {
-    const u = users.find((x) => x.id === selected);
-    if (!u) { body.innerHTML = `<section class="card"><p class="muted center">No staff yet. Add staff first.</p></section>`; return; }
-    const current = u.role || "";
     body.innerHTML = `
-      <div class="access-grid">
-        <aside class="card access-list">
-          <header class="card-head"><h3>Staff</h3><span class="badge">${users.length}</span></header>
-          ${users.map((x) => `
-            <button class="access-user ${x.id === selected ? "active" : ""}" data-pick="${esc(x.id)}">
-              <span class="avatar sm">${esc((x.name || "?").trim().charAt(0).toUpperCase())}</span>
-              <span><strong>${esc(x.name || "Unnamed")}</strong><small>${esc(roles[x.role]?.label || x.role || "No role")}${x.active ? "" : " · disabled"}</small></span>
-            </button>`).join("")}
-        </aside>
-        <section class="card access-panel">
-          <header class="card-head">
-            <div><h3>${esc(u.name || "Unnamed")}</h3><small class="muted">${esc(u.email || "")}</small></div>
-            <div class="row-actions">
-              <select id="ac-role" aria-label="Role for ${esc(u.name)}">${roleKeys.map((k) => `<option value="${esc(k)}" ${k === current ? "selected" : ""}>${esc(roles[k].label)}</option>`).join("")}</select>
-              <button class="btn primary sm" id="ac-save">${icon("check")}<span>Save role</span></button>
+      <div class="sa-page">
+        <div class="sa-top">
+          <button class="btn ghost sm" data-back>${icon("arrowLeft")}<span>All staff</span></button>
+          <span class="muted small">Changes apply the next time this person signs in.</span>
+        </div>
+
+        <section class="card sa-hero">
+          <div class="avatar-ring big"><div class="avatar">${esc((st.name || "?").trim().charAt(0).toUpperCase())}</div></div>
+          <div class="sa-hero-text">
+            <h2>${esc(st.name || "Unnamed")}</h2>
+            <small class="muted">${esc(u.email || "")}</small>
+            <div class="sa-chips">
+              <span class="role-pill">${esc(roles[st.role]?.label || st.role)}</span>
+              <span class="badge ${st.active ? "ok" : "danger"}">${st.active ? "Active" : "Disabled"}</span>
+              ${st.requireOtp ? `<span class="badge warn">Email code at sign-in</span>` : ""}
+              ${st.custom && !isAdminRole() ? `<span class="badge">Custom access</span>` : ""}
             </div>
-          </header>
-          <p class="muted small">The highlighted column is this person's role. Each row shows what a role can do. The database enforces the same rules.</p>
-          <div class="table-wrap"><table class="matrix access-matrix">
-            <thead><tr>
-              <th>Permission</th>
-              ${roleKeys.map((k) => `<th class="${k === current ? "is-mine" : ""}">${esc(roles[k].label)}</th>`).join("")}
-            </tr></thead>
-            <tbody>
-              <tr class="grp-row"><td colspan="${roleKeys.length + 1}">Can open these pages</td></tr>
-              ${PAGE_KEYS.map((p) => `<tr><td>${esc(PAGE_NAMES[p])}</td>${roleKeys.map((k) => `<td class="c ${k === current ? "is-mine" : ""}">${canOf(k, "page", p) ? `<span class="yes">${icon("check")}</span>` : `<span class="no">–</span>`}</td>`).join("")}</tr>`).join("")}
-              <tr class="grp-row"><td colspan="${roleKeys.length + 1}">Can change data in these areas</td></tr>
-              ${WRITE_AREAS.map((a) => `<tr><td>${esc(WRITE_LABEL[a])}</td>${roleKeys.map((k) => `<td class="c ${k === current ? "is-mine" : ""}">${canOf(k, "write", a) ? `<span class="yes">${icon("check")}</span>` : `<span class="no">–</span>`}</td>`).join("")}</tr>`).join("")}
-            </tbody>
-          </table></div>
+          </div>
+          <div class="sa-stats" id="sa-stats">${summaryHtml()}</div>
         </section>
+
+        <div class="sa-grid">
+          <section class="card">
+            <header class="card-head"><h3>Profile</h3></header>
+            <label class="sa-field">Full name<input id="sa-name" value="${esc(st.name)}" maxlength="60" /></label>
+            <label class="sa-switch-row"><input type="checkbox" id="sa-active" ${st.active ? "checked" : ""} ${isSelf ? "disabled" : ""} />
+              <span><strong>Account active</strong><small>${isSelf ? "You cannot disable your own account." : "A disabled person cannot sign in."}</small></span></label>
+            <label class="sa-switch-row"><input type="checkbox" id="sa-otp" ${st.requireOtp ? "checked" : ""} />
+              <span><strong>Email code at every sign-in</strong><small>They enter a 6-digit code sent to their email each time they sign in.</small></span></label>
+          </section>
+
+          <section class="card">
+            <header class="card-head"><h3>Role</h3></header>
+            <p class="muted small">A role is a starting point. Change the screens and areas below to give this person more or less.</p>
+            <div id="sa-roles">${roleCardsHtml()}</div>
+            <label class="sa-switch-row"><input type="checkbox" id="sa-standard" ${st.custom ? "" : "checked"} ${isAdminRole() ? "disabled" : ""} />
+              <span><strong>Use the role's standard access</strong><small>Untick to choose screens and areas for this person.</small></span></label>
+          </section>
+        </div>
+
+        <section class="card">
+          <header class="card-head"><h3>Screens they can open</h3><span class="muted small">Tap a tile to switch it on or off</span></header>
+          <div id="sa-pages">${tilesHtml()}</div>
+        </section>
+
+        <section class="card">
+          <header class="card-head"><h3>Data they can change</h3><span class="muted small">Viewing is allowed on any screen they can open</span></header>
+          <div id="sa-areas">${areasHtml()}</div>
+        </section>
+
+        ${isAdminRole() ? `<p class="muted small center">Administrators always have every screen and area. Change their role to limit them.</p>` : ""}
+
+        <div class="sticky-actions sa-actions">
+          <button class="btn ghost" data-back>Cancel</button>
+          <button class="btn primary" id="sa-save">${icon("check")}<span>Save changes</span></button>
+        </div>
       </div>`;
-    body.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", () => { selected = b.dataset.pick; paint(); }));
-    onAction(body.querySelector("#ac-save"), async () => {
-      const role = body.querySelector("#ac-role").value;
-      if (u.id === session.uid && role !== "admin") return toast("You cannot remove your own admin access", "error");
-      await updateDoc(doc(db, "users", u.id), { role, updatedAt: serverTimestamp() });
-      await audit("user.role", { id: u.id, role });
-      u.role = role;
-      toast("Role saved. It applies the next time they sign in.", "success");
-      paint();
-    });
+    bind();
   };
+
+  const refreshTiles = () => {
+    body.querySelector("#sa-stats").innerHTML = summaryHtml();
+    body.querySelector("#sa-pages").innerHTML = tilesHtml();
+    body.querySelector("#sa-areas").innerHTML = areasHtml();
+    body.querySelector("#sa-roles").innerHTML = roleCardsHtml();
+    bind();
+  };
+
+  function bind() {
+    body.querySelectorAll("[data-back]").forEach((b) => b.addEventListener("click", () => viewUsers(body)));
+    body.querySelector("#sa-name").addEventListener("input", (e) => { st.name = e.target.value; });
+    body.querySelector("#sa-active").addEventListener("change", (e) => { st.active = e.target.checked; });
+    body.querySelector("#sa-otp").addEventListener("change", (e) => { st.requireOtp = e.target.checked; });
+    body.querySelector("#sa-standard").addEventListener("change", (e) => {
+      st.custom = !e.target.checked;
+      if (!st.custom) Object.assign(st, roleDefaults(st.role));
+      refreshTiles();
+    });
+    body.querySelectorAll("[name=role]").forEach((r) => r.addEventListener("change", () => {
+      st.role = r.value;
+      if (!st.custom) Object.assign(st, roleDefaults(st.role));
+      refreshTiles();
+    }));
+    body.querySelectorAll("[data-page]").forEach((c) => c.addEventListener("change", (e) => {
+      st.custom = true;
+      const p = e.target.dataset.page;
+      st.pages = e.target.checked ? [...new Set([...st.pages, p])] : st.pages.filter((x) => x !== p);
+      refreshTiles();
+    }));
+    body.querySelectorAll("[data-area]").forEach((c) => c.addEventListener("change", (e) => {
+      st.custom = true;
+      const a = e.target.dataset.area;
+      st.write = e.target.checked ? [...new Set([...st.write, a])] : st.write.filter((x) => x !== a);
+      refreshTiles();
+    }));
+    onAction(body.querySelector("#sa-save"), async () => {
+      const name = st.name.trim();
+      if (!name) throw new Error("Give them a name.");
+      if (isSelf && st.role !== "admin") throw new Error("You cannot remove your own admin access.");
+      if (isSelf && !st.active) throw new Error("You cannot disable your own account.");
+      if (!isAdminRole() && st.custom && !st.pages.length) throw new Error("Give them at least one screen.");
+      const access = st.custom && !isAdminRole() ? { pages: [...st.pages], write: [...st.write] } : null;
+      await updateDoc(doc(db, "users", uid), {
+        name, active: st.active, requireOtp: st.requireOtp, role: st.role, access, updatedAt: serverTimestamp(),
+      });
+      await audit("user.access", { id: uid, role: st.role, custom: !!access, requireOtp: st.requireOtp });
+      toast("Saved. The change applies the next time they sign in.", "success");
+      viewStaffAccess(body, uid);
+    });
+  }
+
   paint();
 }
 

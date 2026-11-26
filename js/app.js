@@ -1,4 +1,4 @@
-import { onSubmit, onAction } from "./core.js";
+import { effectivePages, onSubmit, onAction } from "./core.js";
 import { auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "./firebase.js";
 import { loadBranding, branding, logoHtml } from "./branding.js";
 import { passwordFields } from "./password-ui.js";
@@ -345,7 +345,7 @@ function openChangePassword() {
 /* ───────── shell (responsive: sidebar on desktop, bottom bar on phones) ───────── */
 
 function navItems() {
-  return roles[session.role].pages.map((p) => ({ key: p, label: PAGES[p], icon: PAGE_ICON[p] }));
+  return effectivePages().map((p) => ({ key: p, label: PAGES[p], icon: PAGE_ICON[p] }));
 }
 
 // Sidebar sections: pages are grouped by what people do with them. Pages not listed here go under "More".
@@ -440,7 +440,7 @@ function buildShell() {
 /* ───────── router ───────── */
 
 async function route() {
-  const allowed = roles[session.role].pages;
+  const allowed = effectivePages();
   const key = location.hash.replace(/^#\/?/, "") || allowed[0];
   const page = PAGES[key] ? key : allowed[0];
   const el = document.getElementById("view");
@@ -614,7 +614,7 @@ async function handleAuthChange(user) {
       await setDoc(doc(db, "settings", "roles"), structuredClone(DEFAULT_ROLES));
       await loadSettings();
     }
-    Object.assign(session, { uid: user.uid, name: p.name || user.email, email: user.email, role: p.role });
+    Object.assign(session, { uid: user.uid, name: p.name || user.email, email: user.email, role: p.role, access: p.access || null });
     buildShell();
     startIdleLogout((message) => { pendingMessage = message; });
     route();

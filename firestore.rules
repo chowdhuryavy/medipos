@@ -47,15 +47,25 @@ service cloud.firestore {
     function otpOk() {
       return request.auth.token.get('otp', false) == true || myProfile().get('requireOtp', false) != true;
     }
+    // A person's own lists (set by an administrator) replace the role's lists. Null means the role's lists apply.
+    function ownAccess() {
+      return myProfile().get('access', null);
+    }
+    function pagesOf() {
+      return (ownAccess() != null && 'pages' in ownAccess()) ? ownAccess().pages : roleMap()[myProfile().role].pages;
+    }
+    function writeOf() {
+      return (ownAccess() != null && 'write' in ownAccess()) ? ownAccess().write : roleMap()[myProfile().role].write;
+    }
     function canPage(page) {
       return isAdmin() || (isActive()
         && 'pages' in roleMap()[myProfile().role]
-        && page in roleMap()[myProfile().role].pages);
+        && page in pagesOf());
     }
     function canWrite(area) {
       return isAdmin() || (isActive()
         && 'write' in roleMap()[myProfile().role]
-        && area in roleMap()[myProfile().role].write);
+        && area in writeOf());
     }
 
     // ───── staff ─────

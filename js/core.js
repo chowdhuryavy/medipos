@@ -60,10 +60,13 @@ export const DEFAULT_ROLES = {
 // Filled by loadSettings() from settings/roles in Firestore; edited by the admin.
 export const roles = structuredClone(DEFAULT_ROLES);
 
-export const session = { uid: null, name: "", email: "", role: null };
+export const session = { uid: null, name: "", email: "", role: null, access: null };
+// A person's own screens and areas (set by an administrator) replace the role's lists; null means the role's lists apply.
+export const effectivePages = () => session.access?.pages ?? roles[session.role]?.pages ?? [];
+export const effectiveWrite = () => session.access?.write ?? roles[session.role]?.write ?? [];
 
-export const can = (page) => !!session.role && !!roles[session.role]?.pages.includes(page);
-export const canWrite = (area) => !!session.role && !!roles[session.role]?.write?.includes(area);
+export const can = (page) => !!session.role && effectivePages().includes(page);
+export const canWrite = (area) => !!session.role && effectiveWrite().includes(area);
 
 /** Loads shop settings and role permissions from Firestore, merged over the defaults. */
 export async function loadSettings() {
