@@ -2,7 +2,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "../../server/firebase-admin.js";
 import { handle, httpError } from "../../server/http.js";
 import { sendMail } from "../../server/mail.js";
-import { loadEmailConfig, renderEmail } from "../../server/templates.js";
+import { loadEmailConfig } from "../../server/templates.js";
+import { renderOtpEmail } from "../../server/otp-email.js";
 import { generateOtp, newSalt, hashCode } from "../../server/secrets.js";
 
 const MINUTE = 60_000;
@@ -45,7 +46,7 @@ export default handle(async (req) => {
     windowCount: windowOpen ? prev.windowCount + 1 : 1,
   });
 
-  const mail = renderEmail("otp", await loadEmailConfig(), { name: profile.name || "", email, code });
+  const mail = renderOtpEmail(await loadEmailConfig(), { name: profile.name || "", code });
   try {
     await sendMail({ to: email, subject: mail.subject, text: mail.text, html: mail.html });
   } catch (err) {
