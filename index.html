@@ -24,35 +24,6 @@
   </div>
   <div id="modal-root"></div>
   <div id="toast-root" aria-live="polite"></div>
-  <script>
-    // If the app has not started after 12 seconds, say so instead of spinning forever.
-    setTimeout(function () {
-      if (document.body.dataset.state !== "boot") return;
-      var m = document.getElementById("splash-msg");
-      if (m) m.textContent = "This is taking longer than usual. Check your internet, then close and reopen the page.";
-    }, 12000);
-    function showBootError(text) {
-      var m = document.getElementById("splash-msg");
-      if (m && document.body.dataset.state === "boot") m.textContent = "Startup error: " + text;
-    }
-    window.addEventListener("error", function (e) { showBootError((e && e.message) || "script failed to load"); });
-    window.addEventListener("unhandledrejection", function (e) { showBootError((e && e.reason && e.reason.message) || String(e.reason)); });
-  </script>
-  <script type="module">
-    // Load the app inside try/catch so a failure to load it shows its real message on this screen.
-    function bootError(err) {
-      var m = document.getElementById("splash-msg");
-      var text = (err && err.message) ? err.message : String(err);
-      if (m) m.textContent = "Startup error: " + text;
-      var n = document.querySelector(".splash-name");
-      if (n) n.textContent = "MediPOS could not start";
-      console.error(err);
-    }
-    try {
-      await import("./js/app.js");
-    } catch (err) {
-      bootError(err);
-    }
-  </script>
+  <script type="module" src="js/boot.js"></script>
 </body>
 </html>

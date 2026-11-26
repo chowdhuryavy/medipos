@@ -380,10 +380,11 @@ function showStartupError(err) {
       <div class="splash-core">
         <h1 class="splash-name">MediPOS could not start</h1>
         <p class="splash-msg">${esc(err?.message || String(err))}</p>
-        <button class="btn primary" type="button" onclick="location.reload()">Try again</button>
+        <button class="btn primary" type="button" id="retry-btn">Try again</button>
       </div>
       <p class="splash-ver">Version ${esc(APP_VERSION)}</p>
     </section>`;
+  document.getElementById("retry-btn")?.addEventListener("click", () => location.reload());
 }
 
 onAuthStateChanged(auth, async (user) => {
