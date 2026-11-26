@@ -11,7 +11,7 @@ export function expenseCategories(expenseAccounts = []) {
 }
 
 // Next free expense account code in the 6000 range (for example 6110, 6120…).
-function nextExpenseCode(accounts) {
+export function nextExpenseCode(accounts) {
   const used = new Set(accounts.map((a) => String(a.code)));
   let n = Math.max(6100, ...accounts.filter((a) => a.type === "expense").map((a) => Number(a.code)).filter((c) => c >= 6000 && c < 7000));
   do { n += 10; } while (used.has(String(n)));

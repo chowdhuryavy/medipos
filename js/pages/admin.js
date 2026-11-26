@@ -4,6 +4,7 @@ import {
   sendPasswordResetEmail, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, query, where, orderBy, limit, serverTimestamp, writeBatch,
 } from "../firebase.js";
 import { firebaseConfig } from "../config.js";
+import { nextExpenseCode, expenseCategories } from "../expense-categories.js";
 import {
   session, roles, DEFAULT_ROLES, WRITE_AREAS, settings, DEFAULT_SETTINGS, esc, icon, toast, openModal, confirmBox, alertBox,
   audit, ensureChartOfAccounts, fmtDateTime, money,
@@ -379,6 +380,10 @@ async function viewLists(body) {
   // Float balance by key (wallet_bKash, operator_Robi). A wallet or operator with money in it cannot be deleted.
   const floatBal = Object.fromEntries(floatSnap.docs.map((d) => [d.id, Number(d.data().balance) || 0]));
   // Ledger accounts a till payment can post to: every asset account, plus any already in use.
+  const allAccounts = accSnap.docs.map((d) => ({ code: d.id, ...d.data() }));
+  const expenseAccounts = allAccounts.filter((a) => a.type === "expense");
+  // Expense categories: name plus the ledger account each one posts to. New ones have no account yet.
+  const ecState = expenseCategories(expenseAccounts).map((c) => ({ name: c.name, account: c.account || null }));
   const accounts = accSnap.docs.map((d) => ({ code: d.id, ...d.data() })).filter((a) => a.type === "asset");
   const accountChoices = [...new Map([
     ...accounts.map((a) => [a.code, a.name]),
@@ -392,6 +397,7 @@ async function viewLists(body) {
     writeOffReasons: [...settings.writeOffReasons],
     walletProviders: [...(settings.walletProviders || [])],
     rechargeOperators: [...(settings.rechargeOperators || [])],
+    expiryDayOptions: (settings.expiryDayOptions || [30, 60, 90, 180]).map(String),
   };
   const ids = Object.fromEntries(Object.keys(orig).map((k) => [k, orig[k].map((_, i) => i)]));
   const state = {
@@ -402,9 +408,27 @@ async function viewLists(body) {
     serviceFees: JSON.parse(JSON.stringify({ ...DEFAULT_SERVICE_FEES, ...(settings.serviceFees || {}) })),
     rechargeOperators: [...(settings.rechargeOperators || [])],
     methods: settings.paymentMethods.map((m) => ({ ...m, active: m.active !== false })),
+    expiryDayOptions: (settings.expiryDayOptions || [30, 60, 90, 180]).map(String),
   };
   const walletKey = (name) => floatKey("cashin", name);
   const operatorKey = (name) => floatKey("recharge", name);
+
+  const ecCard = () => `
+    <section class="card list-card">
+      <header class="card-head"><h3>Expense categories</h3><span class="badge">${ecState.length}</span></header>
+      <p class="muted small">Each category has its own ledger account, so expenses post to the right place. Renaming keeps the account. Removing keeps past expenses.</p>
+      <div class="chips-edit">
+        ${ecState.map((c, i) => `<span class="chip-edit">
+            <input class="chip-input" data-ec="${i}" value="${esc(c.name)}" maxlength="40" aria-label="Expense category name" />
+            <small>${c.account ? `ledger ${esc(c.account)}` : "new ledger account"}</small>
+            <button type="button" class="chip-x" data-rm-ec="${i}" aria-label="Remove ${esc(c.name)}">×</button></span>`).join("")
+          || `<span class="muted small">Nothing here yet.</span>`}
+      </div>
+      <div class="add-row">
+        <input data-new-ec maxlength="40" placeholder="Type a new category, then press Enter" aria-label="New expense category" />
+        <button type="button" class="btn ghost sm" data-add-ec>${icon("plus")}<span>Add</span></button>
+      </div>
+    </section>`;
 
   const root = document.createElement("div");
   body.innerHTML = "";
@@ -416,6 +440,7 @@ async function viewLists(body) {
       const key = inp.closest("[data-list]").dataset.list;
       state[key][Number(inp.dataset.chip)] = inp.value.trim();
     });
+    root.querySelectorAll("[data-ec]").forEach((inp) => { ecState[Number(inp.dataset.ec)].name = inp.value.trim(); });
     root.querySelectorAll("[data-fee]").forEach((r) => {
       const t = r.dataset.fee, f = (k) => r.querySelector(`[data-k="${k}"]`);
       state.serviceFees[t] = { mode: f("mode").value, value: Number(f("value").value) || 0, min: Number(f("min").value) || 0, max: Number(f("max").value) || 0 };
@@ -521,11 +546,42 @@ async function viewLists(body) {
         </section>
         ${chipSection("walletProviders", "Mobile wallets", "e.g. bKash, Nagad, Rocket. Shown when the cashier does a wallet cash-in or cash-out.")}
         ${chipSection("rechargeOperators", "Mobile operators", "e.g. Grameenphone, Robi. Shown when the cashier sells a mobile recharge.")}
+        ${ecCard()}
+        ${chipSection("expiryDayOptions", "Expiry report options", "The day choices offered in the expiry report, e.g. 30, 60, 90.")}
         <div class="sticky-actions">
           <button class="btn primary" type="submit">${icon("check")}<span>Save lists</span></button>
         </div>
       </form>`;
   };
+
+  // Expense category add and remove. Handled first so the list-section handler below does not see these buttons.
+  root.addEventListener("click", async (e) => {
+    const add = e.target.closest("[data-add-ec]");
+    const rm = e.target.closest("[data-rm-ec]");
+    if (!add && !rm) return;
+    e.stopImmediatePropagation();
+    syncFromDom();
+    if (add) {
+      const name = root.querySelector("[data-new-ec]").value.trim();
+      if (!name) return toast("Type a category name", "error");
+      if (ecState.some((c) => c.name.toLowerCase() === name.toLowerCase())) return toast("That category already exists", "error");
+      ecState.push({ name, account: null });
+      paint();
+      root.querySelector("[data-new-ec]").focus();
+    } else {
+      const i = Number(rm.dataset.rmEc);
+      const c = ecState[i];
+      if (!(await confirmBox(`Remove "${c.name}" from the list? Past expenses keep this category, and its ledger account is kept.`))) return;
+      ecState.splice(i, 1);
+      paint();
+    }
+  });
+  root.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.matches("[data-new-ec]")) {
+      e.preventDefault();
+      root.querySelector("[data-add-ec]").click();
+    }
+  });
 
   root.addEventListener("click", (e) => {
     const b = e.target.closest("button");
@@ -614,7 +670,32 @@ async function viewLists(body) {
       key: m.key, label: m.label.trim(), account: m.account, credit: !!m.credit, active: !!m.active,
     }));
     const serviceFees = state.serviceFees;
-    await saveGeneral({ categories, units, writeOffReasons, paymentMethods, walletProviders, rechargeOperators, serviceFees }, "Lists saved. Reloading to apply them.");
+    // Expense categories: a new one gets its own ledger account; a renamed one renames its account.
+    if (ecState.some((c) => !c.name.trim())) throw new Error("An expense category cannot be empty.");
+    const ecNames = ecState.map((c) => c.name.trim().toLowerCase());
+    if (new Set(ecNames).size !== ecNames.length) throw new Error("Two expense categories have the same name.");
+    const working = [...allAccounts];
+    const expenseCategoriesOut = [];
+    for (const c of ecState) {
+      const name = c.name.trim();
+      if (!c.account) {
+        const code = nextExpenseCode(working);
+        const account = { code, name, type: "expense", createdAt: serverTimestamp() };
+        await setDoc(doc(db, "accounts", code), account);
+        working.push(account);
+        expenseCategoriesOut.push({ name, account: code });
+      } else {
+        const acc = working.find((a) => a.code === c.account);
+        if (acc && acc.name !== name) await updateDoc(doc(db, "accounts", c.account), { name });
+        if (acc) acc.name = name;
+        expenseCategoriesOut.push({ name, account: c.account });
+      }
+    }
+    const expiryDayOptions = clean(state.expiryDayOptions).map(Number);
+    if (!expiryDayOptions.length || expiryDayOptions.some((d) => !Number.isInteger(d) || d < 1 || d > 3650)) {
+      throw new Error("Expiry options must be whole numbers of days, from 1 to 3650.");
+    }
+    await saveGeneral({ categories, units, writeOffReasons, paymentMethods, walletProviders, rechargeOperators, serviceFees, expenseCategories: expenseCategoriesOut, expiryDayOptions }, "Lists saved. Reloading to apply them.");
   });
 }
 

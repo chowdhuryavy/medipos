@@ -22,7 +22,7 @@ export async function render(el) {
         <label class="inline">To<input type="date" id="r-to" value="${todayISO()}" /></label>
         <label class="inline">Expiry window
           <select id="r-days">
-            ${[30, 60, 90, 180].map((d) => `<option value="${d}" ${d === settings.expiryWarnDays ? "selected" : ""}>${d} days</option>`).join("")}
+            ${(settings.expiryDayOptions || [30, 60, 90, 180]).map((d) => `<option value="${d}" ${d === settings.expiryWarnDays ? "selected" : ""}>${d} days</option>`).join("")}
           </select>
         </label>
         <label class="inline" id="r-group-wrap">Group by

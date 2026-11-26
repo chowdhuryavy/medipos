@@ -223,6 +223,8 @@ function productForm(p = {}) {
       <label>Cost per piece<input name="costPrice" type="number" inputmode="decimal" step="0.0001" min="0" required value="${p.costPrice ?? ""}" /></label>
       <label>Sale price per piece<input name="salePrice" type="number" inputmode="decimal" step="0.01" min="0" required value="${p.salePrice ?? ""}" /></label>
       <label>Lowest price per piece<input name="minPrice" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Same as sale price" value="${p.minPrice ?? ""}" /></label>
+      ${p.id ? "" : `<label>Opening stock (pieces)<input name="openingQty" type="number" inputmode="numeric" min="0" step="1" placeholder="0" /></label>
+      <label>Expiry date of opening stock<input name="openingExpiry" type="date" /></label>`}
       <label>VAT %<input name="vatRate" type="number" inputmode="decimal" step="0.5" min="0" value="${p.vatRate ?? settings.defaultVatRate}" /></label>
       <label>Reorder level (pieces)<input name="reorderLevel" type="number" inputmode="numeric" min="0" value="${p.reorderLevel ?? settings.defaultReorderLevel}" /></label>
 
@@ -299,11 +301,16 @@ function openProduct(p, reload) {
         stub: false,
         updatedAt: serverTimestamp(),
       };
+      // Opening stock (new products only) is received as a batch, so it needs its expiry date.
+      const openingQty = p ? 0 : (parseInt(fd.get("openingQty"), 10) || 0);
+      const openingExpiry = String(fd.get("openingExpiry") || "");
+      if (openingQty > 0 && !openingExpiry) return toast("Add the expiry date of the opening stock", "error");
       try {
         if (p) {
           await updateDoc(doc(db, "products", p.id), data);
         } else {
-          await addDoc(collection(db, "products"), { ...data, stock: 0, createdAt: serverTimestamp() });
+          const ref = await addDoc(collection(db, "products"), { ...data, stock: 0, createdAt: serverTimestamp() });
+          if (openingQty > 0) await receiveStock({ productId: ref.id, pieces: openingQty, cost: data.costPrice, expiry: openingExpiry, batchNo: "" });
         }
         await audit(p ? "product.update" : "product.create", { name });
         close();

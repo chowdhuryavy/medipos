@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   emailFooter: DEFAULT_EMAIL_FOOTER,
   otpExpiryMinutes: DEFAULT_OTP_MINUTES,
   expiryWarnDays: 60,
+  expiryDayOptions: [30, 60, 90, 180],
   defaultReorderLevel: 10,
   maxDiscountPct: 100,
   allowCreditSales: true,
