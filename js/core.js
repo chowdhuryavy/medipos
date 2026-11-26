@@ -1,3 +1,4 @@
+import { DEFAULT_EMAIL_FOOTER, DEFAULT_OTP_MINUTES } from "./email-defaults.js";
 import { db, doc, getDoc, setDoc, addDoc, collection, serverTimestamp } from "./firebase.js";
 
 /* ───────────────────────── admin-editable settings ─────────────────────────
@@ -14,6 +15,8 @@ export const DEFAULT_SETTINGS = {
   invoicePrefix: "INV",
   purchasePrefix: "PUR",
   receiptFooter: "Thank you for your visit. Get well soon!",
+  emailFooter: DEFAULT_EMAIL_FOOTER,
+  otpExpiryMinutes: DEFAULT_OTP_MINUTES,
   expiryWarnDays: 60,
   defaultReorderLevel: 10,
   maxDiscountPct: 100,

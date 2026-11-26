@@ -34,19 +34,20 @@ export default handle(async (req) => {
   const windowOpen = prev.windowStart && now - prev.windowStart < HOUR;
   if (windowOpen && prev.windowCount >= 5) throw httpError(429, "Too many codes requested. Try again in an hour.");
 
+  const cfg = await loadEmailConfig();
   const code = generateOtp();
   const salt = newSalt();
   await ref.set({
     salt,
     hash: hashCode(code, salt),
-    expiresAt: now + 10 * MINUTE,
+    expiresAt: now + cfg.otpExpiryMinutes * MINUTE,
     attempts: 0,
     lastSentAt: now,
     windowStart: windowOpen ? prev.windowStart : now,
     windowCount: windowOpen ? prev.windowCount + 1 : 1,
   });
 
-  const mail = renderOtpEmail(await loadEmailConfig(), { name: profile.name || "", code });
+  const mail = renderOtpEmail(cfg, { name: profile.name || "", code });
   try {
     await sendMail({ to: email, subject: mail.subject, text: mail.text, html: mail.html });
   } catch (err) {

@@ -15,7 +15,7 @@ const WRITE_LABEL = {
 };
 import { pushToSheets } from "../sheets.js";
 import { post } from "../api.js";
-import { DEFAULT_TEMPLATES, EMAIL_PLACEHOLDERS } from "../email-defaults.js";
+import { DEFAULT_TEMPLATES, EMAIL_PLACEHOLDERS, DEFAULT_BRAND_COLOR } from "../email-defaults.js";
 
 const TABS = [
   ["users", "Staff"],
@@ -169,6 +169,7 @@ const FIELDS = [
     ["shopPhone", "Phone", "tel"],
     ["taxNumber", "Tax / licence number", "text"],
     ["receiptFooter", "Receipt footer message", "text"],
+    ["emailFooter", "Footer line in emails", "text"],
   ]],
   ["Money & tax", [
     ["currency", "Currency code (e.g. QAR, SAR, USD, AED)", "text"],
@@ -180,6 +181,9 @@ const FIELDS = [
   ["Numbering", [
     ["invoicePrefix", "Invoice prefix", "text"],
     ["purchasePrefix", "Purchase prefix", "text"],
+  ]],
+  ["Password reset", [
+    ["otpExpiryMinutes", "Reset code is valid for (minutes, 1–60)", "number"],
   ]],
   ["Inventory rules", [
     ["expiryWarnDays", "Warn this many days before expiry", "number"],
@@ -661,6 +665,7 @@ async function viewBranding(body) {
         <p class="muted small">Shown on the sign-in page, in the sidebar and in every email.</p>
         <div class="form-grid">
           <p class="muted small">The shop name from Settings is shown on the loading and sign-in screens, the menu, receipts and emails. Change it in Settings.</p>
+          <label>Brand colour (used in emails)<input type="color" name="brandColor" value="${esc(brand.brandColor || DEFAULT_BRAND_COLOR)}" /></label>
           <div class="span-2 logo-editor">
             <div class="logo-preview" id="logo-preview">${logoUrl ? `<img src="${logoUrl}" alt="Current logo" />` : `<span class="muted small">No logo yet</span>`}</div>
             <div class="logo-actions">
@@ -710,9 +715,7 @@ async function viewBranding(body) {
     const b = e.target.closest("[data-default]");
     if (!b) return;
     const k = b.dataset.default;
-    form[`${k}__subject`].value = DEFAULT_TEMPLATES[k].subject;
-    form[`${k}__body`].value = DEFAULT_TEMPLATES[k].body;
-    form[`${k}__button`].value = DEFAULT_TEMPLATES[k].button || "";
+    for (const f of tplFields(k)) form[`${k}__${f}`].value = DEFAULT_TEMPLATES[k][f] ?? "";
     toast("Default text restored. Save to apply it.", "info");
   });
 
@@ -722,15 +725,16 @@ async function viewBranding(body) {
     const appName = settings.shopName || "MediPOS";
     const emails = {};
     for (const k of Object.keys(DEFAULT_TEMPLATES)) {
-      emails[k] = {
-        subject: String(f.get(`${k}__subject`) || "").trim() || DEFAULT_TEMPLATES[k].subject,
-        body: String(f.get(`${k}__body`) || "").trim() || DEFAULT_TEMPLATES[k].body,
-        button: String(f.get(`${k}__button`) || "").trim(),
-      };
+      emails[k] = {};
+      for (const fld of tplFields(k)) {
+        const v = String(f.get(`${k}__${fld}`) || "").trim();
+        emails[k][fld] = fld === "button" ? v : (v || DEFAULT_TEMPLATES[k][fld]);
+      }
     }
+    const brandColor = /^#[0-9a-f]{6}$/i.test(String(f.get("brandColor") || "")) ? String(f.get("brandColor")) : DEFAULT_BRAND_COLOR;
     try {
       await setDoc(doc(db, "branding", "public"), {
-        appName, shopName: settings.shopName, logoUrl: removeLogo ? "" : logoUrl, updatedAt: serverTimestamp(),
+        appName, shopName: settings.shopName, logoUrl: removeLogo ? "" : logoUrl, brandColor, updatedAt: serverTimestamp(),
       }, { merge: true });
       await setDoc(doc(db, "settings", "emails"), { ...emails, updatedAt: serverTimestamp() });
       await audit("branding.update", { appName, logo: !!logoUrl && !removeLogo });
