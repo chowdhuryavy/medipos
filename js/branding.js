@@ -14,6 +14,7 @@ export async function loadBranding() {
   // The shop name from Settings is the name shown everywhere.
   if (branding.shopName) branding.appName = branding.shopName;
   document.title = branding.appName || "MediPOS";
+  applyBrandIcons();
   return branding;
 }
 
@@ -22,3 +23,37 @@ export const logoHtml = (fallbackIcon, cls = "brand-mark big") =>
   branding.logoUrl
     ? `<img class="brand-logo" src="${branding.logoUrl}" alt="${esc(branding.appName)} logo" />`
     : `<div class="${cls}">${fallbackIcon}</div>`;
+
+/**
+ * The saved logo is the browser tab icon, the phone home-screen icon and the installed app icon.
+ * Without a logo the default icon stays.
+ */
+export function applyBrandIcons() {
+  const head = document.head;
+  const setLink = (rel, href, type) => {
+    let link = head.querySelector(`link[rel="${rel}"]`);
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = rel;
+      head.appendChild(link);
+    }
+    link.href = href;
+    if (type) link.type = type;
+  };
+  const setMeta = (name, content) => {
+    let m = head.querySelector(`meta[name="${name}"]`);
+    if (!m) {
+      m = document.createElement("meta");
+      m.name = name;
+      head.appendChild(m);
+    }
+    m.content = content;
+  };
+  if (branding.logoUrl) {
+    const type = branding.logoUrl.match(/^data:([^;,]+)/)?.[1] || "image/png";
+    setLink("icon", branding.logoUrl, type);
+    setLink("apple-touch-icon", "/api/logo");
+  }
+  setMeta("apple-mobile-web-app-title", branding.appName || "MediPOS");
+  setMeta("application-name", branding.appName || "MediPOS");
+}
