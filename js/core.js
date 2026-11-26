@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   defaultReorderLevel: 10,
   maxDiscountPct: 100,
   allowCreditSales: true,
+  allowPriceChange: true,
   categories: ["Medicines", "OTC", "Cosmetics", "Baby care", "Medical devices", "General"],
   units: ["Pack", "Strip", "Bottle", "Box", "Piece"],
   paymentMethods: [

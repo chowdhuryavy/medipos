@@ -3,6 +3,8 @@ import {
   session, settings, money, esc, icon, todayISO, daysAgoISO, daysFromNowISO, monthStartISO,
   animateCount, fmtDateTime,
 } from "../core.js";
+import { branding } from "../branding.js";
+import { locationText, breakdown, baseName } from "../packs.js";
 
 export async function render(el) {
   const today = todayISO();
@@ -28,6 +30,10 @@ export async function render(el) {
   const lowStock = products.filter((p) => (p.stock || 0) <= (p.reorderLevel || 0));
   const expiring = batches.filter((b) => b.expiry >= today && b.expiry <= soon);
   const expired = batches.filter((b) => b.expiry < today);
+  const newest = products
+    .filter((p) => p.createdAt?.toMillis)
+    .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())
+    .slice(0, 5);
 
   const kpis = [
     { label: "Today's revenue", value: sum(todaySales, "total"), fmt: money, icon: "cart" },
@@ -65,6 +71,7 @@ export async function render(el) {
 
   el.innerHTML = `
     <section class="card hero">
+      ${branding.logoUrl ? `<img class="hero-logo" src="${branding.logoUrl}" alt="${esc(settings.shopName || "")} logo" />` : ""}
       <div>
         <p class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</p>
         <h1>Good ${greet}, ${esc(firstName)}</h1>
@@ -96,7 +103,7 @@ export async function render(el) {
       <section class="card">
         <header class="card-head"><h3>Needs attention</h3></header>
         <ul class="alert-list">
-          ${lowStock.slice(0, 5).map((p) => `<li class="pill warn">${icon("alert")}Low stock · ${esc(p.name)} (${p.stock || 0} left)</li>`).join("")}
+          ${lowStock.slice(0, 5).map((p) => `<li class="pill warn">${icon("alert")}Low stock · ${esc(p.name)} · ${esc(locationText(p))} · ${esc(breakdown(p, p.stock || 0))} left</li>`).join("")}
           ${expired.slice(0, 5).map((b) => `<li class="pill danger">${icon("alert")}Expired · ${esc(b.productName)} · batch ${esc(b.batchNo || "-")} (${b.remaining})</li>`).join("")}
           ${expiring.slice(0, 5).map((b) => `<li class="pill info">${icon("alert")}Expires ${esc(b.expiry)} · ${esc(b.productName)}</li>`).join("")}
           ${!lowStock.length && !expired.length && !expiring.length ? `<li class="muted">All clear. Nothing needs attention right now.</li>` : ""}
@@ -129,6 +136,13 @@ export async function render(el) {
         </ul>
       </section>
     </div>
+
+    <section class="card">
+      <header class="card-head"><h3>Newly added items</h3><span class="muted">Where to keep them</span></header>
+      <ul class="alert-list">
+        ${newest.map((p) => `<li class="pill info">${icon("plus")}<strong>${esc(p.name)}</strong> · ${esc(locationText(p))}${p.createdAt?.toMillis && Date.now() - p.createdAt.toMillis() < 7 * 864e5 ? " · new" : ""}</li>`).join("") || `<li class="muted">No products added yet.</li>`}
+      </ul>
+    </section>
 
     <section class="card">
       <header class="card-head"><h3>Recent sales</h3><a href="#/reports" class="link">Full reports →</a></header>

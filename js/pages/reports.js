@@ -132,9 +132,9 @@ async function build(from, to, days) {
     dailyTotals.set(s.date, (dailyTotals.get(s.date) || 0) + (s.total || 0));
     for (const it of s.items || []) {
       const profit = round2((it.lineNet || 0) - (it.cogs || 0));
-      saleRows.push([s.date, s.invoiceNo, s.customerName, it.name, it.qty, round2(it.lineNet), round2(it.lineVat), round2(it.lineTotal), round2(it.cogs || 0), profit, s.paymentLabel || s.payment]);
+      saleRows.push([s.date, s.invoiceNo, s.customerName, it.name, it.pieces ?? it.qty, round2(it.lineNet), round2(it.lineVat), round2(it.lineTotal), round2(it.cogs || 0), profit, s.paymentLabel || s.payment]);
       const agg = byProduct.get(it.name) || { qty: 0, revenue: 0, cogs: 0 };
-      agg.qty += it.qty; agg.revenue += it.lineNet || 0; agg.cogs += it.cogs || 0;
+      agg.qty += it.pieces ?? it.qty; agg.revenue += it.lineNet || 0; agg.cogs += it.cogs || 0;
       byProduct.set(it.name, agg);
     }
   }

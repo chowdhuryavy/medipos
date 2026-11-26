@@ -374,6 +374,7 @@ function buildShell() {
       <div class="main">
         <header class="topbar">
           <button class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu">${icon("menu")}</button>
+          ${branding.logoUrl ? `<img class="topbar-logo" src="${branding.logoUrl}" alt="${esc(settings.shopName || "")} logo" />` : ""}
           <h2 id="page-title"></h2>
           <div class="grow"></div>
           <span class="clock" id="clock"></span>

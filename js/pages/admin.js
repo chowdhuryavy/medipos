@@ -175,6 +175,7 @@ const FIELDS = [
     ["defaultVatRate", "Default VAT %", "number"],
     ["maxDiscountPct", "Maximum discount % cashiers can give", "number"],
     ["allowCreditSales", "Allow sales on account (credit)", "bool"],
+    ["allowPriceChange", "Let cashiers raise prices (lowest price is always enforced)", "bool"],
   ]],
   ["Numbering", [
     ["invoicePrefix", "Invoice prefix", "text"],

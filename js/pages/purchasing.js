@@ -1,4 +1,5 @@
 import { onSubmit, onAction, canWrite } from "../core.js";
+import { unitsOf, unitByKey, toPieces, unitOptions } from "../packs.js";
 import { db, collection, doc, getDocs, query, orderBy, limit, runTransaction, serverTimestamp, increment } from "../firebase.js";
 import {
   session, settings, money, esc, icon, toast, todayISO, round2, buildJournal, audit,
@@ -64,13 +65,14 @@ export async function render(el) {
   if (!canPost) return loadHistory(el);
 
   const tbody = el.querySelector("#pur-lines");
-  const lines = [{ productId: "", qty: 1, cost: 0, batchNo: "", expiry: "" }];
+  const lines = [{ productId: "", unit: "piece", qty: 1, cost: 0, batchNo: "", expiry: "" }];
 
   const rowHtml = (l, i) => `
     <tr class="row-in">
       <td data-label="Product"><select data-i="${i}" data-f="productId"><option value="">Choose…</option>
         ${products.map((p) => `<option value="${esc(p.id)}" ${p.id === l.productId ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
       </select></td>
+      <td data-label="Unit"><select data-i="${i}" data-f="unit">${unitOptions(products.find((x) => x.id === l.productId), l.unit || "piece")}</select></td>
       <td data-label="Qty" class="r"><input type="number" inputmode="numeric" min="1" step="1" data-i="${i}" data-f="qty" value="${l.qty}" /></td>
       <td data-label="Unit cost" class="r"><input type="number" inputmode="decimal" min="0" step="0.01" data-i="${i}" data-f="cost" value="${l.cost}" /></td>
       <td data-label="Batch"><input data-i="${i}" data-f="batchNo" value="${esc(l.batchNo)}" /></td>
@@ -99,17 +101,20 @@ export async function render(el) {
 
   tbody.addEventListener("input", (e) => {
     const t = e.target;
-    if (!t.dataset.f || t.dataset.f === "productId") return;
+    if (!t.dataset.f || ["productId", "unit"].includes(t.dataset.f)) return;
     const i = Number(t.dataset.i);
     lines[i][t.dataset.f] = ["qty", "cost"].includes(t.dataset.f) ? Number(t.value) || 0 : t.value;
     totals();
   });
   tbody.addEventListener("change", (e) => {
     const t = e.target;
-    if (t.dataset.f !== "productId") return;
     const i = Number(t.dataset.i);
+    if (t.dataset.f === "unit") { lines[i].unit = t.value; return paintLines(); }
+    if (t.dataset.f !== "productId") return;
     const p = products.find((x) => x.id === t.value);
     lines[i].productId = t.value;
+    lines[i].unit = "piece";
+    // Cost is shown per piece to start; the buyer changes the unit if the bill is per pack.
     if (p) lines[i].cost = Number(p.costPrice) || 0;
     paintLines();
   });
@@ -117,11 +122,11 @@ export async function render(el) {
     const b = e.target.closest("[data-rm]");
     if (!b) return;
     lines.splice(Number(b.dataset.rm), 1);
-    if (!lines.length) lines.push({ productId: "", qty: 1, cost: 0, batchNo: "", expiry: "" });
+    if (!lines.length) lines.push({ productId: "", unit: "piece", qty: 1, cost: 0, batchNo: "", expiry: "" });
     paintLines();
   });
   el.querySelector("#pur-add").addEventListener("click", () => {
-    lines.push({ productId: "", qty: 1, cost: 0, batchNo: "", expiry: "" });
+    lines.push({ productId: "", unit: "piece", qty: 1, cost: 0, batchNo: "", expiry: "" });
     paintLines();
   });
 
@@ -195,13 +200,17 @@ async function postPurchase({ supplier, invoiceNo, date, payment, lines }) {
       const ps = await tx.get(pRef);
       if (!ps.exists()) throw new Error("A product in this purchase no longer exists");
       const p = ps.data();
-      const qty = Number(l.qty);
-      const cost = round2(Number(l.cost) || 0);
+      // Quantity and cost are in the unit the buyer chose (box, strip…). Stock is kept in pieces.
+      const u = unitByKey(p, l.unit);
+      const packs = Number(l.qty);
+      const unitCost = round2(Number(l.cost) || 0);
+      const qty = toPieces(u, packs);
+      const cost = Math.round((unitCost / u.size) * 10000) / 10000; // cost per piece
       const oldStock = Number(p.stock) || 0;
       const oldCost = Number(p.costPrice) || 0;
       const newStock = oldStock + qty;
-      const newCost = newStock ? round2((oldStock * oldCost + qty * cost) / newStock) : cost;
-      const lineNet = round2(qty * cost);
+      const newCost = newStock ? Math.round(((oldStock * oldCost + qty * cost) / newStock) * 10000) / 10000 : cost;
+      const lineNet = round2(packs * unitCost);
       const lineVat = round2(lineNet * (Number(p.vatRate) || 0) / 100);
       net += lineNet;
       vat += lineVat;
@@ -209,7 +218,7 @@ async function postPurchase({ supplier, invoiceNo, date, payment, lines }) {
         productId: l.productId, productName: p.name, batchNo: l.batchNo || purNo, expiry: l.expiry,
         qty, remaining: qty, cost, purNo, createdAt: serverTimestamp(),
       } });
-      items.push({ productId: l.productId, name: p.name, qty, cost, expiry: l.expiry, batchNo: l.batchNo || purNo, lineNet, lineVat });
+      items.push({ productId: l.productId, name: p.name, unit: u.name, qty: packs, pieces: qty, unitCost, cost, expiry: l.expiry, batchNo: l.batchNo || purNo, lineNet, lineVat });
     }
 
     net = round2(net);
