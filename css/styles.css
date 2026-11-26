@@ -970,7 +970,11 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .sidebar-ver { margin: 0; display: flex; justify-content: center; gap: 8px; align-items: center; font-size: 11px; color: rgba(204, 251, 241, .6); letter-spacing: .4px; }
 .sidebar-ver b { font-weight: 800; color: #a7f3ea; background: rgba(255, 255, 255, .08); padding: 2px 8px; border-radius: 999px; }
 @media (max-width: 900px) {
-  .sidebar { height: 100vh; height: 100dvh; width: min(300px, 88vw); }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; height: 100vh; height: 100dvh; width: min(300px, 88vw);
+    transform: translateX(-105%); transition: transform .35s var(--ease); box-shadow: 0 0 40px rgba(0, 0, 0, .3);
+  }
+  .sidebar.open { transform: none; }
   .sidebar-foot { flex: none; margin-top: 12px; }
   .nav-link.active::before { display: none; }
 }
