@@ -2,7 +2,8 @@ import { auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, upda
 import { loadBranding, branding, logoHtml } from "./branding.js";
 import { passwordFields } from "./password-ui.js";
 import { post } from "./api.js";
-import { firebaseConfig, APP_NAME } from "./config.js";
+import { showSplash } from "./splash.js";
+import { firebaseConfig, APP_NAME, APP_VERSION } from "./config.js";
 import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast } from "./core.js";
 
 // Email + password only. No third-party (Google) sign-in is offered anywhere.
@@ -96,6 +97,7 @@ function showLogin(message = "", tone = "error") {
           <button class="btn primary block xl" type="submit" id="login-btn">${icon("key")}<span>Sign in</span></button>
         </form>
         <button class="link-btn" type="button" id="forgot-btn">Forgot password?</button>
+        <p class="version">Version ${esc(APP_VERSION)}</p>
       </div>
     </section>`;
 
@@ -362,10 +364,13 @@ window.addEventListener("hashchange", route);
 /* ───────── boot & auth state ───────── */
 
 restoreTheme();
-const brandingReady = loadBranding();
+const brandingReady = loadBranding().then(() => {
+  if (document.body.dataset.state === "boot") showSplash(root, "Checking your session…");
+});
 
 onAuthStateChanged(auth, async (user) => {
   if (!isConfigured()) return showSetup();
+  showSplash(root, "Checking your session…");
   await brandingReady;
   if (!user) {
     showLogin(pendingMessage);
@@ -391,6 +396,7 @@ onAuthStateChanged(auth, async (user) => {
       showForcePasswordChange(user);
       return;
     }
+    showSplash(root, "Loading your workspace…");
     const rolesExist = await loadSettings();
     // First sign-in after setup: create the role matrix from the defaults so it can be edited.
     if (!rolesExist && p.role === "admin") {

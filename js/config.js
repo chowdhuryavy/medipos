@@ -16,5 +16,8 @@ export const firebaseConfig = {
 
 export const APP_NAME = "MediPOS";
 
+// Shown on the sign-in page and the loading screen. Bump it on each release.
+export const APP_VERSION = "1.1.0";
+
 // ISO 4217 code used for money formatting (change to your currency).
 export const CURRENCY = "QAR";

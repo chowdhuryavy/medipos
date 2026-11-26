@@ -524,3 +524,41 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .logo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .logo-actions { display: grid; gap: 8px; justify-items: start; }
 .file-btn { cursor: pointer; }
+
+/* ───────── loading screen ───────── */
+.splash { position: fixed; inset: 0; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; overflow: hidden; z-index: 1;
+  background: linear-gradient(135deg, #0b4f4a, #0f766e 55%, #115e59); color: #fff; animation: splashIn .5s var(--ease) both; }
+.splash-bg { position: absolute; inset: 0; pointer-events: none; }
+.blob { position: absolute; border-radius: 50%; filter: blur(50px); opacity: .45; animation: float 14s ease-in-out infinite; }
+.b1 { width: 380px; height: 380px; background: #5eead4; top: -120px; left: -100px; }
+.b2 { width: 300px; height: 300px; background: #f59e0b; bottom: -100px; right: -80px; opacity: .28; animation-delay: -5s; }
+.b3 { width: 220px; height: 220px; background: #a7f3d0; top: 35%; left: 62%; opacity: .22; animation-delay: -9s; }
+.splash-core { position: relative; display: grid; justify-items: center; gap: 14px; text-align: center; padding: 24px; }
+.splash-orbit { position: absolute; top: 0; left: 50%; width: 170px; height: 170px; margin-left: -85px; pointer-events: none; }
+.ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .18); }
+.ring.r1 { border-top-color: #5eead4; animation: spin 2.4s linear infinite; }
+.ring.r2 { inset: 14px; border-left-color: #f59e0b; border-bottom-color: transparent; animation: spin 3.6s linear infinite reverse; }
+.dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: #fff; box-shadow: 0 0 14px #5eead4; }
+.arm { position: absolute; inset: 0; border-radius: 50%; }
+.arm.a1 { animation: spin 2.4s linear infinite; }
+.arm.a2 { animation: spin 3.6s linear infinite reverse; }
+.dot.d1 { top: -5px; left: 50%; margin-left: -5px; }
+.dot.d2 { top: 50%; right: -4px; margin-top: -3.5px; width: 7px; height: 7px; background: #f59e0b; box-shadow: 0 0 12px #f59e0b; }
+.splash-logo { position: relative; margin-top: 18px; animation: floatLogo 3s ease-in-out infinite; }
+.splash-logo .brand-mark { width: 84px; height: 84px; border-radius: 24px; background: #fff; color: var(--brand); box-shadow: 0 24px 50px -16px rgba(0, 0, 0, .45); }
+.splash-logo .brand-mark .ico { width: 40px; height: 40px; }
+.splash-logo .brand-logo { max-height: 90px; max-width: 220px; filter: drop-shadow(0 12px 22px rgba(0, 0, 0, .35)); }
+.splash-name { margin: 6px 0 0; font-size: 26px; letter-spacing: .3px; color: #fff; text-align: center; animation: fadeUp .6s .15s var(--ease) both; }
+.splash-msg { margin: 0; font-size: 14px; opacity: .85; min-height: 20px; animation: fadeUp .6s .25s var(--ease) both; }
+.splash-bar { position: relative; width: 180px; height: 5px; border-radius: 99px; background: rgba(255, 255, 255, .2); overflow: hidden; margin-top: 6px; }
+.splash-bar i { position: absolute; inset: 0; width: 45%; border-radius: 99px; background: linear-gradient(90deg, transparent, #fff, #5eead4, transparent); animation: barSlide 1.4s ease-in-out infinite; }
+.splash-ver { position: absolute; bottom: 18px; left: 0; right: 0; margin: 0; text-align: center; font-size: 12px; opacity: .7; letter-spacing: .5px; }
+.version { margin: 2px 0 0; text-align: center; font-size: 12px; opacity: .55; }
+
+@keyframes splashIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes floatLogo { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes barSlide { 0% { left: -45%; } 100% { left: 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .splash *, .splash { animation: none !important; }
+}
