@@ -231,14 +231,20 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
   try {
+    // Read the staff profile first: settings are only readable by active staff.
     const snap = await getDoc(doc(db, "users", user.uid));
     const p = snap.exists() ? snap.data() : null;
-    await loadSettings();
-    if (!p || p.active !== true || !roles[p.role]) {
-      pendingMessage = "Your account has no active staff profile. Ask an administrator.";
+    if (!p) {
+      pendingMessage = `No staff profile found for this login. Create users/${user.uid} in Firestore (see README).`;
       await signOut(auth);
       return;
     }
+    if (p.active !== true || !roles[p.role]) {
+      pendingMessage = `Profile is inactive or has an unknown role ("${p.role ?? "none"}"). Check active = true and role = admin in Firestore.`;
+      await signOut(auth);
+      return;
+    }
+    await loadSettings();
     Object.assign(session, { uid: user.uid, name: p.name || user.email, email: user.email, role: p.role });
     buildShell();
     route();
