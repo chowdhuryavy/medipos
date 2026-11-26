@@ -48,7 +48,7 @@ async function loadAccounts() {
 const monthKey = (d) => d.slice(0, 7);
 
 async function viewOverview(body, go) {
-  const [accounts, jSnap, floatSnap] = await Promise.all([loadAccounts(), getDocs(collection(db, "journal")), getDocs(collection(db, "floats"))]);
+  const [accounts, jSnap, floatSnap] = await Promise.all([loadAccounts(), getDocs(collection(db, "journal")), getDocs(collection(db, "floats")).catch(() => ({ docs: [] }))]);
   const entries = jSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const expenseAccounts = accounts.filter((a) => a.type === "expense");
   const all = accumulate(entries, accounts, "0000-00-00");

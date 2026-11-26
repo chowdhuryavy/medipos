@@ -46,7 +46,15 @@ export async function render(el) {
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
-    await views[tab](body);
+    try {
+      await views[tab](body);
+    } catch (err) {
+      // Shown on screen so a missing deployment or rule is visible, not a blank page.
+      console.error(err);
+      body.innerHTML = `<section class="card"><h3>This screen could not load</h3>
+        <p class="muted">${esc(err.message || "Unknown error")}</p>
+        <p class="muted small">If this says permission denied, the security rules have not been deployed yet. Deploy firestore.rules (firebase deploy --only firestore:rules), then reload.</p></section>`;
+    }
   };
   el.querySelector(".tabs").addEventListener("click", (e) => {
     const b = e.target.closest(".tab");

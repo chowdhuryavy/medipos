@@ -13,7 +13,7 @@ export async function render(el) {
     getDocs(collection(db, "products")),
     getDocs(collection(db, "customers")),
     getDocs(query(collection(db, "batches"), where("remaining", ">", 0))),
-    getDocs(collection(db, "floats")),
+    getDocs(collection(db, "floats")).catch(() => ({ docs: [] })),
   ]);
   // Current float balance of each wallet and operator, kept up to date after every sale.
   const floats = Object.fromEntries(floatSnap.docs.map((d) => [d.id, Number(d.data().balance) || 0]));
