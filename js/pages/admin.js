@@ -630,23 +630,50 @@ async function viewAudit(body) {
 
 const LOGO_MAX_CHARS = 350_000;
 
-function readLogo(file) {
+const LOGO_TYPES = /\.(png|jpe?g|webp|heic|heif|gif|bmp)$/i;
+
+// Decodes the picked file (including iPhone HEIC and large camera photos), scales it down and returns a PNG data URL.
+async function readLogo(file) {
+  const looksLikeImage = file.type?.startsWith("image/") || LOGO_TYPES.test(file.name || "");
+  if (!looksLikeImage) throw new Error("Choose an image file (PNG, JPG, WebP or HEIC).");
+
+  let source;
+  try {
+    // createImageBitmap handles EXIF rotation and large photos without loading the full image into the page.
+    source = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    source = await loadImageElement(file);
+  }
+  const w = source.width || source.naturalWidth;
+  const h = source.height || source.naturalHeight;
+  if (!w || !h) throw new Error("This image could not be read. Try a PNG or JPG screenshot.");
+
+  const scale = Math.min(1, 480 / Math.max(w, h));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w * scale));
+  c.height = Math.max(1, Math.round(h * scale));
+  c.getContext("2d").drawImage(source, 0, 0, c.width, c.height);
+  source.close?.();
+  // PNG keeps transparency. Photos can be too big as PNG, so fall back to WebP, which is smaller and still transparent.
+  let url = c.toDataURL("image/png");
+  for (const q of [0.9, 0.7, 0.5]) {
+    if (url.length <= LOGO_MAX_CHARS) break;
+    url = c.toDataURL("image/webp", q);
+  }
+  if (url.length > LOGO_MAX_CHARS) throw new Error("That logo is still too large. Use a smaller image.");
+  return url;
+}
+
+function loadImageElement(file) {
   return new Promise((resolve, reject) => {
-    if (!file.type.startsWith("image/")) return reject(new Error("Choose an image file (PNG, JPG or WebP)."));
     const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, 480 / Math.max(img.width, img.height));
-      const c = document.createElement("canvas");
-      c.width = Math.max(1, Math.round(img.width * scale));
-      c.height = Math.max(1, Math.round(img.height * scale));
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      const url = c.toDataURL("image/png");
-      URL.revokeObjectURL(img.src);
-      if (url.length > LOGO_MAX_CHARS) return reject(new Error("That logo is too large. Use a smaller image."));
-      resolve(url);
+    const src = URL.createObjectURL(file);
+    img.onload = () => { URL.revokeObjectURL(src); resolve(img); };
+    img.onerror = () => {
+      URL.revokeObjectURL(src);
+      reject(new Error("This image format is not supported on this device. Choose a PNG or JPG, or take a screenshot of the logo."));
     };
-    img.onerror = () => reject(new Error("Could not read that image."));
-    img.src = URL.createObjectURL(file);
+    img.src = src;
   });
 }
 
@@ -670,7 +697,7 @@ async function viewBranding(body) {
             <div class="logo-preview" id="logo-preview">${logoUrl ? `<img src="${logoUrl}" alt="Current logo" />` : `<span class="muted small">No logo yet</span>`}</div>
             <div class="logo-actions">
               <label class="btn ghost sm file-btn">${icon("upload")}<span>Choose logo</span>
-                <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp" hidden /></label>
+                <input type="file" id="logo-file" accept="image/*" hidden /></label>
               <button type="button" class="btn ghost sm" id="logo-remove">${icon("trash")}<span>Remove</span></button>
               <small class="muted">PNG with a transparent background works best. Max about 350 KB after resizing.</small>
             </div>
