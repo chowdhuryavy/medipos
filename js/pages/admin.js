@@ -840,9 +840,14 @@ async function viewScheduledReports(body) {
           <label class="check"><input type="checkbox" data-fmt="pdf" ${(s.formats || ["pdf"]).includes("pdf") ? "checked" : ""} /> PDF</label>
           <label class="check"><input type="checkbox" data-fmt="xlsx" ${(s.formats || []).includes("xlsx") ? "checked" : ""} /> Excel</label>
         </fieldset>
-        <label class="span-2">Send to (comma separated emails)
-          <input data-k="recipients" value="${esc((s.recipients || []).join(", "))}" placeholder="owner@shop.com, accounts@shop.com" />
-        </label>
+        <fieldset class="span-2 sched-recip"><legend>Send to</legend>
+          ${(s.recipients?.length ? s.recipients : [""]).map((r, j) => `
+          <div class="recip-row" data-j="${j}">
+            <input type="email" data-rec value="${esc(r)}" placeholder="name@shop.com" aria-label="Recipient email" />
+            <button type="button" class="icon-btn sm hover-danger" data-rec-remove aria-label="Remove this email">${icon("trash")}</button>
+          </div>`).join("")}
+          <button type="button" class="btn ghost sm" data-rec-add>${icon("plus")}<span>Add email</span></button>
+        </fieldset>
       </div>
       <fieldset class="sched-reports"><legend>Reports to include</legend>
         ${REPORTS.map(([k, l]) => `<label class="check"><input type="checkbox" data-rep="${k}" ${(s.reports || []).includes(k) ? "checked" : ""} /> ${esc(l)}</label>`).join("")}
@@ -882,12 +887,13 @@ async function viewScheduledReports(body) {
       s.timezone = c.querySelector('[data-k="timezone"]').value.trim();
       s.formats = [...c.querySelectorAll("[data-fmt]")].filter((x) => x.checked).map((x) => x.dataset.fmt);
       s.reports = [...c.querySelectorAll("[data-rep]")].filter((x) => x.checked).map((x) => x.dataset.rep);
-      s.recipients = c.querySelector('[data-k="recipients"]').value.split(",").map((v) => v.trim()).filter(Boolean);
+      s.recipients = [...c.querySelectorAll("[data-rec]")].map((x) => x.value.trim());
     });
   };
 
   const validate = () => {
     for (const s of items) {
+      s.recipients = (s.recipients || []).map((v) => (v || "").trim()).filter(Boolean);
       if (!s.name) throw new Error("Give every schedule a name.");
       if (!/^\d{2}:\d{2}$/.test(s.time || "")) throw new Error(`Set the send time for "${s.name}".`);
       if (!localTime(s.timezone)) throw new Error(`"${s.timezone}" is not a valid time zone, for example Asia/Qatar.`);
@@ -921,6 +927,21 @@ async function viewScheduledReports(body) {
     onAction(body.querySelector("#sc-save"), async () => {
       try { await save(); toast("Schedules saved", "success"); paint(); } catch (err) { toast(err.message, "error"); }
     });
+    body.querySelectorAll("[data-rec-add]").forEach((b) => b.addEventListener("click", () => {
+      read();
+      const i = Number(b.closest(".sched-card").dataset.i);
+      if (!items[i]) return;
+      items[i].recipients = [...(items[i].recipients || []), ""];
+      paint();
+    }));
+    body.querySelectorAll("[data-rec-remove]").forEach((b) => b.addEventListener("click", () => {
+      read();
+      const i = Number(b.closest(".sched-card").dataset.i);
+      const j = Number(b.closest(".recip-row").dataset.j);
+      if (!items[i]) return;
+      items[i].recipients.splice(j, 1);
+      paint();
+    }));
     body.querySelectorAll("[data-remove]").forEach((b) => b.addEventListener("click", () => {
       read();
       const i = Number(b.closest(".sched-card").dataset.i);

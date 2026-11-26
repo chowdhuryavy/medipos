@@ -836,6 +836,10 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .sched-fmt, .sched-reports { border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .sched-reports { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .sched-fmt legend, .sched-reports legend { font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 4px; }
+.sched-recip { display: grid; gap: 6px; border: 0; padding: 0; margin: 0; }
+.sched-recip legend { font-size: 13px; font-weight: 600; color: var(--muted); padding: 0; margin-bottom: 4px; }
+.recip-row { display: flex; gap: 6px; align-items: center; }
+.recip-row input { flex: 1; min-width: 0; }
 .sched-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 700px) { .sched-grid { grid-template-columns: 1fr; } .sched-grid .span-2 { grid-column: auto; } }
 
