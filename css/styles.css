@@ -717,12 +717,16 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 /* ───────── dashboard: quick actions, stock health ───────── */
 .quick-bar { display:flex; gap:10px; overflow-x:auto; padding:4px 2px 6px; margin:4px 0 6px; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
 .quick-bar::-webkit-scrollbar { display:none; }
-.quick-btn { flex:0 0 auto; display:inline-flex; align-items:center; gap:10px; min-height:52px; padding:10px 16px 10px 10px; border-radius:16px; border:1px solid var(--border, #dbe4ea); background:var(--card, #fff); color:var(--text, #0f172a); font:inherit; font-weight:700; text-decoration:none; cursor:pointer; box-shadow:0 1px 2px rgba(15,23,42,.05); animation:quickIn .45s ease-out both; animation-delay:var(--d, 0ms); transition:transform .15s ease, box-shadow .15s ease; }
+.quick-btn { flex:0 0 auto; display:inline-flex; align-items:center; gap:10px; min-height:52px; padding:10px 16px 10px 10px; border-radius:16px; border:1px solid var(--border, #dbe4ea); background:var(--surface, #fff); color:var(--text, #0f172a); font:inherit; font-weight:700; text-decoration:none; cursor:pointer; box-shadow:0 1px 2px rgba(15,23,42,.05); animation:quickIn .45s ease-out both; animation-delay:var(--d, 0ms); transition:transform .15s ease, box-shadow .15s ease; }
 .quick-btn:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,42,.08); }
 .quick-btn:active { transform:scale(.97); }
 .quick-btn.primary { background:linear-gradient(135deg,#0b4f4a,#14b8a6); color:#fff; border-color:transparent; }
 .quick-ico { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; background:#ecfdf5; color:#0f766e; }
 .quick-btn.primary .quick-ico { background:rgba(255,255,255,.2); color:#fff; }
+[data-theme="dark"] .quick-btn { background:var(--surface-2); border-color:var(--border); color:#f1f5f9; box-shadow:0 1px 2px rgba(0,0,0,.4); }
+[data-theme="dark"] .quick-btn:hover { box-shadow:0 8px 20px rgba(0,0,0,.45); }
+[data-theme="dark"] .quick-ico { background:rgba(45,212,191,.16); color:#5eead4; }
+[data-theme="dark"] .quick-btn.primary { background:linear-gradient(135deg,#0f766e,#14b8a6); color:#fff; }
 .quick-ico svg { width:18px; height:18px; }
 @keyframes quickIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce) { .quick-btn { animation:none; } }
