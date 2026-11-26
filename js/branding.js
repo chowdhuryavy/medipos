@@ -2,7 +2,7 @@ import { db, doc, getDoc } from "./firebase.js";
 import { esc } from "./core.js";
 
 // Public branding (app name, shop name, logo) readable before sign-in.
-export const branding = { appName: "MediPOS", shopName: "My Pharmacy", logoUrl: "" };
+export const branding = { appName: "MediPOS", shopName: "", logoUrl: "" };
 
 export async function loadBranding() {
   try {

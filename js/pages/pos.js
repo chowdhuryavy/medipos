@@ -27,6 +27,7 @@ export async function render(el) {
     pay: settings.paymentMethods[0]?.key || "cash",
     customerId: "",
     cart: new Map(), // productId -> qty
+    holds: [], // parked bills
   };
   const methods = settings.paymentMethods;
   const creditOk = settings.allowCreditSales;
@@ -41,6 +42,11 @@ export async function render(el) {
 
       <aside class="card pos-bill" id="p-bill">
         <header class="card-head"><h3>${icon("cart")} Current bill</h3><span class="badge" id="p-count">0 items</span></header>
+        <div class="bill-actions">
+          <button class="btn ghost sm" id="p-hold" title="Hold this bill (F8)">${icon("pause")}<span>Hold</span></button>
+          <button class="btn ghost sm" id="p-held" title="Resume a held bill">${icon("refresh")}<span>Held <b id="p-held-n">0</b></span></button>
+          <span class="kbd-hint">F2 search · F4 charge · F8 hold</span>
+        </div>
         <label>Customer
           <select id="p-customer">
             <option value="">Walk-in customer</option>
@@ -57,6 +63,10 @@ export async function render(el) {
             </select>
           </label>
         </div>
+        <label id="p-cashrow" class="cash-row">Cash received
+          <input id="p-tender" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount given by customer" />
+        </label>
+        <div class="change-due" id="p-change" aria-live="polite"></div>
         <button class="btn primary block xl" id="p-charge">${icon("check")}<span>Charge</span></button>
         <button class="btn ghost block" id="p-clear">Clear bill</button>
       </aside>
@@ -112,7 +122,72 @@ export async function render(el) {
       <div><span>VAT</span><span>${money(t.vat)}</span></div>
       <div class="grand"><span>Total</span><span class="count-up">${money(t.total)}</span></div>`;
     $("#p-mobile-total").textContent = `${count} · ${money(t.total)}`;
+    const cash = paymentMethod(st.pay).key === "cash";
+    $("#p-cashrow").hidden = !cash;
+    $("#p-change").hidden = !cash;
+    const given = Number($("#p-tender").value);
+    if (cash && $("#p-tender").value !== "" && count) {
+      const diff = round2(given - t.total);
+      $("#p-change").textContent = diff >= 0 ? `Change due: ${money(diff)}` : `Still to collect: ${money(-diff)}`;
+      $("#p-change").className = `change-due ${diff >= 0 ? "ok" : "warn"}`;
+    } else {
+      $("#p-change").textContent = "";
+      $("#p-change").className = "change-due";
+    }
+    $("#p-held-n").textContent = st.holds.length;
   }
+
+  function hold() {
+    if (!st.cart.size) return toast("Add products before holding a bill", "error");
+    st.holds.push({ cart: new Map(st.cart), disc: st.disc, customerId: st.customerId, pay: st.pay, at: new Date().toLocaleTimeString() });
+    clearBill();
+    toast(`Bill held (${st.holds.length} on hold)`, "success");
+  }
+
+  function clearBill() {
+    st.cart.clear(); st.disc = 0; st.customerId = ""; $("#p-disc").value = 0; $("#p-customer").value = ""; $("#p-tender").value = "";
+    paintBill();
+  }
+
+  function openHeld() {
+    if (!st.holds.length) return toast("No bills are on hold", "info");
+    openModal("Held bills", `
+      <div class="stack">
+        ${st.holds.map((h, i) => {
+          const lines = [...h.cart.entries()].map(([id, q]) => `${q} × ${esc(byId[id]?.name || "item")}`).join(", ");
+          return `<div class="held-row"><div><strong>Held at ${esc(h.at)}</strong><small>${esc(lines)}</small></div>
+            <div class="row-actions"><button class="btn primary sm" data-resume="${i}">Resume</button><button class="btn ghost sm hover-danger" data-discard="${i}">Discard</button></div></div>`;
+        }).join("")}
+      </div>`, (body, close) => {
+      body.querySelectorAll("[data-resume]").forEach((b) => b.addEventListener("click", () => {
+        const h = st.holds.splice(Number(b.dataset.resume), 1)[0];
+        if (st.cart.size) st.holds.push({ cart: new Map(st.cart), disc: st.disc, customerId: st.customerId, pay: st.pay, at: new Date().toLocaleTimeString() });
+        st.cart = new Map(h.cart); st.disc = h.disc; st.customerId = h.customerId; st.pay = h.pay;
+        $("#p-disc").value = st.disc; $("#p-customer").value = st.customerId; $("#p-pay").value = st.pay;
+        paintBill(); close();
+      }));
+      body.querySelectorAll("[data-discard]").forEach((b) => b.addEventListener("click", () => {
+        st.holds.splice(Number(b.dataset.discard), 1);
+        paintBill(); close();
+        toast("Held bill discarded", "info");
+      }));
+    });
+  }
+
+  $("#p-hold").addEventListener("click", hold);
+  $("#p-held").addEventListener("click", openHeld);
+  $("#p-tender").addEventListener("input", paintBill);
+  $("#p-pay").addEventListener("change", () => { st.pay = $("#p-pay").value; paintBill(); });
+
+  // Keyboard: F2 search, F4 charge, F8 hold. Ignored while a dialog is open or this page is gone.
+  const onKey = (e) => {
+    if (!el.isConnected) return document.removeEventListener("keydown", onKey);
+    if (document.getElementById("modal-root")?.children.length) return;
+    if (e.key === "F2") { e.preventDefault(); $("#p-search").focus(); }
+    else if (e.key === "F4") { e.preventDefault(); charge(); }
+    else if (e.key === "F8") { e.preventDefault(); hold(); }
+  };
+  document.addEventListener("keydown", onKey);
 
   function flash(id) {
     const c = el.querySelector(`[data-add="${CSS.escape(id)}"]`);
@@ -179,9 +254,8 @@ export async function render(el) {
     st.disc = Math.min(settings.maxDiscountPct, Math.max(0, Number(e.target.value) || 0));
     paintBill();
   });
-  $("#p-pay").addEventListener("change", (e) => { st.pay = e.target.value; });
   $("#p-clear").addEventListener("click", () => {
-    st.cart.clear(); st.disc = 0; $("#p-disc").value = 0; paintBill();
+    clearBill();
   });
   onAction($("#p-charge"), charge);
   $("#p-mobile-btn").addEventListener("click", () => {
@@ -192,16 +266,21 @@ export async function render(el) {
     if (!st.cart.size) return toast("The bill is empty. Add a product first.", "error");
     const method = paymentMethod(st.pay);
     if (method.credit && !st.customerId) return toast("Choose a customer for an on-account sale", "error");
+    const tendered = method.key === "cash" && $("#p-tender").value !== "" ? Number($("#p-tender").value) : null;
+    if (tendered !== null && tendered < 0) return toast("Cash received cannot be negative", "error");
     const btn = $("#p-charge");
     btn.disabled = true;
     btn.classList.add("loading");
     try {
       const customer = customers.find((c) => c.id === st.customerId) || null;
-      const sale = await completeSale({ lines: cartLines(), discountPct: st.disc, method, customer });
+      const sale = await completeSale({ lines: cartLines(), discountPct: st.disc, method, customer, tendered });
+      if (tendered !== null && tendered < sale.total) {
+        toast(`Cash received is less than the total. The sale was recorded as ${money(sale.total)}.`, "info");
+      }
       await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: method.key });
       for (const [id, qty] of st.cart) byId[id].stock = (Number(byId[id].stock) || 0) - qty;
-      st.cart.clear(); st.disc = 0; st.customerId = ""; $("#p-disc").value = 0; $("#p-customer").value = "";
-      paintGrid(); paintBill();
+      clearBill();
+      paintGrid();
       showReceipt(sale);
     } catch (err) {
       console.error(err);
@@ -231,6 +310,7 @@ export async function render(el) {
           <div><span>VAT</span><span>${money(sale.vat)}</span></div>
           <div class="grand"><span>Total</span><span>${money(sale.total)}</span></div>
           <div><span>Paid by</span><span>${esc(sale.paymentLabel)}</span></div>
+          ${sale.tendered != null ? `<div><span>Cash received</span><span>${money(sale.tendered)}</span></div><div><span>Change</span><span>${money(Math.max(0, sale.change))}</span></div>` : ""}
         </div>
         <p class="r-foot">${esc(settings.receiptFooter || "")}</p>
       </div>
@@ -249,7 +329,7 @@ export async function render(el) {
 }
 
 /* Runs the whole sale atomically: stock (FEFO batches), invoice number, journal, customer balance. */
-async function completeSale({ lines, discountPct, method, customer }) {
+async function completeSale({ lines, discountPct, method, customer, tendered = null }) {
   const today = todayISO();
   const candidateIds = {};
   for (const l of lines) {
@@ -331,6 +411,7 @@ async function completeSale({ lines, discountPct, method, customer }) {
       subtotal: totals.subtotal, discount: totals.discount, discountPct: Number(discountPct) || 0,
       net: totals.net, vat: totals.vat, total: totals.total, cogs: cogsTotal,
       payment: method.key, paymentLabel: method.label,
+      tendered: tendered, change: tendered === null ? null : round2(tendered - totals.total),
       cashier: session.name, cashierUid: session.uid, journalId: journalRef.id,
       createdAt: serverTimestamp(),
     });
@@ -338,6 +419,7 @@ async function completeSale({ lines, discountPct, method, customer }) {
     return {
       id: saleRef.id, invoiceNo, ...totals,
       lines: totals.lines, paymentLabel: method.label,
+      tendered, change: tendered === null ? null : round2(tendered - totals.total),
     };
   });
 }

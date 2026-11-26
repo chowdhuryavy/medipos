@@ -7,7 +7,7 @@ function showBootError(err) {
   const text = err && err.message ? err.message : String(err);
   if (m && stillBooting()) m.textContent = "Startup error: " + text;
   const n = document.querySelector(".splash-name");
-  if (n && stillBooting()) n.textContent = "MediPOS could not start";
+  if (n && stillBooting()) n.textContent = "Could not start";
   console.error(err);
 }
 

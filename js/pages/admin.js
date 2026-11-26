@@ -229,6 +229,8 @@ function viewSettings(body) {
 
 async function saveGeneral(patch, message) {
   await setDoc(doc(db, "settings", "general"), { ...patch, updatedAt: serverTimestamp() }, { merge: true });
+  // The loading screen and sign-in page read branding/public before anyone is signed in.
+  if (patch.shopName) await setDoc(doc(db, "branding", "public"), { shopName: patch.shopName }, { merge: true });
   await audit("settings.update", { keys: Object.keys(patch) });
   toast(message, "success");
   setTimeout(() => location.reload(), 900);

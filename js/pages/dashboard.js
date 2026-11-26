@@ -38,6 +38,23 @@ export async function render(el) {
     { label: `Expiring in ${settings.expiryWarnDays} days`, value: expiring.length, icon: "alert" },
   ];
 
+  // Top products and payment mix for the month
+  const soldMap = new Map();
+  for (const s of monthSales) for (const it of s.items || []) {
+    const a = soldMap.get(it.name) || { qty: 0, revenue: 0 };
+    a.qty += Number(it.qty) || 0; a.revenue += Number(it.lineNet) || 0;
+    soldMap.set(it.name, a);
+  }
+  const topProducts = [...soldMap.entries()].sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 5);
+  const payMap = new Map();
+  for (const s of monthSales) {
+    const k = s.paymentLabel || s.payment || "Other";
+    payMap.set(k, (payMap.get(k) || 0) + (Number(s.total) || 0));
+  }
+  const payTotal = sum(monthSales, "total") || 0;
+  const payMix = [...payMap.entries()].sort((a, b) => b[1] - a[1]);
+  const topMax = Math.max(1, ...topProducts.map(([, a]) => a.revenue));
+
   const days = Array.from({ length: 7 }, (_, i) => daysAgoISO(6 - i));
   const totals = days.map((d) => sum(sales.filter((s) => s.date === d), "total"));
   const max = Math.max(1, ...totals);
@@ -83,6 +100,32 @@ export async function render(el) {
           ${expired.slice(0, 5).map((b) => `<li class="pill danger">${icon("alert")}Expired · ${esc(b.productName)} · batch ${esc(b.batchNo || "-")} (${b.remaining})</li>`).join("")}
           ${expiring.slice(0, 5).map((b) => `<li class="pill info">${icon("alert")}Expires ${esc(b.expiry)} · ${esc(b.productName)}</li>`).join("")}
           ${!lowStock.length && !expired.length && !expiring.length ? `<li class="muted">All clear. Nothing needs attention right now.</li>` : ""}
+        </ul>
+      </section>
+    </div>
+
+    <div class="grid-2">
+      <section class="card">
+        <header class="card-head"><h3>Top products this month</h3><span class="muted">Revenue</span></header>
+        <ul class="rank-list">
+          ${topProducts.map(([name, a], i) => `
+            <li class="rank-row" style="--d:${i * 80}ms">
+              <div class="rank-top"><span><b>${i + 1}</b> ${esc(name)}</span><span>${money(a.revenue)}</span></div>
+              <div class="rank-bar"><i style="width:${Math.max(4, Math.round((a.revenue / topMax) * 100))}%"></i></div>
+              <small class="muted">${a.qty} sold</small>
+            </li>`).join("") || `<li class="muted">No sales this month yet.</li>`}
+        </ul>
+      </section>
+      <section class="card">
+        <header class="card-head"><h3>How customers pay</h3><span class="muted">This month</span></header>
+        <ul class="rank-list">
+          ${payMix.map(([label, v], i) => {
+            const pct = payTotal ? Math.round((v / payTotal) * 100) : 0;
+            return `<li class="rank-row" style="--d:${i * 80}ms">
+              <div class="rank-top"><span>${esc(label)}</span><span>${pct}% · ${money(v)}</span></div>
+              <div class="rank-bar"><i style="width:${Math.max(4, pct)}%"></i></div>
+            </li>`;
+          }).join("") || `<li class="muted">No payments this month yet.</li>`}
         </ul>
       </section>
     </div>

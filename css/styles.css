@@ -582,6 +582,8 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .reset .stack { gap: 14px; }
 .reset .btn.primary { margin-top: 2px; }
 
+.splash-sub { margin: 4px 0 0; font-size: 14px; opacity: .7; letter-spacing: .4px; }
+
 /* ───────── roles & permissions matrix ───────── */
 .role-matrix th.grp { text-align: center; font-size: 12px; letter-spacing: .3px; text-transform: uppercase; opacity: .8; }
 .role-matrix th.rot { height: 130px; padding: 0 4px; vertical-align: bottom; min-width: 34px; }
@@ -592,3 +594,25 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .role-matrix .role-name input { width: 100%; margin-bottom: 4px; }
 .mono { font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
 .role-matrix-wrap { max-height: 70vh; }
+
+/* ───────── POS: hold, cash change, shortcuts ───────── */
+.bill-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bill-actions .btn b { margin-left: 4px; min-width: 18px; padding: 0 5px; border-radius: 99px; background: var(--brand); color: #fff; font-size: 11px; }
+.kbd-hint { margin-left: auto; font-size: 11px; opacity: .6; }
+.cash-row { display: grid; gap: 4px; }
+.cash-row[hidden] { display: none; }
+.change-due { font-weight: 700; font-size: 15px; min-height: 22px; padding: 6px 0; }
+.change-due.ok { color: var(--ok, #16a34a); }
+.change-due.warn { color: var(--warn, #d97706); }
+.change-due[hidden] { display: none; }
+.held-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line, #e5e7eb); flex-wrap: wrap; }
+.held-row small { display: block; opacity: .7; }
+.row-actions { display: flex; gap: 6px; }
+
+/* ───────── dashboard rankings ───────── */
+.rank-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.rank-row { animation: fadeUp .5s var(--d, 0ms) var(--ease) both; }
+.rank-top { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; font-size: 14px; }
+.rank-top b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; background: var(--brand); color: #fff; font-size: 11px; margin-right: 6px; }
+.rank-bar { height: 8px; border-radius: 99px; background: rgba(127,127,127,.15); overflow: hidden; margin: 6px 0 2px; }
+.rank-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--brand), var(--brand-2, var(--brand))); transition: width .8s var(--ease); }

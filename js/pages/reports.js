@@ -5,7 +5,7 @@ import {
 } from "../core.js";
 import { pushToSheets } from "../sheets.js";
 
-const KINDS = [["sales", "Sales"], ["stock", "Stock"], ["expiry", "Expiry"]];
+const KINDS = [["sales", "Sales"], ["productSummary", "Products"], ["stock", "Stock"], ["expiry", "Expiry"]];
 // Only admins can read the Sheets secret (settings/integrations), so only they can send reports.
 const CAN_SYNC = ["admin"];
 
@@ -43,7 +43,21 @@ export async function render(el) {
   function paint() {
     const k = kind();
     const d = data[k];
+    const daily = data.charts?.daily || [];
+    const dMax = Math.max(1, ...daily.map(([, v]) => v));
     out.innerHTML = `
+      ${k === "sales" && daily.length ? `
+      <section class="card">
+        <header class="card-head"><h3>Daily revenue</h3><span class="muted">${daily.length} day${daily.length === 1 ? "" : "s"} with sales</span></header>
+        <div class="chart">
+          ${daily.map(([date, v]) => `
+            <div class="bar-col" title="${esc(date)}: ${esc(money(v))}">
+              <span class="bar-value">${Math.round(v).toLocaleString()}</span>
+              <div class="bar" style="--h:${Math.max(3, Math.round((v / dMax) * 100))}%"></div>
+              <span class="bar-label">${esc(date.slice(5))}</span>
+            </div>`).join("")}
+        </div>
+      </section>` : ""}
       ${d.summary ? `<section class="kpi-grid">${d.summary.map(([l, v], i) => `
         <article class="card kpi hover-lift" style="--d:${i * 60}ms"><div class="kpi-ico">${icon("reports")}</div><div><small>${esc(l)}</small><strong>${esc(v)}</strong></div></article>`).join("")}</section>` : ""}
       <section class="card">
@@ -100,8 +114,10 @@ async function build(from, to, days) {
   const saleRows = [];
   const byProduct = new Map();
   let net = 0, vat = 0, total = 0, cogs = 0;
+  const dailyTotals = new Map();
   for (const s of sales) {
     net += s.net || 0; vat += s.vat || 0; total += s.total || 0; cogs += s.cogs || 0;
+    dailyTotals.set(s.date, (dailyTotals.get(s.date) || 0) + (s.total || 0));
     for (const it of s.items || []) {
       const profit = round2((it.lineNet || 0) - (it.cogs || 0));
       saleRows.push([s.date, s.invoiceNo, s.customerName, it.name, it.qty, round2(it.lineNet), round2(it.lineVat), round2(it.lineTotal), round2(it.cogs || 0), profit, s.paymentLabel || s.payment]);
@@ -162,6 +178,12 @@ async function build(from, to, days) {
         ["Expiring soon", expiryRows.filter((r) => r[6] !== "Expired").length],
       ],
     },
-    productSummary: { headers: ["Product", "Qty", "Revenue", "COGS", "Profit"], rows: productRows },
+    productSummary: {
+      headers: ["Product", "Qty", "Revenue", "COGS", "Profit"],
+      numeric: [1, 2, 3, 4],
+      rows: productRows,
+      summary: [["Products sold", productRows.length], ["Best seller", productRows[0]?.[0] || "-"]],
+    },
+    charts: { daily: [...dailyTotals.entries()].sort((a, b) => a[0].localeCompare(b[0])) },
   };
 }
