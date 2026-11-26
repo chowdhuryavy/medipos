@@ -1,4 +1,5 @@
 import { reserveJv, writeVoucher } from "../journal.js";
+import { addDays, billDue, billRemaining, billStatus, dayDiff, allOpenBills, openPaySupplier } from "../payables.js";
 import { onSubmit, onAction, canWrite } from "../core.js";
 import { unitsOf, unitByKey, toPieces, unitOptions } from "../packs.js";
 import { db, collection, doc, getDocs, query, orderBy, limit, runTransaction, serverTimestamp, increment } from "../firebase.js";
@@ -19,6 +20,7 @@ export async function render(el) {
     <div class="tabs" role="tablist">
       ${canPost ? `<button class="tab active" data-tab="new">New purchase</button>` : ""}
       <button class="tab ${canPost ? "" : "active"}" data-tab="hist">History</button>
+      <button class="tab" data-tab="pay">Payables</button>
     </div>
     ${canPost ? `
     ${productDatalist(products, "pur-products")}
@@ -39,6 +41,8 @@ export async function render(el) {
             <option value="cash">Cash</option>
           </select>
         </label>
+        <label>Due date (credit)<input name="dueDate" type="date" /></label>
+        <small class="muted span-2" id="pur-due-hint"></small>
       </form>
 
       <div class="lines-head"><h3>Items</h3><button class="btn ghost sm" id="pur-add" type="button">${icon("plus")}<span>Add item</span></button></div>
@@ -56,16 +60,39 @@ export async function render(el) {
       <div class="form-actions"><button class="btn primary" id="pur-save" type="button">${icon("check")}<span>Post purchase</span></button></div>
     </section>` : ""}
 
-    <section class="card ${canPost ? "hidden" : ""}" id="pur-hist"></section>`;
+    <section class="card ${canPost ? "hidden" : ""}" id="pur-hist"></section>
+    <section class="card hidden" id="pur-pay"></section>`;
 
   el.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => {
     el.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === t));
     el.querySelector("#pur-new")?.classList.toggle("hidden", t.dataset.tab !== "new");
     el.querySelector("#pur-hist").classList.toggle("hidden", t.dataset.tab !== "hist");
+    el.querySelector("#pur-pay").classList.toggle("hidden", t.dataset.tab !== "pay");
     if (t.dataset.tab === "hist") loadHistory(el);
+    if (t.dataset.tab === "pay") loadPayables(el);
   }));
 
+  // Due date follows the supplier's credit period. Changing the due date by hand is kept.
+  const updateDue = () => {
+    const f = new FormData(el.querySelector("#pur-form"));
+    const sup = suppliers.find((x) => x.id === f.get("supplierId"));
+    const due = el.querySelector('[name="dueDate"]');
+    const hint = el.querySelector("#pur-due-hint");
+    const isCredit = f.get("payment") === "credit";
+    due.disabled = !isCredit;
+    if (!isCredit) { due.value = ""; hint.textContent = ""; return; }
+    if (!sup) { hint.textContent = "Choose a supplier to see the due date and credit limit."; return; }
+    due.value = addDays(String(f.get("date") || todayISO()), sup.creditDays || 0);
+    const left = sup.creditLimit ? ` Credit limit left: ${money(Math.max(0, sup.creditLimit - (Number(sup.balance) || 0)))}.` : " No credit limit.";
+    hint.textContent = (sup.creditDays ? `Credit period ${sup.creditDays} days.` : "No credit period set, so the bill is due on the purchase date.") + left;
+  };
+  if (canPost) {
+    el.querySelector("#pur-form").addEventListener("change", (e) => { if (e.target.name !== "dueDate") updateDue(); });
+    updateDue();
+  }
+
   if (!canPost) return loadHistory(el);
+
 
   const tbody = el.querySelector("#pur-lines");
   const lines = [{ productId: "", unit: "piece", qty: 1, cost: 0, batchNo: "", expiry: "" }];
@@ -147,11 +174,12 @@ export async function render(el) {
     if (!supplier) return toast("Choose a supplier first", "error");
     if (!valid.length) return toast("Add at least one item", "error");
     if (valid.some((l) => !l.expiry)) return toast("Every item needs an expiry date", "error");
+    if (payment === "credit" && !form.get("dueDate")) return toast("Set the due date for this credit purchase", "error");
     btn.disabled = true;
     btn.classList.add("loading");
     try {
       const res = await postPurchase({
-        supplier, invoiceNo: String(form.get("invoiceNo") || ""), date, payment, lines: valid,
+        supplier, invoiceNo: String(form.get("invoiceNo") || ""), date, payment, dueDate: String(form.get("dueDate") || ""), lines: valid,
       });
       await audit("purchase", { purNo: res.purNo, total: res.total });
       toast(`Purchase ${res.purNo} posted`, "success");
@@ -173,7 +201,7 @@ async function loadHistory(el) {
   const snap = await getDocs(query(collection(db, "purchases"), orderBy("createdAt", "desc"), limit(50)));
   host.innerHTML = `
     <div class="table-wrap"><table class="stack-mobile">
-      <thead><tr><th>No.</th><th>Supplier</th><th>Supplier invoice</th><th>Payment</th><th class="r">Total</th><th>Posted</th></tr></thead>
+      <thead><tr><th>No.</th><th>Supplier</th><th>Supplier invoice</th><th>Payment</th><th class="r">Total</th><th>Due</th><th>Status</th><th>Posted</th></tr></thead>
       <tbody>
         ${snap.docs.map((d) => { const p = d.data(); return `<tr>
           <td data-label="No.">${esc(p.purNo)}</td>
@@ -181,14 +209,16 @@ async function loadHistory(el) {
           <td data-label="Supplier invoice">${esc(p.supplierInvoice || "—")}</td>
           <td data-label="Payment"><span class="badge">${esc(p.payment)}</span></td>
           <td data-label="Total" class="r">${money(p.total)}</td>
+          <td data-label="Due">${p.payment === "credit" ? esc(billDue(p)) : "—"}</td>
+          <td data-label="Status"><span class="badge">${esc(billStatus(p))}</span></td>
           <td data-label="Posted">${fmtDateTime(p.createdAt)}</td></tr>`; }).join("")
-          || `<tr><td colspan="6" class="muted center">No purchases yet</td></tr>`}
+          || `<tr><td colspan="8" class="muted center">No purchases yet</td></tr>`}
       </tbody>
     </table></div>`;
 }
 
 // One transaction: batches created, weighted-average cost updated, journal posted, supplier balance updated.
-async function postPurchase({ supplier, invoiceNo, date, payment, lines }) {
+async function postPurchase({ supplier, invoiceNo, date, payment, dueDate, lines }) {
   const counterRef = doc(db, "counters", "main");
   const purRef = doc(collection(db, "purchases"));
   const supplierRef = doc(db, "suppliers", supplier.id);
@@ -231,6 +261,12 @@ async function postPurchase({ supplier, invoiceNo, date, payment, lines }) {
     net = round2(net);
     vat = round2(vat);
     const total = round2(net + vat);
+    // Credit: the supplier's limit (0 = no limit) must cover what is already owed plus this bill.
+    const supSnap = await tx.get(supplierRef);
+    const sup = supSnap.exists() ? supSnap.data() : {};
+    if (payment === "credit" && Number(sup.creditLimit) > 0 && (Number(sup.balance) || 0) + total > Number(sup.creditLimit) + 0.005) {
+      throw new Error(`This purchase takes ${supplier.name} over its credit limit of ${money(sup.creditLimit)}. Pay some bills first, or raise the limit.`);
+    }
 
     const jvNo = await reserveJv(tx);
     tx.set(counterRef, { purchase: seq }, { merge: true });
@@ -252,7 +288,76 @@ async function postPurchase({ supplier, invoiceNo, date, payment, lines }) {
     tx.set(purRef, {
       purNo, supplierId: supplier.id, supplierName: supplier.name, supplierInvoice: invoiceNo,
       date, payment, items, net, vat, total, by: session.name, createdAt: serverTimestamp(),
+      dueDate: payment === "credit" ? (dueDate || date) : date,
+      paid: payment === "credit" ? 0 : total,
+      status: payment === "credit" ? "open" : "paid",
     });
     return { purNo, total };
   });
+}
+
+// ───── Payables: what is owed to each supplier and every open bill, with a Pay button per supplier ─────
+async function loadPayables(el) {
+  const host = el.querySelector("#pur-pay");
+  host.innerHTML = `<div class="skeleton"></div>`;
+  const [bills, sSnap] = await Promise.all([allOpenBills(), getDocs(collection(db, "suppliers"))]);
+  const suppliers = sSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name));
+  const sum = (arr) => round2(arr.reduce((s, b) => s + billRemaining(b), 0));
+  const overdue = bills.filter((b) => dayDiff(billDue(b)) < 0);
+  const soon = bills.filter((b) => { const d = dayDiff(billDue(b)); return d >= 0 && d <= 7; });
+  const owedTotal = round2(suppliers.reduce((s, x) => s + (Number(x.balance) || 0), 0));
+  const canPay = canWrite("partners") || canWrite("purchasing");
+  const count = (n) => `${n} bill${n === 1 ? "" : "s"}`;
+
+  const rows = suppliers.filter((s) => (Number(s.balance) || 0) > 0.005).map((s) => {
+    const mine = bills.filter((b) => b.supplierId === s.id);
+    const used = s.creditLimit ? Math.min(100, Math.round(((Number(s.balance) || 0) / s.creditLimit) * 100)) : null;
+    return { s, next: mine[0] ? billDue(mine[0]) : "", overdue: sum(mine.filter((b) => dayDiff(billDue(b)) < 0)), used };
+  }).sort((a, b) => b.overdue - a.overdue || (Number(b.s.balance) || 0) - (Number(a.s.balance) || 0));
+
+  host.innerHTML = `
+    <div class="pay-kpis">
+      <div class="pay-kpi"><small>Owed to suppliers</small><strong>${money(owedTotal)}</strong></div>
+      <div class="pay-kpi danger"><small>Overdue</small><strong>${money(sum(overdue))}</strong><span>${count(overdue.length)}</span></div>
+      <div class="pay-kpi warn"><small>Due in 7 days</small><strong>${money(sum(soon))}</strong><span>${count(soon.length)}</span></div>
+      <div class="pay-kpi"><small>Open bills</small><strong>${bills.length}</strong></div>
+    </div>
+    <div class="lines-head"><h3>Suppliers</h3></div>
+    <div class="table-wrap"><table class="stack-mobile">
+      <thead><tr><th>Supplier</th><th class="r">Owed</th><th>Credit limit used</th><th>Next due</th><th class="r">Overdue</th><th></th></tr></thead>
+      <tbody>${rows.map((r) => `<tr>
+        <td data-label="Supplier">${esc(r.s.name)}${r.s.creditDays ? ` <small class="muted">· ${r.s.creditDays} days</small>` : ""}</td>
+        <td data-label="Owed" class="r">${money(r.s.balance)}</td>
+        <td data-label="Credit limit used">${r.used === null
+          ? `<span class="muted small">No limit</span>`
+          : `<div class="pay-meter ${r.used >= 90 ? "danger" : r.used >= 70 ? "warn" : ""}"><span style="width:${r.used}%"></span></div><small class="muted">${r.used}% of ${money(r.s.creditLimit)}</small>`}</td>
+        <td data-label="Next due">${r.next ? esc(r.next) : "—"}</td>
+        <td data-label="Overdue" class="r">${r.overdue ? `<span class="badge danger">${money(r.overdue)}</span>` : "—"}</td>
+        <td>${canPay ? `<button class="btn ghost sm" type="button" data-pay="${esc(r.s.id)}">Pay</button>` : ""}</td></tr>`).join("")
+        || `<tr><td colspan="6" class="muted center">Nothing is owed to suppliers</td></tr>`}</tbody>
+    </table></div>
+    <div class="lines-head"><h3>Open bills</h3></div>
+    <div class="table-wrap"><table class="stack-mobile">
+      <thead><tr><th>Due</th><th>Bill</th><th>Supplier</th><th class="r">Total</th><th class="r">Paid</th><th class="r">Remaining</th><th>Timing</th></tr></thead>
+      <tbody>${bills.map((b) => {
+        const d = dayDiff(billDue(b));
+        const tag = d < 0 ? `<span class="badge danger">Overdue ${-d}d</span>`
+          : d === 0 ? `<span class="badge warn">Due today</span>`
+          : d <= 7 ? `<span class="badge warn">Due in ${d}d</span>`
+          : `<span class="badge ok">${d} days left</span>`;
+        return `<tr>
+          <td data-label="Due">${esc(billDue(b))}</td>
+          <td data-label="Bill">${esc(b.purNo)}${b.supplierInvoice ? ` <small class="muted">· inv ${esc(b.supplierInvoice)}</small>` : ""}</td>
+          <td data-label="Supplier">${esc(b.supplierName)}</td>
+          <td data-label="Total" class="r">${money(b.total)}</td>
+          <td data-label="Paid" class="r">${money(b.paid || 0)}</td>
+          <td data-label="Remaining" class="r"><strong>${money(billRemaining(b))}</strong></td>
+          <td data-label="Timing">${tag}</td></tr>`;
+      }).join("") || `<tr><td colspan="7" class="muted center">No open bills</td></tr>`}</tbody>
+    </table></div>`;
+
+  host.querySelectorAll("[data-pay]").forEach((btn) => btn.addEventListener("click", () => {
+    const s = suppliers.find((x) => x.id === btn.dataset.pay);
+    if (s) openPaySupplier(s, () => loadPayables(el));
+  }));
 }

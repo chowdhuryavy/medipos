@@ -1,3 +1,4 @@
+import { openPaySupplier } from "../payables.js";
 import { reserveJv, writeVoucher } from "../journal.js";
 import { onSubmit, onAction, onDelegated } from "../core.js";
 import { db, collection, doc, getDocs, addDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp } from "../firebase.js";
@@ -47,7 +48,7 @@ function paint(body, type, list, reload) {
       <tr class="row-in" style="--i:${Math.min(i, 15)}">
         <td data-label="Name"><strong>${esc(r.name)}</strong></td>
         <td data-label="Phone">${esc(r.phone || "—")}</td>
-        <td data-label="${isCustomer ? "Credit limit" : "Terms"}">${isCustomer ? money(r.creditLimit || 0) : esc(r.terms || "—")}</td>
+        <td data-label="${isCustomer ? "Credit limit" : "Terms"}">${isCustomer ? money(r.creditLimit || 0) : (r.creditDays ? `${r.creditDays} days${r.creditLimit ? ` · limit ${money(r.creditLimit)}` : ""}` : esc(r.terms || "—"))}</td>
         <td data-label="Balance" class="r"><span class="badge ${(r.balance || 0) > 0 ? "warn" : "ok"}">${money(r.balance || 0)}</span></td>
         <td class="actions">
           ${(r.balance || 0) > 0 ? `<button class="btn ghost sm" data-settle="${esc(r.id)}">${isCustomer ? "Receive" : "Pay"}</button>` : ""}
@@ -86,7 +87,9 @@ function openForm(type, p, reload) {
       <label class="span-2">Address<input name="address" value="${esc(p?.address || "")}" /></label>
       ${isCustomer
         ? `<label>Credit limit<input name="creditLimit" type="number" inputmode="decimal" min="0" step="0.01" value="${p?.creditLimit ?? 0}" /></label>`
-        : `<label>Payment terms<input name="terms" placeholder="e.g. 30 days" value="${esc(p?.terms || "")}" /></label>`}
+        : `<label>Credit period (days)<input name="creditDays" type="number" inputmode="numeric" min="0" step="1" placeholder="0 = pay on purchase" value="${p?.creditDays ?? 0}" /></label>
+           <label>Credit limit<input name="creditLimit" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0 = no limit" value="${p?.creditLimit ?? 0}" /></label>
+           <label class="span-2">Terms note<input name="terms" placeholder="e.g. 2% discount if paid within 7 days" value="${esc(p?.terms || "")}" /></label>`}
       <div class="form-actions span-2">
         <button type="button" class="btn ghost" data-cancel>Cancel</button>
         <button class="btn primary" type="submit">Save</button>
@@ -105,7 +108,11 @@ function openForm(type, p, reload) {
       };
       if (!data.name) return toast("Name is required", "error");
       if (isCustomer) data.creditLimit = Number(fd.get("creditLimit")) || 0;
-      else data.terms = String(fd.get("terms") || "").trim();
+      else {
+        data.terms = String(fd.get("terms") || "").trim();
+        data.creditDays = Math.max(0, Math.round(Number(fd.get("creditDays")) || 0));
+        data.creditLimit = Math.max(0, Number(fd.get("creditLimit")) || 0);
+      }
       try {
         if (p) await updateDoc(doc(db, type, p.id), data);
         else await addDoc(collection(db, type), { ...data, balance: 0, createdAt: serverTimestamp() });
@@ -121,6 +128,7 @@ function openForm(type, p, reload) {
 }
 
 function openSettle(type, p, reload) {
+  if (type !== "customers") return openPaySupplier(p, reload);
   const isCustomer = type === "customers";
   const methods = settings.paymentMethods.filter((m) => !m.credit && m.active !== false);
   openModal(isCustomer ? `Receive from ${p.name}` : `Pay ${p.name}`, `
@@ -155,6 +163,7 @@ function openSettle(type, p, reload) {
 }
 
 async function settle({ type, id, name, amount, cashAccount }) {
+  if (type !== "customers") throw new Error("Supplier payments are made from Purchasing, Payables.");
   const isCustomer = type === "customers";
   const ref = doc(db, type, id);
   await runTransaction(db, async (tx) => {

@@ -125,9 +125,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
     match /purchases/{id} {
-      allow read: if canPage('purchasing') || canPage('reports') || canPage('accounting');
+      allow read: if canPage('purchasing') || canPage('reports') || canPage('accounting') || canWrite('partners');
       allow create: if canWrite('purchasing');
-      allow update, delete: if false;
+      // Paying a supplier only marks bills as paid. Otherwise a posted bill is never changed.
+      allow update: if (canWrite('partners') || canWrite('purchasing'))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paid', 'status', 'paidAt']);
+      allow delete: if false;
     }
     match /journal/{id} {
       allow read: if canPage('accounting') || canPage('reports');
