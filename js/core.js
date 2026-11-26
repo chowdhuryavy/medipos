@@ -30,30 +30,44 @@ export const DEFAULT_SETTINGS = {
 
 export const settings = structuredClone(DEFAULT_SETTINGS);
 
+// Areas a role can change data in. The database (firestore.rules) enforces these;
+// the screens only mirror them so people are not shown buttons that would fail.
+export const WRITE_AREAS = ["pos", "inventory", "purchasing", "partners", "accounting"];
+
 export const DEFAULT_ROLES = {
-  admin:       { label: "Administrator", pages: ["dashboard", "pos", "inventory", "purchasing", "partners", "accounting", "reports", "admin"] },
-  pharmacist:  { label: "Pharmacist",    pages: ["dashboard", "pos", "inventory", "purchasing", "partners", "reports"] },
-  cashier:     { label: "Cashier",       pages: ["dashboard", "pos", "partners"] },
-  storekeeper: { label: "Storekeeper",   pages: ["inventory", "purchasing", "partners"] },
-  accountant:  { label: "Accountant",    pages: ["dashboard", "accounting", "reports", "purchasing", "partners"] },
+  admin:       { label: "Administrator", pages: ["dashboard", "pos", "inventory", "purchasing", "partners", "accounting", "reports", "admin"], write: [...WRITE_AREAS] },
+  pharmacist:  { label: "Pharmacist",    pages: ["dashboard", "pos", "inventory", "purchasing", "partners", "reports"], write: ["pos", "inventory", "purchasing", "partners"] },
+  cashier:     { label: "Cashier",       pages: ["dashboard", "pos", "partners"], write: ["pos", "partners"] },
+  storekeeper: { label: "Storekeeper",   pages: ["inventory", "purchasing", "partners"], write: ["inventory", "purchasing"] },
+  accountant:  { label: "Accountant",    pages: ["dashboard", "accounting", "reports", "purchasing", "partners"], write: ["accounting"] },
 };
 
-// Filled by loadSettings(); edited by the admin.
+// Filled by loadSettings() from settings/roles in Firestore; edited by the admin.
 export const roles = structuredClone(DEFAULT_ROLES);
 
 export const session = { uid: null, name: "", email: "", role: null };
 
 export const can = (page) => !!session.role && !!roles[session.role]?.pages.includes(page);
+export const canWrite = (area) => !!session.role && !!roles[session.role]?.write?.includes(area);
 
 /** Loads shop settings and role permissions from Firestore, merged over the defaults. */
 export async function loadSettings() {
-  const [g, r] = await Promise.all([getDoc(doc(db, "settings", "general")), getDoc(doc(db, "settings", "roles"))]);
+  const g = await getDoc(doc(db, "settings", "general"));
   Object.assign(settings, structuredClone(DEFAULT_SETTINGS), g.exists() ? g.data() : {});
+  const r = await getDoc(doc(db, "settings", "roles"));
   const saved = r.exists() ? r.data() : {};
   for (const key of Object.keys(DEFAULT_ROLES)) {
-    roles[key] = { ...structuredClone(DEFAULT_ROLES[key]), ...(saved[key] || {}) };
+    // Mirror the database exactly; the rules deny anything not listed there.
+    // Admins always keep everything (the rules do the same).
+    const s = saved[key] || {};
+    roles[key] = {
+      label: s.label || DEFAULT_ROLES[key].label,
+      pages: key === "admin" ? [...DEFAULT_ROLES.admin.pages] : (Array.isArray(s.pages) ? s.pages : []),
+      write: key === "admin" ? [...WRITE_AREAS] : (Array.isArray(s.write) ? s.write : []),
+    };
   }
   fmtCache = null;
+  return r.exists();
 }
 
 /* ───────────────────────── accounting constants ───────────────────────── */

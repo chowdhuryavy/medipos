@@ -5,7 +5,8 @@ import {
 import { pushToSheets } from "../sheets.js";
 
 const KINDS = [["sales", "Sales"], ["stock", "Stock"], ["expiry", "Expiry"]];
-const CAN_SYNC = ["admin", "accountant"];
+// Only admins can read the Sheets secret (settings/integrations), so only they can send reports.
+const CAN_SYNC = ["admin"];
 
 export async function render(el) {
   el.innerHTML = `

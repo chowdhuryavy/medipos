@@ -1,6 +1,6 @@
-import { auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, doc, getDoc } from "./firebase.js";
+import { auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, doc, getDoc, setDoc } from "./firebase.js";
 import { firebaseConfig, APP_NAME } from "./config.js";
-import { session, roles, settings, icon, esc, can, loadSettings } from "./core.js";
+import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES } from "./core.js";
 
 // Email + password only. No third-party (Google) sign-in is offered anywhere.
 
@@ -244,7 +244,12 @@ onAuthStateChanged(auth, async (user) => {
       await signOut(auth);
       return;
     }
-    await loadSettings();
+    const rolesExist = await loadSettings();
+    // First sign-in after setup: create the role matrix from the defaults so it can be edited.
+    if (!rolesExist && p.role === "admin") {
+      await setDoc(doc(db, "settings", "roles"), structuredClone(DEFAULT_ROLES));
+      await loadSettings();
+    }
     Object.assign(session, { uid: user.uid, name: p.name || user.email, email: user.email, role: p.role });
     buildShell();
     route();

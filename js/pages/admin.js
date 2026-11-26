@@ -4,10 +4,16 @@ import {
 } from "../firebase.js";
 import { firebaseConfig } from "../config.js";
 import {
-  session, roles, DEFAULT_ROLES, settings, DEFAULT_SETTINGS, esc, icon, toast, openModal, confirmBox,
+  session, roles, DEFAULT_ROLES, WRITE_AREAS, settings, DEFAULT_SETTINGS, esc, icon, toast, openModal, confirmBox,
   audit, ensureChartOfAccounts, fmtDateTime,
 } from "../core.js";
+
+const WRITE_LABEL = {
+  pos: "Sales & receipts", inventory: "Products & stock", purchasing: "Purchases",
+  partners: "Customers & suppliers", accounting: "Journal, expenses & accounts",
+};
 import { pushToSheets } from "../sheets.js";
+import { passwordProblem } from "../password.js";
 
 const TABS = [
   ["users", "Staff"],
@@ -119,6 +125,8 @@ function openUserForm(u, reload) {
         if (isNew) {
           const email = String(f.get("email") || "").trim();
           const password = String(f.get("password") || "");
+          const problem = passwordProblem(password);
+          if (problem) return toast(problem, "error");
           const uid = await createAuthUser(email, password);
           await setDoc(doc(db, "users", uid), { name, email, role, active, createdAt: serverTimestamp(), createdBy: session.uid });
           await audit("user.create", { email, role });
@@ -304,10 +312,10 @@ function pmRow(m, i) {
 function viewRoles(body) {
   const pages = Object.keys(PAGE_NAMES);
   body.innerHTML = `
+    <form id="rf">
     <section class="card">
-      <h3>Which pages each role can open</h3>
-      <p class="muted small">Tick the pages a role should see. Stock, sales and money rules are enforced separately by the database and are not changed here.</p>
-      <form id="rf">
+      <h3>What each role can open</h3>
+      <p class="muted small">Saved in the database. The database blocks reads and writes that a role is not allowed, even if someone changes the app.</p>
         <div class="table-wrap"><table class="matrix">
           <thead><tr><th>Role</th><th>Display name</th>${pages.map((p) => `<th>${esc(PAGE_NAMES[p])}</th>`).join("")}</tr></thead>
           <tbody>
@@ -315,25 +323,45 @@ function viewRoles(body) {
               <tr data-role="${k}">
                 <td><strong>${esc(k)}</strong></td>
                 <td><input name="${k}__label" value="${esc(roles[k].label)}" aria-label="Display name for ${esc(k)}" /></td>
-                ${pages.map((p) => `<td class="c"><input type="checkbox" name="${k}__${p}" ${roles[k].pages.includes(p) ? "checked" : ""} aria-label="${esc(k)} can open ${esc(PAGE_NAMES[p])}" /></td>`).join("")}
+                ${pages.map((p) => `<td class="c"><input type="checkbox" name="${k}__${p}" ${roles[k].pages.includes(p) ? "checked" : ""} ${k === "admin" ? "disabled" : ""} aria-label="${esc(k)} can open ${esc(PAGE_NAMES[p])}" /></td>`).join("")}
               </tr>`).join("")}
           </tbody>
         </table></div>
+      </section>
+      <section class="card">
+        <h3>What each role can change</h3>
+        <p class="muted small">Sales, stock, purchases, customers and accounting entries. Cashiers can change stock but not prices or costs.</p>
+        <div class="table-wrap"><table class="matrix">
+          <thead><tr><th>Role</th>${WRITE_AREAS.map((a) => `<th>${esc(WRITE_LABEL[a])}</th>`).join("")}</tr></thead>
+          <tbody>
+            ${Object.keys(DEFAULT_ROLES).map((k) => `
+              <tr>
+                <td><strong>${esc(k)}</strong></td>
+                ${WRITE_AREAS.map((a) => `<td class="c"><input type="checkbox" name="${k}__write__${a}" ${(roles[k].write || []).includes(a) ? "checked" : ""} ${k === "admin" ? "disabled" : ""} aria-label="${esc(k)} can change ${esc(WRITE_LABEL[a])}" /></td>`).join("")}
+              </tr>`).join("")}
+          </tbody>
+        </table></div>
+      </section>
         <div class="sticky-actions">
           <button type="button" class="btn ghost" id="r-reset">Restore defaults</button>
           <button class="btn primary" type="submit">${icon("check")}<span>Save access</span></button>
         </div>
-      </form>
-    </section>`;
+    </form>`;
 
   body.querySelector("#rf").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
     const out = {};
     for (const k of Object.keys(DEFAULT_ROLES)) {
-      out[k] = { label: String(f.get(`${k}__label`) || DEFAULT_ROLES[k].label).trim(), pages: pages.filter((p) => f.get(`${k}__${p}`) === "on") };
+      out[k] = {
+        label: String(f.get(`${k}__label`) || DEFAULT_ROLES[k].label).trim(),
+        pages: pages.filter((p) => f.get(`${k}__${p}`) === "on"),
+        write: WRITE_AREAS.filter((a) => f.get(`${k}__write__${a}`) === "on"),
+      };
     }
-    if (!out.admin.pages.includes("admin")) return toast("Administrators must keep access to Administration", "error");
+    // Administrators always keep every page and every write area (the rules do the same).
+    out.admin.pages = [...pages];
+    out.admin.write = [...WRITE_AREAS];
     await setDoc(doc(db, "settings", "roles"), out);
     await audit("roles.update", {});
     toast("Access saved. Reloading to apply it.", "success");

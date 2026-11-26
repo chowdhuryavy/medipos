@@ -1,7 +1,13 @@
 rules_version = '2';
 
 // MediPOS security rules. Deploy with:  firebase deploy --only firestore:rules
-// Access is by staff role stored in users/{uid}. There is no Google sign-in in this app.
+//
+// Permissions come from the database, not from this file:
+//   settings/roles  →  { <role>: { label, pages: [...], write: [...] } }
+//     pages = screens a role can open (read access to that area)
+//     write = areas a role can change: pos, inventory, purchasing, partners, accounting
+// Administrators are always allowed everything, so the admin cannot be locked out.
+// Field-level limits (e.g. cashiers can change stock but not prices) are enforced here.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -9,94 +15,131 @@ service cloud.firestore {
     function signedIn() {
       return request.auth != null;
     }
-    function staff() {
+    function myProfile() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-    function isActive() {
+    function roleMap() {
+      return get(/databases/$(database)/documents/settings/roles).data;
+    }
+    function isAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && staff().active == true
-        && staff().role in ['admin', 'pharmacist', 'cashier', 'storekeeper', 'accountant'];
+        && myProfile().active == true
+        && myProfile().role == 'admin';
     }
-    function hasRole(roles) {
-      return isActive() && staff().role in roles;
+    // Active staff whose role exists in settings/roles. Admins do not need the roles document,
+    // so an admin can always sign in and create it.
+    function isActive() {
+      return isAdmin() || (signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && myProfile().active == true
+        && myProfile().role in roleMap());
+    }
+    function canPage(page) {
+      return isAdmin() || (isActive()
+        && 'pages' in roleMap()[myProfile().role]
+        && page in roleMap()[myProfile().role].pages);
+    }
+    function canWrite(area) {
+      return isAdmin() || (isActive()
+        && 'write' in roleMap()[myProfile().role]
+        && area in roleMap()[myProfile().role].write);
     }
 
     // ───── staff ─────
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || hasRole(['admin']));
-      allow create, update, delete: if hasRole(['admin']);
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update, delete: if isAdmin();
     }
 
     // ───── catalogue ─────
     match /products/{id} {
       allow read: if isActive();
-      allow create, update: if hasRole(['admin', 'pharmacist', 'storekeeper', 'cashier']);
-      allow delete: if hasRole(['admin']);
+      allow create, delete: if canWrite('inventory');
+      // Inventory staff may change anything. Purchasing may change stock and cost.
+      // Sales may only change stock (never prices, names or costs).
+      allow update: if canWrite('inventory')
+        || (canWrite('purchasing')
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'costPrice', 'updatedAt']))
+        || (canWrite('pos')
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'updatedAt']));
     }
     match /batches/{id} {
       allow read: if isActive();
-      allow create: if hasRole(['admin', 'pharmacist', 'storekeeper']);
-      allow update: if hasRole(['admin', 'pharmacist', 'storekeeper', 'cashier']);
-      allow delete: if hasRole(['admin']);
+      allow create: if canWrite('inventory') || canWrite('purchasing');
+      allow update: if canWrite('inventory')
+        || (canWrite('pos') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remaining']));
+      allow delete: if isAdmin();
     }
 
     // ───── customers & suppliers ─────
     match /customers/{id} {
       allow read: if isActive();
-      allow create, update: if hasRole(['admin', 'pharmacist', 'cashier', 'accountant']);
-      allow delete: if hasRole(['admin']);
+      allow create, update: if canWrite('partners')
+        || (canWrite('pos') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'updatedAt']));
+      allow delete: if isAdmin();
     }
     match /suppliers/{id} {
       allow read: if isActive();
-      allow create, update: if hasRole(['admin', 'pharmacist', 'storekeeper', 'accountant']);
-      allow delete: if hasRole(['admin']);
+      allow create, update: if canWrite('purchasing') || canWrite('partners');
+      allow delete: if isAdmin();
     }
 
     // ───── transactions (append-only) ─────
     match /sales/{id} {
-      allow read: if hasRole(['admin', 'pharmacist', 'cashier', 'accountant']);
-      allow create: if hasRole(['admin', 'pharmacist', 'cashier']);
+      allow read: if canPage('pos') || canPage('dashboard') || canPage('reports') || canPage('accounting');
+      allow create: if canWrite('pos');
       allow update, delete: if false;
     }
     match /purchases/{id} {
-      allow read: if hasRole(['admin', 'pharmacist', 'storekeeper', 'accountant']);
-      allow create: if hasRole(['admin', 'pharmacist', 'storekeeper']);
+      allow read: if canPage('purchasing') || canPage('reports') || canPage('accounting');
+      allow create: if canWrite('purchasing');
       allow update, delete: if false;
     }
     match /journal/{id} {
-      allow read: if hasRole(['admin', 'accountant']);
-      allow create: if isActive();
+      allow read: if canPage('accounting') || canPage('reports');
+      // Any staff who post money movements create journal lines through their transaction.
+      allow create: if canWrite('accounting') || canWrite('pos') || canWrite('purchasing')
+        || canWrite('partners') || canWrite('inventory');
       allow update, delete: if false;
     }
     match /expenses/{id} {
-      allow read, create: if hasRole(['admin', 'accountant']);
+      allow read: if canPage('accounting');
+      allow create: if canWrite('accounting');
       allow update, delete: if false;
     }
 
     // ───── accounting setup ─────
     match /accounts/{code} {
-      allow read, write: if hasRole(['admin', 'accountant']);
+      allow read: if canPage('accounting');
+      allow write: if canWrite('accounting');
     }
 
     // ───── system ─────
+    // Receipt and purchase numbers can only move forward, so they cannot be reset to reuse a number.
     match /counters/{id} {
-      allow read, write: if isActive();
+      allow read: if isActive();
+      allow create: if canWrite('pos') || canWrite('purchasing');
+      allow update: if (canWrite('pos') || canWrite('purchasing'))
+        && request.resource.data.get('sale', 0) >= resource.data.get('sale', 0)
+        && request.resource.data.get('purchase', 0) >= resource.data.get('purchase', 0);
+      allow delete: if false;
     }
     match /settings/general {
       allow read: if isActive();
-      allow write: if hasRole(['admin']);
+      allow write: if isAdmin();
     }
     match /settings/roles {
       allow read: if isActive();
-      allow write: if hasRole(['admin']);
+      // Administrators must keep access to Administration.
+      allow write: if isAdmin() && 'admin' in request.resource.data && 'admin' in request.resource.data.admin.pages;
     }
     match /settings/integrations {
-      allow read: if hasRole(['admin', 'accountant']);
-      allow write: if hasRole(['admin']);
+      // Holds the Google Sheets secret: administrators only.
+      allow read, write: if isAdmin();
     }
     match /audit/{id} {
-      allow read: if hasRole(['admin']);
+      allow read: if isAdmin();
       allow create: if isActive();
       allow update, delete: if false;
     }
