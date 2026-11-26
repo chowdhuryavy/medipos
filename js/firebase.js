@@ -2,6 +2,7 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
   createUserWithEmailAndPassword, sendPasswordResetEmail, updatePassword,
+  reauthenticateWithCredential, EmailAuthProvider,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
@@ -18,6 +19,7 @@ export {
   initializeApp, deleteApp, getAuth,
   onAuthStateChanged, signInWithEmailAndPassword, signOut,
   createUserWithEmailAndPassword, sendPasswordResetEmail, updatePassword,
+  reauthenticateWithCredential, EmailAuthProvider,
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, runTransaction, serverTimestamp, increment,
 };

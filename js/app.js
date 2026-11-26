@@ -1,11 +1,11 @@
 import { onSubmit, onAction } from "./core.js";
-import { auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "./firebase.js";
+import { auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "./firebase.js";
 import { loadBranding, branding, logoHtml } from "./branding.js";
 import { passwordFields } from "./password-ui.js";
 import { post } from "./api.js";
 import { showSplash } from "./splash.js";
 import { firebaseConfig, APP_NAME, APP_VERSION } from "./config.js";
-import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast } from "./core.js";
+import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast, confirmBox } from "./core.js";
 
 // Email + password only. No third-party (Google) sign-in is offered anywhere.
 
@@ -268,6 +268,67 @@ function showForcePasswordChange(user) {
   });
 }
 
+/* ───────── account menu (tap the avatar) ───────── */
+
+function openAccountMenu() {
+  const email = auth.currentUser?.email || "";
+  openModal("Your account", `
+    <div class="account-menu">
+      <div class="account-who">
+        <div class="avatar lg">${esc((session.name || "?").charAt(0).toUpperCase())}</div>
+        <div><strong>${esc(session.name || "")}</strong><small class="muted">${esc(email)}${email ? " · " : ""}${esc(roles[session.role]?.label || "")}</small></div>
+      </div>
+      <div class="account-actions">
+        <button class="account-action" type="button" data-act="password">
+          ${icon("key")}<span><strong>Change password</strong><small>Confirm your current password, then choose a new one</small></span>
+        </button>
+        <button class="account-action danger" type="button" data-act="signout">
+          ${icon("logout")}<span><strong>Sign out</strong><small>Leave MediPOS on this device</small></span>
+        </button>
+      </div>
+    </div>`, (body, close) => {
+    body.querySelector('[data-act="password"]').addEventListener("click", () => { close(); openChangePassword(); });
+    body.querySelector('[data-act="signout"]').addEventListener("click", async () => {
+      if (!(await confirmBox("Sign out of MediPOS on this device?"))) return;
+      close();
+      await signOut(auth);
+    });
+  });
+}
+
+function openChangePassword() {
+  openModal("Change password", `
+    <form id="cp-form" class="stack" novalidate>
+      <label class="field"><span class="field-label">Current password</span>
+        <span class="input-wrap">${icon("lock")}<input type="password" name="current" autocomplete="current-password" required /></span>
+      </label>
+      <div id="cp-pw"></div>
+      <div class="form-actions">
+        <button class="btn ghost" type="button" data-cancel>Cancel</button>
+        <button class="btn primary" type="submit">${icon("check")}<span>Update password</span></button>
+      </div>
+    </form>`, (body, close) => {
+    const fields = passwordFields(body.querySelector("#cp-pw"));
+    body.querySelector("[data-cancel]").addEventListener("click", close);
+    onSubmit(body.querySelector("#cp-form"), async (e) => {
+      const current = String(new FormData(e.target).get("current") || "");
+      if (!current) throw new Error("Enter your current password.");
+      if (!fields.valid()) throw new Error("Check the password rules and make sure both new passwords match.");
+      const user = auth.currentUser;
+      if (!user?.email) throw new Error("Please sign in again to change your password.");
+      try {
+        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, current));
+      } catch {
+        throw new Error("Your current password is not correct.");
+      }
+      await updatePassword(user, fields.value());
+      await updateDoc(doc(db, "users", user.uid), { passwordChangedAt: serverTimestamp() });
+      close();
+      toast("Password changed.", "success");
+    });
+  });
+}
+
 /* ───────── shell (responsive: sidebar on desktop, bottom bar on phones) ───────── */
 
 function navItems() {
@@ -294,7 +355,7 @@ function buildShell() {
               ${icon(p.icon)}<span>${esc(PAGE_TITLE[p.key])}</span>
             </a>`).join("")}
         </nav>
-        <div class="sidebar-foot">
+        <div class="sidebar-foot avatar-trigger" id="avatar-side" role="button" tabindex="0" aria-label="Your account">
           <div class="avatar">${esc((session.name || "?").charAt(0).toUpperCase())}</div>
           <div class="who"><strong>${esc(session.name)}</strong><small>${esc(roles[session.role].label)}</small></div>
         </div>
@@ -306,7 +367,7 @@ function buildShell() {
           <div class="grow"></div>
           <span class="clock" id="clock"></span>
           <button class="icon-btn" id="theme-btn" aria-label="Toggle dark mode">${icon(document.documentElement.dataset.theme === "dark" ? "sun" : "moon")}</button>
-          <button class="icon-btn hover-danger" id="logout-btn" aria-label="Sign out">${icon("logout")}</button>
+          <button class="avatar-top" id="avatar-top" type="button" aria-label="Your account" title="${esc(session.name || "Account")}">${esc((session.name || "?").charAt(0).toUpperCase())}</button>
         </header>
         <main id="view" class="view"></main>
       </div>
@@ -324,7 +385,11 @@ function buildShell() {
   scrim.addEventListener("click", () => setDrawer(false));
   sidebar.querySelectorAll(".nav-link").forEach((a) => a.addEventListener("click", () => setDrawer(false)));
   document.getElementById("theme-btn").addEventListener("click", toggleTheme);
-  document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
+  const openAccount = () => openAccountMenu();
+  document.getElementById("avatar-top").addEventListener("click", openAccount);
+  const side = document.getElementById("avatar-side");
+  side.addEventListener("click", openAccount);
+  side.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAccount(); } });
 
   const tick = () => {
     const el = document.getElementById("clock");
