@@ -2,12 +2,27 @@ import { db, doc, getDoc } from "./firebase.js";
 import { esc } from "./core.js";
 
 // Public branding (app name, shop name, logo) readable before sign-in.
+// Last known name and logo on this device, so the loading screen is right even when the network is slow.
+const CACHE_KEY = "medipos.branding";
 export const branding = { appName: "MediPOS", shopName: "", logoUrl: "" };
+try {
+  Object.assign(branding, JSON.parse(localStorage.getItem(CACHE_KEY) || "{}"));
+} catch {
+  /* storage unavailable or corrupt: use defaults */
+}
 
 export async function loadBranding() {
   try {
     const snap = await getDoc(doc(db, "branding", "public"));
-    if (snap.exists()) Object.assign(branding, snap.data());
+    if (snap.exists()) {
+      Object.assign(branding, snap.data());
+      const { shopName, appName, logoUrl } = branding;
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ shopName, appName, logoUrl }));
+      } catch {
+        /* the logo may be too large to cache: the name still works */
+      }
+    }
   } catch (err) {
     console.warn("Branding unavailable:", err.message);
   }
