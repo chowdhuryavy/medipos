@@ -149,7 +149,7 @@ function markSynced(ss, tab, count) {
 function buildStartHere(ss) {
   var sh = ss.getSheetByName("Start Here");
   sh.clear();
-  sh.hideGridlines();
+  sh.setHiddenGridlines(true);
   sh.setColumnWidth(1, 150);
   sh.setColumnWidth(2, 380);
   sh.getRange("A1").setValue("MediPOS Reports").setFontSize(22).setFontWeight("bold").setFontColor(BRAND.teal);
@@ -168,7 +168,7 @@ function buildStartHere(ss) {
 function buildDashboard(ss) {
   var sh = ss.getSheetByName("Dashboard");
   sh.clear();
-  sh.hideGridlines();
+  sh.setHiddenGridlines(true);
   sh.setColumnWidth(1, 280);
   sh.setColumnWidth(2, 150);
   sh.setColumnWidths(3, 3, 120);
