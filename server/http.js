@@ -1,12 +1,7 @@
 import { adminAuth, adminDb } from "./firebase-admin.js";
 
-export class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-export const httpError = (status, message) => new HttpError(status, message);
+import { HttpError, httpError } from "./errors.js";
+export { HttpError, httpError };
 
 /** Wraps an endpoint: POST only, JSON in/out, no internal error details leak to the browser. */
 export function handle(fn) {
@@ -16,7 +11,7 @@ export function handle(fn) {
       const out = await fn(req);
       return res.status(200).json(out || { ok: true });
     } catch (err) {
-      if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+      if (err instanceof HttpError || err.expose) return res.status(err.status || 500).json({ error: err.message });
       console.error(err);
       return res.status(500).json({ error: "Something went wrong. Please try again." });
     }

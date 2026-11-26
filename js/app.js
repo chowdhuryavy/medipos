@@ -131,21 +131,28 @@ function showLogin(message = "", tone = "error") {
 /* ───────── forgot password: email → 6-digit code → new password ───────── */
 
 function openForgotPassword(prefillEmail = "") {
-  openModal("Reset your password", `
-    <form id="fp-form" class="stack" novalidate>
-      <p class="muted small" id="fp-help">Enter your staff email. If an account exists, we will send a 6-digit code.</p>
-      <label class="field"><span class="field-label">Email</span>
-        <span class="input-wrap">${icon("mail")}<input type="email" name="email" inputmode="email" autocomplete="username" value="${esc(prefillEmail)}" required /></span></label>
-      <div id="fp-step2" hidden>
-        <label class="field"><span class="field-label">6-digit code</span>
-          <span class="input-wrap">${icon("shield")}<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required /></span></label>
-        <div id="fp-pw"></div>
+  openModal("Reset password", `
+    <div class="reset">
+      <div class="reset-head">
+        <div class="reset-icon" aria-hidden="true">${icon("shield")}</div>
+        <p class="muted small" id="fp-help">Enter your staff email. If an account exists, we'll send a 6-digit code.</p>
       </div>
-      <div class="form-actions">
-        <button class="btn primary" type="submit" id="fp-submit">${icon("send")}<span>Send code</span></button>
-      </div>
-      <p class="small center"><button type="button" class="link-btn" id="fp-resend" hidden>Resend code</button></p>
-    </form>`, (body, close) => {
+      <ol class="steps" aria-label="Progress">
+        <li class="step on" data-step="1"><span>1</span> Email</li>
+        <li class="step" data-step="2"><span>2</span> Code &amp; new password</li>
+      </ol>
+      <form id="fp-form" class="stack" novalidate>
+        <label class="field"><span class="field-label">Email</span>
+          <span class="input-wrap">${icon("mail")}<input type="email" name="email" inputmode="email" autocomplete="username" value="${esc(prefillEmail)}" required /></span></label>
+        <div id="fp-step2" hidden class="stack">
+          <label class="field"><span class="field-label">6-digit code</span>
+            <span class="input-wrap">${icon("key")}<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required /></span></label>
+          <div id="fp-pw"></div>
+        </div>
+        <button class="btn primary block xl" type="submit" id="fp-submit"><span>Send code</span></button>
+        <button class="link-btn" type="button" id="fp-resend" hidden>Resend code</button>
+      </form>
+    </div>`, (body, close) => {
     const form = body.querySelector("#fp-form");
     const step2 = body.querySelector("#fp-step2");
     const submit = body.querySelector("#fp-submit");
@@ -154,6 +161,13 @@ function openForgotPassword(prefillEmail = "") {
     let pw = null;
     let stage = 1;
     let cooldownTimer = null;
+
+    const busy = (on, text) => {
+      submit.disabled = on;
+      submit.classList.toggle("loading", on);
+      if (text) submit.querySelector("span").textContent = text;
+    };
+    const setStep = (n) => body.querySelectorAll(".step").forEach((el) => el.classList.toggle("on", Number(el.dataset.step) <= n));
 
     const startCooldown = () => {
       let left = 60;
@@ -168,45 +182,47 @@ function openForgotPassword(prefillEmail = "") {
       }, 1000);
     };
 
-    const sendCode = async () => {
-      const email = form.email.value.trim();
-      await post("/api/otp/request", { email });
-      help.textContent = "We sent a 6-digit code to your email. It expires in 10 minutes.";
-      stage = 2;
-      step2.hidden = false;
-      form.email.readOnly = true;
-      submit.querySelector("span").textContent = "Reset password";
-      if (!pw) pw = passwordFields(body.querySelector("#fp-pw"));
-      startCooldown();
-      form.code.focus();
-    };
-
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      submit.disabled = true;
       try {
         if (stage === 1) {
-          if (!form.email.value.trim()) throw new Error("Enter your email.");
-          await sendCode();
+          const email = form.email.value.trim();
+          if (!email) throw new Error("Enter your email.");
+          busy(true, "Sending…");
+          await post("/api/otp/request", { email });
+          stage = 2;
+          setStep(2);
+          help.textContent = "We sent a 6-digit code to your email. It expires in 10 minutes.";
+          form.email.readOnly = true;
+          step2.hidden = false;
+          if (!pw) pw = passwordFields(body.querySelector("#fp-pw"));
+          busy(false, "Reset password");
+          startCooldown();
+          form.code.focus();
         } else {
           if (!/^\d{6}$/.test(form.code.value.trim())) throw new Error("Enter the 6-digit code.");
           if (!pw.valid()) throw new Error("Check the new password rules and make sure both passwords match.");
+          busy(true, "Updating…");
           await post("/api/otp/reset", { email: form.email.value.trim(), code: form.code.value.trim(), password: pw.value() });
           close();
           showLogin("Password updated. Sign in with your new password.", "ok");
-          return;
         }
       } catch (err) {
         toast(err.message, "error");
-      } finally {
-        submit.disabled = false;
+        busy(false, stage === 1 ? "Send code" : "Reset password");
       }
     });
 
     resend.addEventListener("click", async () => {
       resend.disabled = true;
-      try { await post("/api/otp/request", { email: form.email.value.trim() }); toast("New code sent", "success"); startCooldown(); }
-      catch (err) { toast(err.message, "error"); resend.disabled = false; }
+      try {
+        await post("/api/otp/request", { email: form.email.value.trim() });
+        toast("New code sent", "success");
+        startCooldown();
+      } catch (err) {
+        toast(err.message, "error");
+        resend.disabled = false;
+      }
     });
   });
 }

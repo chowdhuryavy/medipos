@@ -565,3 +565,19 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 @media (prefers-reduced-motion: reduce) {
   .splash *, .splash { animation: none !important; }
 }
+
+/* ───────── forgot password screen (v3) ───────── */
+.reset { display: grid; gap: 16px; }
+.reset-head { display: grid; justify-items: center; gap: 10px; text-align: center; }
+.reset-head p { margin: 0; max-width: 300px; }
+.reset-icon { width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, var(--brand), var(--brand-2)); box-shadow: 0 12px 26px -10px rgba(15, 118, 110, .6); }
+.reset-icon .ico { width: 26px; height: 26px; }
+.steps { list-style: none; margin: 0; padding: 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--surface-2, rgba(127,127,127,.08)); border-radius: 14px; }
+.step { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 10px; border-radius: 10px; font-size: 13px; font-weight: 600; opacity: .55; transition: all .3s var(--ease); }
+.step span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; background: rgba(127,127,127,.18); }
+.step.on { opacity: 1; background: var(--surface); box-shadow: 0 4px 12px -6px rgba(0,0,0,.25); color: var(--brand); }
+.step.on span { background: var(--brand); color: #fff; }
+.reset .link-btn { justify-self: center; }
+.reset .stack { gap: 14px; }
+.reset .btn.primary { margin-top: 2px; }

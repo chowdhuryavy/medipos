@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { configError } from "./errors.js";
 
 // Gmail (or any SMTP host) via environment variables:
 // SMTP_USER, SMTP_PASS (App Password), MAIL_FROM, optional SMTP_HOST and SMTP_PORT.
@@ -7,7 +8,7 @@ let transport = null;
 export async function sendMail({ to, subject, text, html }) {
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  if (!user || !pass) throw new Error("Email is not configured: set SMTP_USER and SMTP_PASS in Vercel.");
+  if (!user || !pass) throw configError("Email is not set up yet: SMTP_USER and SMTP_PASS are missing in Vercel. Add them and redeploy.");
   if (!transport) {
     const port = Number(process.env.SMTP_PORT || 465);
     transport = nodemailer.createTransport({
