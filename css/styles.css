@@ -542,6 +542,9 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .arm { position: absolute; inset: 0; border-radius: 50%; }
 .arm.a1 { animation: spin 2.4s linear infinite; }
 .arm.a2 { animation: spin 3.6s linear infinite reverse; }
+.arm { position: absolute; inset: 0; border-radius: 50%; }
+.arm.a1 { animation: spin 2.4s linear infinite; }
+.arm.a2 { animation: spin 3.6s linear infinite reverse; }
 .dot.d1 { top: -5px; left: 50%; margin-left: -5px; }
 .dot.d2 { top: 50%; right: -4px; margin-top: -3.5px; width: 7px; height: 7px; background: #f59e0b; box-shadow: 0 0 12px #f59e0b; }
 .splash-logo { position: relative; margin-top: 18px; animation: floatLogo 3s ease-in-out infinite; }
