@@ -390,7 +390,7 @@ function buildShell() {
           <div class="who"><strong>${esc(session.name)}</strong><span class="role-pill">${esc(roles[session.role].label)}</span></div>
           <span class="foot-chev" aria-hidden="true">›</span>
         </div>
-        <p class="sidebar-ver"><span>MediPOS</span> <b>v${esc(APP_VERSION)}</b></p>
+        <p class="sidebar-ver"><b>v${esc(APP_VERSION)}</b></p>
       </aside>
       <div class="main">
         <header class="topbar">
