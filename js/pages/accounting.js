@@ -1,3 +1,4 @@
+import { manageExpenseCategories, expenseCategories } from "../expense-categories.js";
 import { onSubmit, onAction } from "../core.js";
 import { db, collection, doc, getDoc, getDocs, query, where, orderBy, limit, addDoc, setDoc, runTransaction, serverTimestamp } from "../firebase.js";
 import {
@@ -218,14 +219,15 @@ async function viewExpenses(body) {
       <div class="toolbar">
         <h3>Recent expenses</h3>
         <div class="grow"></div>
+        <button class="btn ghost" id="ex-cats">${icon("label")}<span>Categories</span></button>
         <button class="btn primary" id="ex-new">${icon("plus")}<span>Record expense</span></button>
       </div>
       <div class="table-wrap"><table class="stack-mobile">
-        <thead><tr><th>Date</th><th>Account</th><th>Payee</th><th>Note</th><th>Paid from</th><th class="r">Amount</th></tr></thead>
+        <thead><tr><th>Date</th><th>Category</th><th>Payee</th><th>Note</th><th>Paid from</th><th class="r">Amount</th></tr></thead>
         <tbody>
           ${rows.map((x) => `<tr>
             <td data-label="Date">${esc(x.date)}</td>
-            <td data-label="Account">${esc(x.accountName)}</td>
+            <td data-label="Category">${esc(x.category || x.accountName)}</td>
             <td data-label="Payee">${esc(x.payee || "—")}</td>
             <td data-label="Note">${esc(x.note || "")}</td>
             <td data-label="Paid from">${esc(x.paidFromName)}</td>
@@ -235,6 +237,7 @@ async function viewExpenses(body) {
       </table></div>
     </section>`;
   body.querySelector("#ex-new").addEventListener("click", () => openExpenseForm(expenseAccounts, accounts, () => viewExpenses(body)));
+  body.querySelector("#ex-cats").addEventListener("click", () => manageExpenseCategories(() => viewExpenses(body)));
 }
 
 function openExpenseForm(expenseAccounts, accounts, reload) {
@@ -243,8 +246,8 @@ function openExpenseForm(expenseAccounts, accounts, reload) {
     <form id="exf" class="form-grid">
       <label>Date<input name="date" type="date" value="${todayISO()}" required /></label>
       <label>Amount<input name="amount" type="number" inputmode="decimal" min="0.01" step="0.01" required /></label>
-      <label class="span-2">Expense account
-        <select name="account" required>${expenseAccounts.map((a) => `<option value="${esc(a.code)}">${esc(a.name)}</option>`).join("")}</select>
+      <label class="span-2">Category
+        <select name="account" required>${expenseCategories(expenseAccounts).map((c) => `<option value="${esc(c.account)}">${esc(c.name)}</option>`).join("")}</select>
       </label>
       <label>Payee<input name="payee" /></label>
       <label>Paid from
@@ -261,13 +264,14 @@ function openExpenseForm(expenseAccounts, accounts, reload) {
       const account = String(f.get("account"));
       const method = String(f.get("method"));
       const accName = accounts.find((a) => a.code === account)?.name || account;
+      const category = expenseCategories(expenseAccounts).find((c) => c.account === account)?.name || accName;
       const paidFromName = payMethods.find((m) => m.account === method)?.label || method;
       if (!(amount > 0)) return toast("Enter an amount above 0", "error");
       try {
         const expRef = doc(collection(db, "expenses"));
         await runTransaction(db, async (tx) => {
           tx.set(expRef, {
-            date: String(f.get("date")), amount, account, accountName: accName,
+            date: String(f.get("date")), amount, account, accountName: accName, category,
             payee: String(f.get("payee") || ""), note: String(f.get("note") || ""),
             paidFrom: method, paidFromName, by: session.name, createdAt: serverTimestamp(),
           });

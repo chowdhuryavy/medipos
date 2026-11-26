@@ -5,8 +5,9 @@ import {
 } from "../core.js";
 import { pushToSheets } from "../sheets.js";
 import { printReport } from "../print.js";
+import { FINANCE_KINDS, FINANCE_GROUPS, buildFinance } from "./reports-finance.js";
 
-const KINDS = [["sales", "Sales"], ["productSummary", "Products"], ["stock", "Stock"], ["expiry", "Expiry"]];
+const KINDS = [["sales", "Sales"], ...FINANCE_KINDS, ["productSummary", "Products"], ["stock", "Stock"], ["expiry", "Expiry"]];
 // Only admins can read the Sheets secret (settings/integrations), so only they can send reports.
 const CAN_SYNC = ["admin"];
 
@@ -24,6 +25,9 @@ export async function render(el) {
             ${[30, 60, 90, 180].map((d) => `<option value="${d}" ${d === settings.expiryWarnDays ? "selected" : ""}>${d} days</option>`).join("")}
           </select>
         </label>
+        <label class="inline" id="r-group-wrap">Group by
+          <select id="r-group">${FINANCE_GROUPS.map(([v, l]) => `<option value="${v}" ${v === "month" ? "selected" : ""}>${l}</option>`).join("")}</select>
+        </label>
         <div class="grow"></div>
         <button class="btn ghost" id="r-print">${icon("print")}<span>Print A4</span></button>
         <button class="btn ghost" id="r-csv">${icon("download")}<span>Download CSV</span></button>
@@ -38,12 +42,16 @@ export async function render(el) {
 
   async function load() {
     out.innerHTML = `<div class="skeleton"></div>`;
-    data = await build(el.querySelector("#r-from").value, el.querySelector("#r-to").value, Number(el.querySelector("#r-days").value));
+    const from = el.querySelector("#r-from").value;
+    const to = el.querySelector("#r-to").value;
+    const base = await build(from, to, Number(el.querySelector("#r-days").value));
+    data = { ...base, ...(await buildFinance(from, to, el.querySelector("#r-group").value)) };
     paint();
   }
 
   function paint() {
     const k = kind();
+    el.querySelector("#r-group-wrap").hidden = !["pl", "expenses"].includes(k);
     const d = data[k];
     const daily = data.charts?.daily || [];
     const dMax = Math.max(1, ...daily.map(([, v]) => v));
@@ -107,6 +115,7 @@ export async function render(el) {
     }
   });
 
+  el.querySelector("#r-group").addEventListener("change", load);
   load();
 }
 
