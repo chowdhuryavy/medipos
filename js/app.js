@@ -492,6 +492,8 @@ async function handleAuthChange(user) {
   if (!isConfigured()) return showSetup();
   showSplash(root, "Checking your session…");
   await brandingReady;
+  // Draw the loader again now that the saved shop name and logo are known.
+  showSplash(root, "Checking your session…");
   if (!user) {
     showLogin(pendingMessage);
     pendingMessage = "";
