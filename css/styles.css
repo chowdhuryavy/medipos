@@ -534,7 +534,7 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .b2 { width: 300px; height: 300px; background: #f59e0b; bottom: -100px; right: -80px; opacity: .28; animation-delay: -5s; }
 .b3 { width: 220px; height: 220px; background: #a7f3d0; top: 35%; left: 62%; opacity: .22; animation-delay: -9s; }
 .splash-core { position: relative; display: grid; justify-items: center; gap: 14px; text-align: center; padding: 24px; }
-.splash-orbit { position: absolute; top: 0; left: 50%; width: 170px; height: 170px; margin-left: -85px; pointer-events: none; }
+.splash-orbit { position: absolute; top: 50%; left: 50%; width: 150px; height: 150px; margin: -75px 0 0 -75px; pointer-events: none; }
 .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .18); }
 .ring.r1 { border-top-color: #5eead4; animation: spin 2.4s linear infinite; }
 .ring.r2 { inset: 14px; border-left-color: #f59e0b; border-bottom-color: transparent; animation: spin 3.6s linear infinite reverse; }
@@ -547,11 +547,11 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .arm.a2 { animation: spin 3.6s linear infinite reverse; }
 .dot.d1 { top: -5px; left: 50%; margin-left: -5px; }
 .dot.d2 { top: 50%; right: -4px; margin-top: -3.5px; width: 7px; height: 7px; background: #f59e0b; box-shadow: 0 0 12px #f59e0b; }
-.splash-logo { position: relative; margin-top: 18px; animation: floatLogo 3s ease-in-out infinite; }
+.splash-logo { position: relative; animation: floatLogo 3s ease-in-out infinite; }
 .splash-logo .brand-mark { width: 84px; height: 84px; border-radius: 24px; background: #fff; color: var(--brand); box-shadow: 0 24px 50px -16px rgba(0, 0, 0, .45); }
 .splash-logo .brand-mark .ico { width: 40px; height: 40px; }
 .splash-logo .brand-logo { max-height: 90px; max-width: 220px; filter: drop-shadow(0 12px 22px rgba(0, 0, 0, .35)); }
-.splash-name { margin: 6px 0 0; font-size: 26px; letter-spacing: .3px; color: #fff; text-align: center; animation: fadeUp .6s .15s var(--ease) both; }
+.splash-name { margin: 40px 0 0; font-size: 26px; letter-spacing: .3px; color: #fff; text-align: center; animation: fadeUp .6s .15s var(--ease) both; }
 .splash-msg { margin: 0; font-size: 14px; opacity: .85; min-height: 20px; animation: fadeUp .6s .25s var(--ease) both; }
 .splash-bar { position: relative; width: 180px; height: 5px; border-radius: 99px; background: rgba(255, 255, 255, .2); overflow: hidden; margin-top: 6px; }
 .splash-bar i { position: absolute; inset: 0; width: 45%; border-radius: 99px; background: linear-gradient(90deg, transparent, #fff, #5eead4, transparent); animation: barSlide 1.4s ease-in-out infinite; }

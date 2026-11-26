@@ -9,8 +9,7 @@ export function splashHtml(message = "Loading…") {
     <section class="splash" role="status" aria-live="polite">
       <div class="splash-bg" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span></div>
       <div class="splash-core">
-        <div class="splash-orbit" aria-hidden="true"><span class="ring r1"></span><span class="ring r2"></span><span class="arm a1"><span class="dot d1"></span></span><span class="arm a2"><span class="dot d2"></span></span></div>
-        <div class="splash-logo">${logoHtml(icon("pos"), "brand-mark big")}</div>
+        <div class="splash-logo"><div class="splash-orbit" aria-hidden="true"><span class="ring r1"></span><span class="ring r2"></span><span class="arm a1"><span class="dot d1"></span></span><span class="arm a2"><span class="dot d2"></span></span></div>${logoHtml(icon("pos"), "brand-mark big")}</div>
         <h1 class="splash-name">${esc(name)}</h1>
         <p class="splash-msg" id="splash-msg">${esc(message)}</p>
         <div class="splash-bar" aria-hidden="true"><i></i></div>
