@@ -23,7 +23,7 @@ const TABS = [
   ["lists", "Lists & payments"],
   ["roles", "Role access"],
   ["branding", "Branding & email"],
-  ["integrations", "Google Sheets"],
+  ["integrations", "Integrations"],
   ["audit", "Activity log"],
 ];
 const PAGE_NAMES = {
@@ -191,9 +191,25 @@ const FIELDS = [
   ]],
 ];
 
-function viewSettings(body) {
+async function viewSettings(body) {
+  const bSnap = await getDoc(doc(db, "branding", "public"));
+  let logoUrl = (bSnap.exists() && bSnap.data().logoUrl) || "";
+  let logoChanged = false;
   body.innerHTML = `
     <form id="sf" class="settings-form">
+      <section class="card">
+        <h3>Shop logo</h3>
+        <p class="muted small">Shown on the sign-in page, the sidebar, the top bar, the dashboard, every email and as the app icon.</p>
+        <div class="logo-editor">
+          <div class="logo-preview" id="logo-preview">${logoUrl ? `<img src="${logoUrl}" alt="Current logo" />` : `<span class="muted small">No logo yet</span>`}</div>
+          <div class="logo-actions">
+            <label class="btn ghost sm file-btn">${icon("upload")}<span>Choose logo</span>
+              <input type="file" id="logo-file" accept="image/*" hidden /></label>
+            <button type="button" class="btn ghost sm" id="logo-remove">${icon("trash")}<span>Remove</span></button>
+            <small class="muted">PNG with a transparent background works best. Saved when you press Save settings.</small>
+          </div>
+        </div>
+      </section>
       ${FIELDS.map(([title, fields]) => `
         <section class="card">
           <h3>${esc(title)}</h3>
@@ -210,6 +226,24 @@ function viewSettings(body) {
       </div>
     </form>`;
 
+  body.querySelector("#logo-file").addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      logoUrl = await readLogo(file);
+      logoChanged = true;
+      body.querySelector("#logo-preview").innerHTML = `<img src="${logoUrl}" alt="New logo" />`;
+    } catch (err) {
+      toast(err.message, "error");
+    }
+    e.target.value = "";
+  });
+  body.querySelector("#logo-remove").addEventListener("click", () => {
+    logoUrl = "";
+    logoChanged = true;
+    body.querySelector("#logo-preview").innerHTML = `<span class="muted small">No logo (the default icon is used)</span>`;
+  });
+
   onSubmit(body.querySelector("#sf"), async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -222,6 +256,10 @@ function viewSettings(body) {
       }
     }
     if (!patch.currency) return toast("Currency code is required", "error");
+    if (logoChanged) {
+      await setDoc(doc(db, "branding", "public"), { logoUrl, updatedAt: serverTimestamp() }, { merge: true });
+      await audit("branding.logo", { changed: true });
+    }
     await saveGeneral(patch, "Settings saved. Reloading to apply them.");
   });
 
@@ -575,6 +613,35 @@ async function viewIntegrations(body) {
       </form>
     </section>
     <section class="card">
+      <h3>Email sending</h3>
+      <p class="muted small">Sends password reset codes, new staff logins and admin resets. Choose one provider and save. Secrets are stored for administrators only and are never shown again. Leave a secret field empty to keep the saved one.</p>
+      <form id="ef" class="form-grid">
+        <label class="span-2">Provider
+          <select name="emailProvider">
+            <option value="" ${!cfg.emailProvider ? "selected" : ""}>Automatic (saved key, else server settings)</option>
+            <option value="resend" ${cfg.emailProvider === "resend" ? "selected" : ""}>Resend (API)</option>
+            <option value="smtp" ${cfg.emailProvider === "smtp" ? "selected" : ""}>SMTP (Gmail or another mail server)</option>
+          </select></label>
+        <label class="span-2">Sender address (From)<input name="mailFrom" type="email" placeholder="noreply@yourdomain.com" value="${esc(cfg.mailFrom || "")}" /></label>
+        <p class="span-2 muted small">Resend: the sender must be on a domain you verified in Resend. Gmail SMTP: use your Gmail address with an app password.</p>
+        <fieldset class="span-2 packs-box">
+          <legend>Resend</legend>
+          <label class="span-2">API key<input name="resendApiKey" type="password" autocomplete="off" placeholder="${cfg.resendApiKey ? "Saved. Type a new key to replace it." : "re_…"}" /></label>
+        </fieldset>
+        <fieldset class="span-2 packs-box">
+          <legend>SMTP</legend>
+          <label>Host<input name="smtpHost" placeholder="smtp.gmail.com" value="${esc(cfg.smtpHost || "")}" /></label>
+          <label>Port<input name="smtpPort" type="number" inputmode="numeric" placeholder="465" value="${esc(cfg.smtpPort || "")}" /></label>
+          <label>Username<input name="smtpUser" autocomplete="off" value="${esc(cfg.smtpUser || "")}" /></label>
+          <label>Password<input name="smtpPass" type="password" autocomplete="new-password" placeholder="${cfg.smtpPass ? "Saved. Type a new one to replace it." : ""}" /></label>
+        </fieldset>
+        <div class="form-actions span-2">
+          <button type="button" class="btn ghost" id="ef-test">${icon("mail")}<span>Send test email to me</span></button>
+          <button class="btn primary" type="submit">${icon("check")}<span>Save email settings</span></button>
+        </div>
+      </form>
+    </section>
+    <section class="card">
       <h3>Chart of accounts</h3>
       <p class="muted small">Adds any missing default accounts. Existing accounts are not changed.</p>
       <button class="btn ghost" id="coa">${icon("accounting")}<span>Add missing default accounts</span></button>
@@ -595,6 +662,37 @@ async function viewIntegrations(body) {
     try {
       await pushToSheets("Connection test", ["Check", "Time"], [["Connected", new Date().toLocaleString()]]);
       toast("Connected. Check the “Connection test” tab.", "success");
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  });
+  onSubmit(body.querySelector("#ef"), async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const patch = {
+      emailProvider: String(f.get("emailProvider") || ""),
+      mailFrom: String(f.get("mailFrom") || "").trim(),
+      smtpHost: String(f.get("smtpHost") || "").trim(),
+      smtpPort: Number(f.get("smtpPort")) || 0,
+      smtpUser: String(f.get("smtpUser") || "").trim(),
+    };
+    // Secrets are only written when a new value is typed.
+    const resendApiKey = String(f.get("resendApiKey") || "").trim();
+    const smtpPass = String(f.get("smtpPass") || "");
+    if (resendApiKey) patch.resendApiKey = resendApiKey;
+    if (smtpPass) patch.smtpPass = smtpPass;
+    try {
+      await setDoc(doc(db, "settings", "integrations"), { ...patch, updatedAt: serverTimestamp() }, { merge: true });
+      await audit("integrations.email", { provider: patch.emailProvider, from: patch.mailFrom });
+      toast("Email settings saved", "success");
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  });
+  onAction(body.querySelector("#ef-test"), async () => {
+    try {
+      await post("/api/admin/test-email", {}, { secure: true });
+      toast("Test email sent. Check your inbox and spam folder.", "success");
     } catch (err) {
       toast(err.message, "error");
     }
@@ -682,26 +780,14 @@ async function viewBranding(body) {
   const brand = bSnap.exists() ? bSnap.data() : {};
   const stored = eSnap.exists() ? eSnap.data() : {};
   const tpl = (k) => ({ ...DEFAULT_TEMPLATES[k], ...(stored[k] || {}) });
-  let logoUrl = brand.logoUrl || "";
-  let removeLogo = false;
 
   body.innerHTML = `
     <form id="bf" class="settings-form">
       <section class="card">
-        <h3>App name and logo</h3>
-        <p class="muted small">Shown on the sign-in page, in the sidebar and in every email.</p>
+        <h3>Brand colour</h3>
+        <p class="muted small">Used for the header, code box and buttons in every email. The logo and shop name are set in Settings → Shop profile.</p>
         <div class="form-grid">
-          <p class="muted small">The shop name from Settings is shown on the loading and sign-in screens, the menu, receipts and emails. Change it in Settings.</p>
-          <label>Brand colour (used in emails)<input type="color" name="brandColor" value="${esc(brand.brandColor || DEFAULT_BRAND_COLOR)}" /></label>
-          <div class="span-2 logo-editor">
-            <div class="logo-preview" id="logo-preview">${logoUrl ? `<img src="${logoUrl}" alt="Current logo" />` : `<span class="muted small">No logo yet</span>`}</div>
-            <div class="logo-actions">
-              <label class="btn ghost sm file-btn">${icon("upload")}<span>Choose logo</span>
-                <input type="file" id="logo-file" accept="image/*" hidden /></label>
-              <button type="button" class="btn ghost sm" id="logo-remove">${icon("trash")}<span>Remove</span></button>
-              <small class="muted">PNG with a transparent background works best. Max about 350 KB after resizing.</small>
-            </div>
-          </div>
+          <label>Brand colour<input type="color" name="brandColor" value="${esc(brand.brandColor || DEFAULT_BRAND_COLOR)}" /></label>
         </div>
       </section>
       ${Object.keys(DEFAULT_TEMPLATES).map((k) => `
@@ -721,23 +807,6 @@ async function viewBranding(body) {
     </form>`;
 
   const form = body.querySelector("#bf");
-  body.querySelector("#logo-file").addEventListener("change", async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      logoUrl = await readLogo(file);
-      removeLogo = false;
-      body.querySelector("#logo-preview").innerHTML = `<img src="${logoUrl}" alt="New logo" />`;
-    } catch (err) {
-      toast(err.message, "error");
-    }
-    e.target.value = "";
-  });
-  body.querySelector("#logo-remove").addEventListener("click", () => {
-    logoUrl = "";
-    removeLogo = true;
-    body.querySelector("#logo-preview").innerHTML = `<span class="muted small">No logo (the default icon is used)</span>`;
-  });
   body.addEventListener("click", (e) => {
     const b = e.target.closest("[data-default]");
     if (!b) return;
@@ -761,10 +830,10 @@ async function viewBranding(body) {
     const brandColor = /^#[0-9a-f]{6}$/i.test(String(f.get("brandColor") || "")) ? String(f.get("brandColor")) : DEFAULT_BRAND_COLOR;
     try {
       await setDoc(doc(db, "branding", "public"), {
-        appName, shopName: settings.shopName, logoUrl: removeLogo ? "" : logoUrl, brandColor, updatedAt: serverTimestamp(),
+        appName, shopName: settings.shopName, brandColor, updatedAt: serverTimestamp(),
       }, { merge: true });
       await setDoc(doc(db, "settings", "emails"), { ...emails, updatedAt: serverTimestamp() });
-      await audit("branding.update", { appName, logo: !!logoUrl && !removeLogo });
+      await audit("branding.update", { appName, brandColor });
       toast("Branding and emails saved", "success");
     } catch (err) {
       toast(err.message, "error");
