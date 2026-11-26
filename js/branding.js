@@ -4,7 +4,7 @@ import { esc } from "./core.js";
 // Public branding (app name, shop name, logo) readable before sign-in.
 // Last known name and logo on this device, so the loading screen is right even when the network is slow.
 const CACHE_KEY = "medipos.branding";
-export const branding = { appName: "MediPOS", shopName: "", logoUrl: "" };
+export const branding = { appName: "MediPOS", shopName: "", logoUrl: "", brandColor: "" };
 try {
   Object.assign(branding, JSON.parse(localStorage.getItem(CACHE_KEY) || "{}"));
 } catch {
@@ -16,9 +16,9 @@ export async function loadBranding() {
     const snap = await getDoc(doc(db, "branding", "public"));
     if (snap.exists()) {
       Object.assign(branding, snap.data());
-      const { shopName, appName, logoUrl } = branding;
+      const { shopName, appName, logoUrl, brandColor } = branding;
       try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ shopName, appName, logoUrl }));
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ shopName, appName, logoUrl, brandColor }));
       } catch {
         /* the logo may be too large to cache: the name still works */
       }

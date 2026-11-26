@@ -1,3 +1,4 @@
+import { reserveJv, writeVoucher } from "../journal.js";
 import { onSubmit, onAction, onDelegated } from "../core.js";
 import { db, collection, doc, getDocs, addDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp } from "../firebase.js";
 import { settings, money, esc, icon, toast, openModal, confirmBox, round2, buildJournal, audit, ACCOUNTS, can, session } from "../core.js";
@@ -161,14 +162,15 @@ async function settle({ type, id, name, amount, cashAccount }) {
     if (!s.exists()) throw new Error("Record not found");
     const bal = Number(s.data().balance) || 0;
     if (amount > bal + 0.005) throw new Error(`Amount is more than the balance (${money(bal)})`);
+    const jvNo = await reserveJv(tx);
     tx.update(ref, { balance: round2(bal - amount), updatedAt: serverTimestamp() });
-    tx.set(doc(collection(db, "journal")), buildJournal({
+    writeVoucher(tx, doc(collection(db, "journal")), buildJournal({
       memo: isCustomer ? `Receipt from ${name}` : `Payment to ${name}`,
       ref: `PMT-${Date.now()}`,
       lines: isCustomer
         ? [{ account: cashAccount, debit: amount }, { account: ACCOUNTS.AR, credit: amount }]
         : [{ account: ACCOUNTS.AP, debit: amount }, { account: cashAccount, credit: amount }],
-    }));
+    }), jvNo, isCustomer ? "receipt" : "payment");
   });
   await audit(isCustomer ? "customer.receipt" : "supplier.payment", { id, amount });
 }

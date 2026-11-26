@@ -19,6 +19,14 @@ export const DEFAULT_TEMPLATES = {
     expiryNote: "This code expires in {{minutes}} minutes. Enter it on the reset page to choose a new password.",
     securityNote: "Keep this code private. Never share it with anyone, including shop staff. We will never ask you for it by phone or message.\n\nIf you did not request a password reset, you can safely ignore this email. Your password will not change.",
   },
+  login: {
+    label: "Sign-in code",
+    help: "Sent at sign-in to staff whose account asks for a code every time. The code is shown in its own box.",
+    subject: "Your sign-in code – {{shopName}}",
+    eyebrow: "Security",
+    heading: "Confirm it is you",
+    body: "Hello {{name}},\n\nSomeone is signing in to {{appName}}. Enter this code to continue:\n\n{{password}}\n\nThe code expires in {{minutes}} minutes. If this was not you, do not share the code and tell an administrator.",
+  },
   welcome: {
     label: "New staff account",
     help: "Sent when an administrator creates a staff login. Include {{email}} and {{password}}.",

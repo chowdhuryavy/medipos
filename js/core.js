@@ -23,6 +23,8 @@ export const DEFAULT_SETTINGS = {
   allowCreditSales: true,
   allowPriceChange: true,
   floatWarnAmount: 1000,
+  // Sign out after this many minutes with no activity. 0 = never.
+  sessionTimeoutMinutes: 0,
   walletProviders: ["bKash", "Nagad", "Rocket"],
   // Service fee rules. mode "percent" = % of the amount, "flat" = fixed amount. min/max 0 = no limit.
   serviceFees: {

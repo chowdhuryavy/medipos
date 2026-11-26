@@ -1,3 +1,4 @@
+import { reserveJv, writeVoucher } from "../journal.js";
 import { db, collection, doc, getDocs, query, where, runTransaction, serverTimestamp, increment } from "../firebase.js";
 import { onAction, onSubmit } from "../core.js";
 import { printReceipt } from "../print.js";
@@ -696,12 +697,13 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
       lines: journalLines,
     });
 
+    const jvNo = await reserveJv(tx);
     tx.set(counterRef, { sale: seq }, { merge: true });
     Object.entries(floatBalances).forEach(([k, b]) => tx.set(doc(db, "floats", k), { balance: b, updatedAt: serverTimestamp() }, { merge: true }));
     productWrites.forEach((w) => tx.update(w.ref, { stock: w.stock, updatedAt: serverTimestamp() }));
     batchWrites.forEach((w) => tx.update(w.ref, { remaining: w.remaining }));
     if (method.credit) tx.update(doc(db, "customers", customer.id), { balance: increment(saleTotal) });
-    tx.set(journalRef, journal);
+    writeVoucher(tx, journalRef, journal, jvNo, "sale");
 
     const items = [
       ...goods.lines.map((l) => ({

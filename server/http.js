@@ -29,3 +29,13 @@ export async function requireAdmin(req) {
   if (p.mustChangePassword === true) throw httpError(403, "Change your password before continuing.");
   return { uid: decoded.uid, name: p.name || decoded.email || "admin" };
 }
+
+/** Requires a valid Firebase ID token from any active staff member (used for the sign-in code). */
+export async function requireStaff(req) {
+  const m = String(req.headers.authorization || "").match(/^Bearer (.+)$/);
+  if (!m) throw httpError(401, "Sign in first.");
+  const decoded = await adminAuth().verifyIdToken(m[1]);
+  const profile = (await adminDb().doc(`users/${decoded.uid}`).get()).data();
+  if (!profile || profile.active !== true) throw httpError(403, "This account is not active.");
+  return { uid: decoded.uid, email: decoded.email || profile.email || "", profile };
+}

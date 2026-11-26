@@ -1,12 +1,12 @@
 import { onSubmit, onAction, onDelegated, withBusy } from "../core.js";
 import {
   auth, db, initializeApp, deleteApp, getAuth, createUserWithEmailAndPassword, signOut,
-  sendPasswordResetEmail, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, query, where, orderBy, limit, serverTimestamp,
+  sendPasswordResetEmail, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, query, where, orderBy, limit, serverTimestamp, writeBatch,
 } from "../firebase.js";
 import { firebaseConfig } from "../config.js";
 import {
   session, roles, DEFAULT_ROLES, WRITE_AREAS, settings, DEFAULT_SETTINGS, esc, icon, toast, openModal, confirmBox, alertBox,
-  audit, ensureChartOfAccounts, fmtDateTime,
+  audit, ensureChartOfAccounts, fmtDateTime, money,
 } from "../core.js";
 
 const WRITE_LABEL = {
@@ -16,7 +16,7 @@ const WRITE_LABEL = {
 import { pushToSheets } from "../sheets.js";
 import { post } from "../api.js";
 import { DEFAULT_TEMPLATES, EMAIL_PLACEHOLDERS, DEFAULT_BRAND_COLOR } from "../email-defaults.js";
-import { DEFAULT_SERVICE_FEES, SERVICE_TYPES } from "../services.js";
+import { DEFAULT_SERVICE_FEES, SERVICE_TYPES, floatKey } from "../services.js";
 import { REPORTS } from "../report-tables.js";
 
 const TABS = [
@@ -81,11 +81,12 @@ async function viewUsers(body) {
           ${users.map((u, i) => `<tr class="row-in" style="--i:${i}">
             <td data-label="Name"><strong>${esc(u.name)}</strong></td>
             <td data-label="Email">${esc(u.email)}</td>
-            <td data-label="Role"><span class="badge">${esc(roles[u.role]?.label || u.role)}</span></td>
+            <td data-label="Role"><span class="badge">${esc(roles[u.role]?.label || u.role)}</span>${u.requireOtp ? ' <span class="badge warn">Email code</span>' : ""}</td>
             <td data-label="Status"><span class="badge ${u.active ? "ok" : "danger"}">${u.active ? "Active" : "Disabled"}</span></td>
             <td class="actions">
               <button class="icon-btn sm" data-edit="${esc(u.id)}" aria-label="Edit ${esc(u.name)}">${icon("edit")}</button>
               <button class="icon-btn sm" data-reset="${esc(u.id)}" aria-label="Send password reset email" title="Send password reset email">${icon("sync")}</button>
+              ${u.id !== session.uid ? `<button class="icon-btn sm hover-danger" data-delete-user="${esc(u.id)}" aria-label="Delete ${esc(u.name)}" title="Delete staff account">${icon("trash")}</button>` : ""}
             </td></tr>`).join("") || `<tr><td colspan="5" class="muted center">No staff yet</td></tr>`}
         </tbody>
       </table></div>
@@ -96,13 +97,25 @@ async function viewUsers(body) {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.edit) return openUserForm(users.find((u) => u.id === b.dataset.edit), () => viewUsers(body));
+    if (b.dataset.deleteUser) {
+      const u = users.find((x) => x.id === b.dataset.deleteUser);
+      if (!(await confirmBox(`Delete ${u.name}? Their sign-in is removed and they can no longer use MediPOS. Past sales keep their name.`))) return;
+      try {
+        await post("/api/admin/delete-user", { uid: u.id }, { secure: true });
+        toast("Staff account deleted", "success");
+        viewUsers(body);
+      } catch (err) {
+        toast(err.message, "error");
+      }
+      return;
+    }
     if (b.dataset.reset) {
       const u = users.find((x) => x.id === b.dataset.reset);
       if (!(await confirmBox(`Reset ${u.name}'s password? A temporary password will be emailed to ${u.email}, and they must change it at sign-in.`))) return;
       try {
         await post("/api/admin/reset-password", { uid: u.id }, { secure: true });
         toast("Temporary password emailed", "success");
-        reload();
+        viewUsers(body);
       } catch (err) {
         toast(err.message, "error");
       }
@@ -124,6 +137,7 @@ function openUserForm(u, reload) {
         <p class="span-2 muted small">A temporary password is generated and emailed to the staff member. They must choose their own password at first sign-in.</p>` : ""}
       <label>Role<select name="role">${roleOptions(u?.role || "cashier")}</select></label>
       <label class="check"><input type="checkbox" name="active" ${!u || u.active ? "checked" : ""} /> <span>Account active</span></label>
+      <label class="check span-2"><input type="checkbox" name="requireOtp" ${u?.requireOtp ? "checked" : ""} /> <span>Ask for an email code at every sign-in</span></label>
       <div class="form-actions span-2">
         <button type="button" class="btn ghost" data-cancel>Cancel</button>
         <button class="btn primary" type="submit">${isNew ? "Create account" : "Save"}</button>
@@ -136,6 +150,7 @@ function openUserForm(u, reload) {
       const name = String(f.get("name") || "").trim();
       const role = String(f.get("role"));
       const active = f.get("active") === "on";
+      const requireOtp = f.get("requireOtp") === "on";
       if (u && u.id === session.uid && (!active || role !== "admin")) {
         return toast("You cannot remove your own admin access", "error");
       }
@@ -143,10 +158,13 @@ function openUserForm(u, reload) {
         if (isNew) {
           const email = String(f.get("email") || "").trim();
           const created = await post("/api/admin/create-user", { name, email, role }, { secure: true });
-          if (!active) await updateDoc(doc(db, "users", created.uid), { active: false });
+          const extra = {};
+          if (!active) extra.active = false;
+          if (requireOtp) extra.requireOtp = true;
+          if (Object.keys(extra).length) await updateDoc(doc(db, "users", created.uid), extra);
         } else {
-          await updateDoc(doc(db, "users", u.id), { name, role, active, updatedAt: serverTimestamp() });
-          await audit("user.update", { id: u.id, role, active });
+          await updateDoc(doc(db, "users", u.id), { name, role, active, requireOtp, updatedAt: serverTimestamp() });
+          await audit("user.update", { id: u.id, role, active, requireOtp });
         }
         toast("Saved", "success");
         close();
@@ -196,6 +214,9 @@ const FIELDS = [
   ]],
   ["Password reset", [
     ["otpExpiryMinutes", "Reset code is valid for (minutes, 1–60)", "number"],
+  ]],
+  ["Security", [
+    ["sessionTimeoutMinutes", "Sign staff out after this many minutes with no activity (0 = never)", "number"],
   ]],
   ["Inventory rules", [
     ["expiryWarnDays", "Warn this many days before expiry", "number"],
@@ -298,9 +319,66 @@ async function saveGeneral(patch, message) {
 
 const clean = (arr) => [...new Set(arr.map((v) => String(v).trim()).filter(Boolean))];
 
+/**
+ * Applies renames and removals from the lists to the records that use them:
+ * products keep their category or unit name, and a wallet or operator keeps its float balance under the new name.
+ */
+async function applyListChanges({ orig, state, ids }) {
+  const changed = (key) => state[key]
+    .map((name, i) => ({ name, old: ids[key][i] === null ? null : orig[key][ids[key][i]] }))
+    .filter((x) => x.old !== null && x.old !== x.name);
+  const removed = (key) => {
+    const kept = new Set(ids[key].filter((x) => x !== null));
+    return orig[key].filter((_, i) => !kept.has(i));
+  };
+  const ops = [];
+
+  for (const [key, field] of [["categories", "category"], ["units", "unit"]]) {
+    for (const { old, name } of changed(key)) {
+      const snap = await getDocs(query(collection(db, "products"), where(field, "==", old)));
+      snap.docs.forEach((d) => ops.push(["update", d.ref, { [field]: name }]));
+    }
+  }
+
+  for (const [key, keyOf] of [["walletProviders", (n) => floatKey("cashin", n)], ["rechargeOperators", (n) => floatKey("recharge", n)]]) {
+    for (const { old, name } of changed(key)) {
+      const from = keyOf(old), to = keyOf(name);
+      if (from === to) continue;
+      const snap = await getDoc(doc(db, "floats", from));
+      if (snap.exists()) {
+        ops.push(["set", doc(db, "floats", to), { ...snap.data(), updatedAt: serverTimestamp() }]);
+        ops.push(["delete", doc(db, "floats", from)]);
+      }
+    }
+    for (const old of removed(key)) {
+      const ref = doc(db, "floats", keyOf(old));
+      const snap = await getDoc(ref);
+      if (snap.exists() && Number(snap.data().balance)) {
+        throw new Error(`"${old}" still holds ${Number(snap.data().balance)} in its float. Cash it out before removing it.`);
+      }
+      if (snap.exists()) ops.push(["delete", ref]);
+    }
+  }
+
+  for (let i = 0; i < ops.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const [op, ref, data] of ops.slice(i, i + 400)) {
+      if (op === "update") batch.update(ref, data);
+      else if (op === "set") batch.set(ref, data);
+      else batch.delete(ref);
+    }
+    await batch.commit();
+  }
+  return ops.length;
+}
+
 async function viewLists(body) {
-  const [accSnap, prodSnap] = await Promise.all([getDocs(collection(db, "accounts")), getDocs(collection(db, "products"))]);
+  const [accSnap, prodSnap, floatSnap] = await Promise.all([
+    getDocs(collection(db, "accounts")), getDocs(collection(db, "products")), getDocs(collection(db, "floats")),
+  ]);
   const products = prodSnap.docs.map((d) => d.data());
+  // Float balance by key (wallet_bKash, operator_Robi). A wallet or operator with money in it cannot be deleted.
+  const floatBal = Object.fromEntries(floatSnap.docs.map((d) => [d.id, Number(d.data().balance) || 0]));
   // Ledger accounts a till payment can post to: every asset account, plus any already in use.
   const accounts = accSnap.docs.map((d) => ({ code: d.id, ...d.data() })).filter((a) => a.type === "asset");
   const accountChoices = [...new Map([
@@ -308,6 +386,15 @@ async function viewLists(body) {
     ...settings.paymentMethods.map((m) => [m.account, m.account]),
   ]).entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
+  // orig: the saved lists. ids: for each entry on screen, its position in orig (null when it was just added).
+  const orig = {
+    categories: [...settings.categories],
+    units: [...settings.units],
+    writeOffReasons: [...settings.writeOffReasons],
+    walletProviders: [...(settings.walletProviders || [])],
+    rechargeOperators: [...(settings.rechargeOperators || [])],
+  };
+  const ids = Object.fromEntries(Object.keys(orig).map((k) => [k, orig[k].map((_, i) => i)]));
   const state = {
     categories: [...settings.categories],
     units: [...settings.units],
@@ -317,6 +404,8 @@ async function viewLists(body) {
     rechargeOperators: [...(settings.rechargeOperators || [])],
     methods: settings.paymentMethods.map((m) => ({ ...m, active: m.active !== false })),
   };
+  const walletKey = (name) => floatKey("cashin", name);
+  const operatorKey = (name) => floatKey("recharge", name);
 
   const root = document.createElement("div");
   body.innerHTML = "";
@@ -324,6 +413,10 @@ async function viewLists(body) {
 
   // Read what is typed in the payment-method cards into state before anything is re-drawn.
   const syncFromDom = () => {
+    root.querySelectorAll("[data-chip]").forEach((inp) => {
+      const key = inp.closest("[data-list]").dataset.list;
+      state[key][Number(inp.dataset.chip)] = inp.value.trim();
+    });
     root.querySelectorAll("[data-fee]").forEach((r) => {
       const t = r.dataset.fee, f = (k) => r.querySelector(`[data-k="${k}"]`);
       state.serviceFees[t] = { mode: f("mode").value, value: Number(f("value").value) || 0, min: Number(f("min").value) || 0, max: Number(f("max").value) || 0 };
@@ -338,22 +431,42 @@ async function viewLists(body) {
     });
   };
 
+  // What uses an entry: products for categories and units, float money for wallets and operators.
   const usageOf = (listKey, value) => {
     if (listKey === "categories") return products.filter((p) => p.category === value).length;
     if (listKey === "units") return products.filter((p) => p.unit === value).length;
     return null;
   };
+  const floatOf = (listKey, value) => {
+    if (listKey === "walletProviders") return floatBal[walletKey(value)] || 0;
+    if (listKey === "rechargeOperators") return floatBal[operatorKey(value)] || 0;
+    return null;
+  };
+  const noteOf = (key, v) => {
+    const u = usageOf(key, v);
+    if (u !== null) return `${u} product${u === 1 ? "" : "s"}`;
+    const f = floatOf(key, v);
+    return f !== null ? `float ${money(f)}` : "";
+  };
+  // Why an entry cannot be deleted right now. Empty text means it can.
+  const blockReason = (key, v) => {
+    const n = usageOf(key, v);
+    if (n) return `${n} product${n === 1 ? " uses" : "s use"} "${v}". Change ${n === 1 ? "it" : "them"} to another ${key === "units" ? "unit" : "category"} first.`;
+    const f = floatOf(key, v);
+    if (f) return `"${v}" still holds ${money(f)} in its float. Cash it out or send it first.`;
+    return "";
+  };
 
   const chipSection = (key, title, help) => `
     <section class="card list-card" data-list="${key}">
       <header class="card-head"><h3>${title}</h3><span class="badge">${state[key].length}</span></header>
-      <p class="muted small">${help}</p>
+      <p class="muted small">${help} Tap a name to rename it.</p>
       <div class="chips-edit">
-        ${state[key].map((v, i) => {
-          const used = usageOf(key, v);
-          return `<span class="chip-edit">${esc(v)}${used !== null ? `<small>${used} product${used === 1 ? "" : "s"}</small>` : ""}
-            <button type="button" class="chip-x" data-rm-chip="${i}" aria-label="Remove ${esc(v)}">×</button></span>`;
-        }).join("") || `<span class="muted small">Nothing here yet.</span>`}
+        ${state[key].map((v, i) => `<span class="chip-edit">
+            <input class="chip-input" data-chip="${i}" value="${esc(v)}" maxlength="40" aria-label="Name" />
+            ${noteOf(key, v) ? `<small>${esc(noteOf(key, v))}</small>` : ""}
+            <button type="button" class="chip-x" data-rm-chip="${i}" aria-label="Remove ${esc(v)}">×</button></span>`).join("")
+          || `<span class="muted small">Nothing here yet.</span>`}
       </div>
       <div class="add-row">
         <input data-new maxlength="40" placeholder="Type a new one, then press Enter" aria-label="New ${esc(title)}" />
@@ -427,13 +540,22 @@ async function viewLists(body) {
       if (state[key].some((x) => x.toLowerCase() === v.toLowerCase())) return toast("That is already in the list", "error");
       syncFromDom();
       state[key].push(v);
+      ids[key].push(null);
       paint();
       root.querySelector(`[data-list="${key}"] [data-new]`).focus();
     } else if (b.hasAttribute("data-rm-chip")) {
       const key = sec.dataset.list;
+      const i = Number(b.dataset.rmChip);
       syncFromDom();
-      state[key].splice(Number(b.dataset.rmChip), 1);
-      paint();
+      const why = blockReason(key, state[key][i]);
+      if (why) return alertBox({ title: "Cannot delete", tone: "warn", message: why });
+      const name = state[key][i];
+      confirmBox(`Remove "${name}" from the list? Existing records keep their text.`).then((ok) => {
+        if (!ok) return;
+        state[key].splice(i, 1);
+        ids[key].splice(i, 1);
+        paint();
+      });
     } else if (b.hasAttribute("data-pm-add")) {
       syncFromDom();
       state.methods.push({ key: `m${Date.now().toString(36)}`, label: "", account: accountChoices[0]?.[0] || "1000", credit: false, active: true });
@@ -475,6 +597,13 @@ async function viewLists(body) {
 
   onSubmit(root.querySelector("#lf"), async () => {
     syncFromDom();
+    for (const key of Object.keys(orig)) {
+      if (state[key].some((v) => !v)) throw new Error("A list entry cannot be empty. Type a name or remove it.");
+      const lower = state[key].map((v) => v.toLowerCase());
+      if (new Set(lower).size !== lower.length) throw new Error("Two entries in one list have the same name.");
+    }
+    // Renames and removals reach the data they point to (products, wallet and operator floats) before the lists are saved.
+    await applyListChanges({ orig, state, ids });
     const categories = clean(state.categories), units = clean(state.units), writeOffReasons = clean(state.writeOffReasons);
     const walletProviders = clean(state.walletProviders), rechargeOperators = clean(state.rechargeOperators);
     if (!categories.length || !units.length) throw new Error("Keep at least one category and one unit.");

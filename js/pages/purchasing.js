@@ -1,3 +1,4 @@
+import { reserveJv, writeVoucher } from "../journal.js";
 import { onSubmit, onAction, canWrite } from "../core.js";
 import { unitsOf, unitByKey, toPieces, unitOptions } from "../packs.js";
 import { db, collection, doc, getDocs, query, orderBy, limit, runTransaction, serverTimestamp, increment } from "../firebase.js";
@@ -231,12 +232,13 @@ async function postPurchase({ supplier, invoiceNo, date, payment, lines }) {
     vat = round2(vat);
     const total = round2(net + vat);
 
+    const jvNo = await reserveJv(tx);
     tx.set(counterRef, { purchase: seq }, { merge: true });
     for (const w of writes) {
       tx.update(w.pRef, w.data);
       tx.set(doc(collection(db, "batches")), w.batch);
     }
-    tx.set(doc(collection(db, "journal")), buildJournal({
+    writeVoucher(tx, doc(collection(db, "journal")), buildJournal({
       date,
       memo: `Purchase ${purNo} from ${supplier.name}`,
       ref: purNo,
@@ -245,7 +247,7 @@ async function postPurchase({ supplier, invoiceNo, date, payment, lines }) {
         { account: ACCOUNTS.VAT_INPUT, debit: vat },
         { account: PURCHASE_PAYMENT_ACCOUNT[payment], credit: total },
       ],
-    }));
+    }), jvNo, "purchase");
     if (payment === "credit") tx.update(supplierRef, { balance: increment(total) });
     tx.set(purRef, {
       purNo, supplierId: supplier.id, supplierName: supplier.name, supplierInvoice: invoiceNo,

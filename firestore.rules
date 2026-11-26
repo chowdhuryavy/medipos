@@ -30,7 +30,8 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && myProfile().active == true
         && myProfile().role == 'admin'
-        && !mustChange();
+        && !mustChange()
+        && otpOk();
     }
     // Active staff whose role exists in settings/roles. Admins do not need the roles document,
     // so an admin can always sign in and create it.
@@ -39,7 +40,12 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && myProfile().active == true
         && !mustChange()
-        && myProfile().role in roleMap());
+        && myProfile().role in roleMap()
+        && otpOk());
+    }
+    // Staff who must confirm each sign-in with an email code can read nothing until the code is entered.
+    function otpOk() {
+      return request.auth.token.get('otp', false) == true || myProfile().get('requireOtp', false) != true;
     }
     function canPage(page) {
       return isAdmin() || (isActive()
@@ -116,9 +122,14 @@ service cloud.firestore {
     match /journal/{id} {
       allow read: if canPage('accounting') || canPage('reports');
       // Any staff who post money movements create journal lines through their transaction.
-      allow create: if canWrite('accounting') || canWrite('pos') || canWrite('purchasing')
-        || canWrite('partners') || canWrite('inventory');
-      allow update, delete: if false;
+      // A voucher must carry its JV number. Once posted it is never edited or deleted; only its
+      // reversal link and status change (when it is reversed or numbered).
+      allow create: if (canWrite('accounting') || canWrite('pos') || canWrite('purchasing')
+        || canWrite('partners') || canWrite('inventory'))
+        && request.resource.data.jvNo is string;
+      allow update: if canWrite('accounting')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['jvNo', 'status', 'reversedBy']);
+      allow delete: if false;
     }
     match /expenses/{id} {
       allow read: if canPage('accounting');
@@ -136,10 +147,12 @@ service cloud.firestore {
     // Receipt and purchase numbers can only move forward, so they cannot be reset to reuse a number.
     match /counters/{id} {
       allow read: if isActive();
-      allow create: if canWrite('pos') || canWrite('purchasing');
-      allow update: if (canWrite('pos') || canWrite('purchasing'))
+      // Every area that posts to the journal takes a journal voucher number from here.
+      allow create: if canWrite('pos') || canWrite('purchasing') || canWrite('accounting') || canWrite('partners') || canWrite('inventory');
+      allow update: if (canWrite('pos') || canWrite('purchasing') || canWrite('accounting') || canWrite('partners') || canWrite('inventory'))
         && request.resource.data.get('sale', 0) >= resource.data.get('sale', 0)
-        && request.resource.data.get('purchase', 0) >= resource.data.get('purchase', 0);
+        && request.resource.data.get('purchase', 0) >= resource.data.get('purchase', 0)
+        && request.resource.data.get('jv', 0) >= resource.data.get('jv', 0);
       allow delete: if false;
     }
     match /settings/general {
@@ -159,7 +172,8 @@ service cloud.firestore {
       // Wallet and operator float balances: sales and top-ups update them; staff who sell or keep accounts can read them.
       allow read: if canPage('pos') || canPage('accounting') || canPage('dashboard');
       allow create, update: if canWrite('pos') || canWrite('accounting');
-      allow delete: if false;
+      // Only administrators delete a float, and only when a wallet or operator is renamed (its balance moves) or removed at zero.
+      allow delete: if isAdmin();
     }
     match /notifications/{id} {
       // Bell notifications: each person sees those addressed to their role (admins see all). Anyone active may raise one.

@@ -1,5 +1,6 @@
+import { reserveJv, writeVoucher } from "../journal.js";
 import { onSubmit, onAction, onDelegated } from "../core.js";
-import { db, collection, doc, getDocs, query, where, addDoc, updateDoc, runTransaction, serverTimestamp } from "../firebase.js";
+import { db, collection, doc, getDocs, query, where, addDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp, writeBatch } from "../firebase.js";
 import {
   settings, money, esc, icon, toast, openModal, confirmBox, alertBox, todayISO, daysFromNowISO,
   round2, buildJournal, allocateFEFO, audit, ACCOUNTS,
@@ -12,6 +13,8 @@ const DAY = 864e5;
 const NEW_DAYS = 7;
 const active = (p) => p.active !== false;
 let knownSubGroups = [];
+
+let invTab = "products"; // "products" or "order": kept across re-renders
 
 export async function render(el) {
   const [pSnap, bSnap] = await Promise.all([
@@ -48,7 +51,13 @@ export async function render(el) {
     ["Has expired stock", rows.filter((r) => r.expiredQty > 0).length, "alert"],
   ];
 
+  const orderCount = products.filter((p) => p.orderMarked).length;
   el.innerHTML = `
+    <div class="tabs inv-tabs" role="tablist">
+      <button class="tab ${invTab === "products" ? "active" : ""}" data-itab="products" role="tab">Products</button>
+      <button class="tab ${invTab === "order" ? "active" : ""}" data-itab="order" role="tab">Order list <span class="badge">${orderCount}</span></button>
+    </div>
+    ${invTab === "order" ? orderCardHtml(products) : `
     <section class="kpi-grid five">
       ${kpis.map(([label, value, ic], i) => `
         <article class="card kpi hover-lift" style="--d:${i * 60}ms">
@@ -65,8 +74,6 @@ export async function render(el) {
       </ul>
       ${lowItems.length > 8 ? `<p class="muted small">Showing 8 of ${lowItems.length}. Use the Low stock filter below to see all.</p>` : ""}
     </section>` : ""}
-
-    ${orderCardHtml(products)}
 
     <section class="card">
       <div class="toolbar">
@@ -92,7 +99,7 @@ export async function render(el) {
           <tbody></tbody>
         </table>
       </div>
-    </section>`;
+    </section>`}`;
 
   const tbody = el.querySelector("#i-table tbody");
   const reload = () => render(el);
@@ -132,7 +139,8 @@ export async function render(el) {
           <button class="icon-btn sm" data-edit="${esc(r.id)}" aria-label="Edit product">${icon("edit")}</button>
           ${active(r)
             ? `<button class="icon-btn sm hover-danger" data-off="${esc(r.id)}" aria-label="Deactivate">${icon("trash")}</button>`
-            : `<button class="icon-btn sm" data-on="${esc(r.id)}" aria-label="Reactivate">${icon("check")}</button>`}
+            : `<button class="icon-btn sm" data-on="${esc(r.id)}" aria-label="Reactivate">${icon("check")}</button>
+              <button class="icon-btn sm hover-danger" data-purge="${esc(r.id)}" aria-label="Delete permanently">${icon("trash")}</button>`}
         </td>
       </tr>`).join("") || `<tr><td colspan="10" class="muted center">No products match. Try another search or filter.</td></tr>`;
   }
@@ -147,6 +155,20 @@ export async function render(el) {
     if (!b) return;
     if (b.dataset.edit) return openProduct(rows.find((r) => r.id === b.dataset.edit), reload);
     if (b.dataset.adjust) return openStock({ products, batches, preId: b.dataset.adjust, reload });
+    if (b.dataset.purge) {
+      // Permanent delete: only for an inactive product with no stock and no batches (it was never bought or sold).
+      const p = rows.find((r) => r.id === b.dataset.purge);
+      if (!p) return;
+      if ((Number(p.stock) || 0) > 0) return alertBox({ title: "Cannot delete", tone: "warn", message: `"${p.name}" still has stock. Adjust the stock to zero first.` });
+      const batchSnap = await getDocs(query(collection(db, "batches"), where("productId", "==", p.id)));
+      if (!batchSnap.empty) return alertBox({ title: "Cannot delete", tone: "warn", message: `"${p.name}" has purchase history, so it stays as an inactive product for the records.` });
+      if (!(await confirmBox(`Delete "${p.name}" permanently? This cannot be undone.`))) return;
+      await deleteDoc(doc(db, "products", p.id));
+      await audit("product.delete", { name: p.name });
+      toast("Product deleted", "success");
+      reload();
+      return;
+    }
     if (b.dataset.off || b.dataset.on) {
       const id = b.dataset.off || b.dataset.on;
       const p = rows.find((r) => r.id === id);
@@ -160,6 +182,7 @@ export async function render(el) {
   });
 
   paint();
+  el.querySelectorAll("[data-itab]").forEach((b) => b.addEventListener("click", () => { invTab = b.dataset.itab; render(el); }));
   bindOrderCard(el, products, () => render(el));
 }
 
@@ -406,16 +429,17 @@ async function receiveStock({ productId, pieces, cost, expiry, batchNo }) {
     const newStock = oldStock + pieces;
     const newCost = round4((oldStock * oldCost + pieces * cost) / newStock);
     const value = round2(pieces * cost);
+    const jvNo = value > 0 ? await reserveJv(tx) : null;
     tx.update(pRef, { stock: newStock, costPrice: newCost, updatedAt: serverTimestamp() });
     tx.set(doc(collection(db, "batches")), {
       productId, productName: p.name, batchNo: batchNo || "-", expiry, qty: pieces, remaining: pieces, cost, createdAt: serverTimestamp(),
     });
     if (value > 0) {
-      tx.set(doc(collection(db, "journal")), buildJournal({
+      writeVoucher(tx, doc(collection(db, "journal")), buildJournal({
         memo: `Stock in: ${p.name} x${pieces} ${baseName(p)}`,
         ref: `ADJ-${Date.now()}`,
         lines: [{ account: ACCOUNTS.INVENTORY, debit: value }, { account: ACCOUNTS.EQUITY, credit: value }],
-      }));
+      }), jvNo, "stock");
     }
   });
   await audit("stock.in", { productId, pieces, expiry });
@@ -437,17 +461,21 @@ async function writeOff({ productId, pieces, reason, batchIds }) {
     let value = 0;
     for (const step of plan) {
       const b = batches.find((x) => x.id === step.id);
-      tx.update(doc(db, "batches", step.id), { remaining: b.remaining - step.take });
       value += step.take * (Number(b.cost) || 0);
     }
     value = round2(value);
+    const jvNo = value > 0 ? await reserveJv(tx) : null;
+    for (const step of plan) {
+      const b = batches.find((x) => x.id === step.id);
+      tx.update(doc(db, "batches", step.id), { remaining: b.remaining - step.take });
+    }
     tx.update(pRef, { stock: (Number(p.stock) || 0) - pieces, updatedAt: serverTimestamp() });
     if (value > 0) {
-      tx.set(doc(collection(db, "journal")), buildJournal({
+      writeVoucher(tx, doc(collection(db, "journal")), buildJournal({
         memo: `Stock out (${reason}): ${p.name} x${pieces} ${baseName(p)}`,
         ref: `ADJ-${Date.now()}`,
         lines: [{ account: ACCOUNTS.OTHER_EXPENSE, debit: value }, { account: ACCOUNTS.INVENTORY, credit: value }],
-      }));
+      }), jvNo, "stock");
     }
   });
   await audit("stock.out", { productId, pieces, reason });

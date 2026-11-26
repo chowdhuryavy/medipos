@@ -81,17 +81,18 @@ export async function sendReportFor(schedule, reportDate, today) {
   const shop = general.shopName || "MediPOS";
   const title = `${shop} · Daily reports`;
   const subtitle = `Sales day ${reportDate} · Sent ${new Date().toLocaleString("en-GB", { timeZone: schedule.timezone || DEFAULT_TZ })}`;
+  const cfg = await loadEmailConfig();
+  const brand = { shop, color: cfg.brandColor, subtitle };
   const files = [];
   const formats = schedule.formats?.length ? schedule.formats : ["pdf"];
   if (formats.includes("pdf")) {
-    files.push({ filename: `${shop.replace(/\W+/g, "-")}-reports-${reportDate}.pdf`, content: toPdf({ title, subtitle, footer: `${shop} · MediPOS`, sections }) });
+    files.push({ filename: `${shop.replace(/\W+/g, "-")}-reports-${reportDate}.pdf`, content: toPdf({ title, subtitle, footer: `${shop} · MediPOS`, sections, brand }) });
   }
   if (formats.includes("xlsx")) {
-    files.push({ filename: `${shop.replace(/\W+/g, "-")}-reports-${reportDate}.xlsx`, content: toXlsx(sections) });
+    files.push({ filename: `${shop.replace(/\W+/g, "-")}-reports-${reportDate}.xlsx`, content: toXlsx(sections, brand) });
   }
 
   // Email body: the key figures of each chosen report, the attachments listed below.
-  const cfg = await loadEmailConfig();
   const pal = brandPalette(cfg.brandColor);
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:15px;color:#334155">Here are the reports for <strong>${esc(reportDate)}</strong>. Stock and expiry are as of the time this was sent.</p>
@@ -103,7 +104,7 @@ export async function sendReportFor(schedule, reportDate, today) {
     <p style="margin:18px 0 0;font-size:13px;color:#64748b">Attached: ${files.map((f) => esc(f.filename)).join(", ") || "none"}</p>`;
   const html = shell({
     cfg, pal, subject: `${shop} reports ${reportDate}`, preheader: `Reports for ${reportDate}`,
-    icon: "&#128202;", eyebrow: "Daily report", heading: `Reports for ${reportDate}`,
+    icon: "&#128202;", eyebrow: esc(cfg.shopName || shop), heading: `Reports for ${reportDate}`,
     bodyHtml, footerText: cfg.emailFooter,
   });
   const text = sections.map((s) => `${s.title}\n${s.summary.map(([l, v]) => `${l}: ${v}`).join("\n")}`).join("\n\n");

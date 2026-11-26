@@ -1,22 +1,24 @@
+import { reserveJv, writeVoucher, reverseVoucher, numberExistingVouchers, voucherHtml } from "../journal.js";
 import { manageExpenseCategories, expenseCategories } from "../expense-categories.js";
 import { onSubmit, onAction, downloadCSV } from "../core.js";
 import { printHtml } from "../print.js";
 import { SERVICE_TYPES, serviceProviders, floatKey } from "../services.js";
-import { db, collection, doc, getDoc, getDocs, query, where, orderBy, limit, addDoc, setDoc, runTransaction, serverTimestamp } from "../firebase.js";
+import { db, collection, doc, getDoc, getDocs, query, where, orderBy, limit, addDoc, setDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp } from "../firebase.js";
 import {
-  session, money, esc, icon, toast, openModal, todayISO, monthStartISO, round2,
+  session, money, esc, icon, toast, openModal, confirmBox, alertBox, canWrite, todayISO, monthStartISO, round2,
   buildJournal, audit, ACCOUNTS, ensureChartOfAccounts, settings, paymentMethod,
 } from "../core.js";
 
 const TABS = [
   ["overview", "Overview"],
-  ["journal", "Journal"],
+  ["journal", "Vouchers"],
+  ["ledger", "General ledger"],
   ["chart", "Chart of accounts"],
   ["expenses", "Expenses"],
   ["statements", "Statements"],
 ];
 
-const VIEWS = { overview: viewOverview, journal: viewJournal, chart: viewChart, expenses: viewExpenses, statements: viewStatements };
+const VIEWS = { overview: viewOverview, journal: viewJournal, ledger: viewLedger, chart: viewChart, expenses: viewExpenses, statements: viewStatements };
 
 export async function render(el) {
   el.innerHTML = `
@@ -202,13 +204,14 @@ function openFloatTopUp(accounts, reload) {
           const ref = doc(db, "floats", key);
           const snap = await tx.get(ref);
           const before = snap.exists() ? Number(snap.data().balance) || 0 : 0;
+          const jvNo = await reserveJv(tx);
           tx.set(ref, { balance: round2(before + amount), kind: String(f.get("kind")), provider, updatedAt: serverTimestamp() }, { merge: true });
-          tx.set(doc(collection(db, "journal")), buildJournal({
+          writeVoucher(tx, doc(collection(db, "journal")), buildJournal({
             date: todayISO(),
             memo: `Float top-up · ${provider}${f.get("note") ? " · " + f.get("note") : ""}`,
             ref: key,
             lines: [{ account: ACCOUNTS.WALLET_FLOAT, debit: amount }, { account: method, credit: amount }],
-          }));
+          }), jvNo, "float");
         });
         await audit("float.topup", { key, amount });
         toast("Float updated", "success");
@@ -227,69 +230,214 @@ async function viewJournal(body) {
   const accounts = await loadAccounts();
   const name = (code) => accounts.find((a) => a.code === code)?.name || code;
   const today = todayISO();
+  const canEdit = canWrite("accounting");
+  let byId = new Map();
+  let shown = [];
   body.innerHTML = `
     <section class="card">
       <div class="toolbar wrap">
-        <h3>Journal</h3>
+        <h3>Journal vouchers</h3>
         <div class="grow"></div>
-        <button class="btn primary" id="j-new">${icon("plus")}<span>Manual entry</span></button>
+        ${canEdit ? `<button class="btn ghost hidden" id="j-number">${icon("sync")}<span>Number existing entries</span></button>` : ""}
+        ${canEdit ? `<button class="btn primary" id="j-new">${icon("plus")}<span>Manual entry</span></button>` : ""}
       </div>
       <div class="filter-row">
         <label class="inline">From<input type="date" id="j-from" /></label>
         <label class="inline">To<input type="date" id="j-to" value="${today}" /></label>
-        <input type="search" id="j-q" placeholder="Search memo, reference or account" aria-label="Search journal" />
-        <button class="btn ghost sm" id="j-apply">${icon("search")}<span>Apply</span></button>
+        <select id="j-status" aria-label="Status">
+          <option value="">All vouchers</option><option value="posted">Posted</option><option value="reversed">Reversed</option><option value="reversal">Reversal vouchers</option>
+        </select>
+        <input type="search" id="j-q" placeholder="Search JV no, narration, reference, account or amount" aria-label="Search vouchers" />
+        <button class="btn ghost sm" id="j-apply">${icon("search")}<span>Search</span></button>
         <button class="btn ghost sm" id="j-clear">Reset</button>
         <button class="btn ghost sm" id="j-csv">${icon("download")}<span>CSV</span></button>
       </div>
-      <p class="muted small" id="j-info">Tap an entry to see its lines.</p>
+      <p class="muted small" id="j-info">Tap a voucher to see its lines. Use View to print it.</p>
       <div class="table-wrap" id="j-table"></div>
     </section>`;
 
-  let shown = [];
+  const statusBadge = (e) => {
+    if (e.status === "reversed") return `<span class="badge danger">Reversed by ${esc(e.reversedBy)}</span>`;
+    if (e.reverses) return `<span class="badge warn">Reversal of ${esc(e.reverses)}</span>`;
+    return `<span class="badge ok">Posted</span>`;
+  };
+
   const load = async () => {
     const from = body.querySelector("#j-from").value;
     const to = body.querySelector("#j-to").value || today;
     const q = body.querySelector("#j-q").value.trim().toLowerCase();
+    const status = body.querySelector("#j-status").value;
     body.querySelector("#j-table").innerHTML = `<div class="skeleton"></div>`;
     const snap = from
       ? await getDocs(query(collection(db, "journal"), where("date", ">=", from), where("date", "<=", to), orderBy("date", "desc"), limit(500)))
       : await getDocs(query(collection(db, "journal"), where("date", "<=", to), orderBy("date", "desc"), limit(200)));
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    shown = all.filter((e) => !q || [e.memo, e.ref, e.by, ...(e.lines || []).map((l) => `${l.account} ${name(l.account)}`)]
-      .some((v) => String(v || "").toLowerCase().includes(q)));
-    body.querySelector("#j-info").textContent = `${shown.length} entr${shown.length === 1 ? "y" : "ies"}${from ? ` from ${from}` : ""} to ${to}. Tap an entry to see its lines.`;
+    byId = new Map(all.map((e) => [e.id, e]));
+    const unnumbered = all.filter((e) => !e.jvNo).length;
+    if (canEdit) body.querySelector("#j-number")?.classList.toggle("hidden", !unnumbered);
+    shown = all
+      .filter((e) => !status || (status === "reversal" ? !!e.reverses : e.status === status))
+      .filter((e) => !q || [e.jvNo, e.memo, e.ref, e.by, ...(e.lines || []).map((l) => `${l.account} ${name(l.account)} ${l.debit || ""} ${l.credit || ""}`)]
+        .some((v) => String(v || "").toLowerCase().includes(q)))
+      .sort((a, b) => String(b.jvNo || "").localeCompare(String(a.jvNo || "")) || String(b.date).localeCompare(String(a.date)));
+    body.querySelector("#j-info").textContent = `${shown.length} voucher${shown.length === 1 ? "" : "s"}${from ? ` from ${from}` : ""} to ${to}.${unnumbered ? ` ${unnumbered} entr${unnumbered === 1 ? "y has" : "ies have"} no JV number yet.` : ""}`;
     body.querySelector("#j-table").innerHTML = `
       <table class="stack-mobile">
-        <thead><tr><th>Date</th><th>Memo</th><th>Ref</th><th class="r">Debit</th><th class="r">Credit</th><th>By</th></tr></thead>
+        <thead><tr><th>JV no.</th><th>Date</th><th>Narration</th><th>Ref</th><th class="r">Debit</th><th class="r">Credit</th><th>Status</th><th></th></tr></thead>
         <tbody>
           ${shown.slice(0, 300).map((e) => `
             <tr class="expandable" data-jid="${esc(e.id)}">
-              <td data-label="Date">${esc(e.date)}</td><td data-label="Memo">${esc(e.memo)}</td><td data-label="Ref">${esc(e.ref || "")}</td>
-              <td data-label="Debit" class="r">${money(e.debit)}</td><td data-label="Credit" class="r">${money(e.credit)}</td><td data-label="By">${esc(e.by || "")}</td>
+              <td data-label="JV no."><strong>${esc(e.jvNo || "—")}</strong></td>
+              <td data-label="Date">${esc(e.date)}</td><td data-label="Narration">${esc(e.memo)}</td><td data-label="Ref">${esc(e.ref || "")}</td>
+              <td data-label="Debit" class="r">${money(e.debit)}</td><td data-label="Credit" class="r">${money(e.credit)}</td>
+              <td data-label="Status">${statusBadge(e)}</td>
+              <td class="actions">
+                <button class="icon-btn sm" data-view="${esc(e.id)}" aria-label="View ${esc(e.jvNo || "entry")}">${icon("search")}</button>
+                ${canEdit && e.jvNo && !e.reverses && e.status !== "reversed"
+                  ? `<button class="btn ghost sm" data-reverse="${esc(e.id)}">Reverse</button>` : ""}
+              </td>
             </tr>
-            <tr class="detail hidden" data-detail="${esc(e.id)}"><td colspan="6">
+            <tr class="detail hidden" data-detail="${esc(e.id)}"><td colspan="8">
               <table class="mini">${(e.lines || []).map((l) => `<tr><td>${esc(l.account)} · ${esc(name(l.account))}</td><td class="r">${l.debit ? money(l.debit) : ""}</td><td class="r">${l.credit ? money(l.credit) : ""}</td></tr>`).join("")}</table>
-            </td></tr>`).join("") || `<tr><td colspan="6" class="muted center">No entries match.</td></tr>`}
+            </td></tr>`).join("") || `<tr><td colspan="8" class="muted center">No vouchers match.</td></tr>`}
         </tbody>
       </table>`;
   };
 
   body.querySelector("#j-table").addEventListener("click", (e) => {
+    const view = e.target.closest("[data-view]");
+    if (view) return openVoucher(byId.get(view.dataset.view), name, () => load());
+    const rev = e.target.closest("[data-reverse]");
+    if (rev) return openReverse(byId.get(rev.dataset.reverse), () => load());
+    if (e.target.closest("button, a")) return;
     const tr = e.target.closest(".expandable");
     if (tr) body.querySelector(`[data-detail="${CSS.escape(tr.dataset.jid)}"]`)?.classList.toggle("hidden");
   });
   body.querySelector("#j-apply").addEventListener("click", load);
+  body.querySelector("#j-status").addEventListener("change", load);
   body.querySelector("#j-q").addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
   body.querySelector("#j-clear").addEventListener("click", () => {
-    body.querySelector("#j-from").value = ""; body.querySelector("#j-to").value = today; body.querySelector("#j-q").value = ""; load();
+    body.querySelector("#j-from").value = ""; body.querySelector("#j-to").value = today;
+    body.querySelector("#j-q").value = ""; body.querySelector("#j-status").value = ""; load();
   });
   body.querySelector("#j-csv").addEventListener("click", () => {
-    const rows = [["Date", "Memo", "Ref", "Account", "Account name", "Debit", "Credit"]];
-    shown.forEach((e) => (e.lines || []).forEach((l) => rows.push([e.date, e.memo, e.ref || "", l.account, name(l.account), l.debit || 0, l.credit || 0])));
-    downloadCSV(`journal-${todayISO()}.csv`, rows);
+    const rows = [["JV no.", "Date", "Narration", "Ref", "Status", "Account", "Account name", "Debit", "Credit"]];
+    shown.forEach((e) => (e.lines || []).forEach((l) => rows.push([e.jvNo || "", e.date, e.memo, e.ref || "", e.status || "posted", l.account, name(l.account), l.debit || 0, l.credit || 0])));
+    downloadCSV(`vouchers-${todayISO()}.csv`, rows);
   });
-  body.querySelector("#j-new").addEventListener("click", () => openManualEntry(accounts, () => viewJournal(body)));
+  body.querySelector("#j-new")?.addEventListener("click", () => openManualEntry(accounts, () => viewJournal(body)));
+  onAction(body.querySelector("#j-number"), async () => {
+    const n = await numberExistingVouchers();
+    toast(n ? `${n} entries numbered` : "Nothing to number", "success");
+    load();
+  });
+  load();
+}
+
+// Printable voucher, shown in a dialog first.
+function openVoucher(v, name, reload) {
+  if (!v) return;
+  const html = voucherHtml(v, {
+    shop: settings.shopName || "MediPOS", address: settings.shopAddress || "", phone: settings.shopPhone || "", accountName: name,
+  });
+  openModal(v.jvNo ? `Voucher ${v.jvNo}` : "Voucher", `<div class="jv-view">${html}</div>
+    <div class="form-actions"><button class="btn ghost" data-cancel>Close</button><button class="btn primary" id="jv-print">${icon("print")}<span>Print</span></button></div>`,
+  (body, close) => {
+    body.querySelector("[data-cancel]").addEventListener("click", close);
+    body.querySelector("#jv-print").addEventListener("click", () => printHtml(`Journal voucher ${v.jvNo || ""}`, html));
+  });
+}
+
+// A reversal is a new voucher with its own number. The original is kept, marked reversed.
+function openReverse(v, reload) {
+  if (!v) return;
+  openModal(`Reverse ${v.jvNo}`, `
+    <form id="rv" class="form-grid">
+      <p class="span-2 muted small">A reversal posts a new voucher with its own JV number that cancels ${esc(v.jvNo)}. Nothing is deleted; both vouchers stay in the books.</p>
+      <label class="span-2">Reason<input name="reason" maxlength="120" placeholder="e.g. wrong account, duplicate" /></label>
+      <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn danger" type="submit">Post reversal</button></div>
+    </form>`, (body, close) => {
+    body.querySelector("[data-cancel]").addEventListener("click", close);
+    onSubmit(body.querySelector("#rv"), async (e) => {
+      e.preventDefault();
+      const jvNo = await reverseVoucher(v.id, String(new FormData(e.target).get("reason") || "").trim());
+      toast(`Reversed. New voucher ${jvNo}`, "success");
+      close();
+      reload();
+    });
+  });
+}
+
+async function viewLedger(body) {
+  const accounts = await loadAccounts();
+  const today = todayISO();
+  body.innerHTML = `
+    <section class="card">
+      <div class="toolbar wrap"><h3>General ledger</h3></div>
+      <p class="muted small">Every voucher line for one account, in date order, with the running balance. Debit balances show as Dr, credit balances as Cr.</p>
+      <div class="filter-row">
+        <label class="inline">Account<select id="g-acc">${accounts.map((a) => `<option value="${esc(a.code)}">${esc(a.code)} · ${esc(a.name)}</option>`).join("")}</select></label>
+        <label class="inline">From<input type="date" id="g-from" value="${today.slice(0, 4)}-01-01" /></label>
+        <label class="inline">To<input type="date" id="g-to" value="${today}" /></label>
+        <button class="btn ghost sm" id="g-apply">${icon("search")}<span>Show</span></button>
+        <button class="btn ghost sm" id="g-csv">${icon("download")}<span>CSV</span></button>
+      </div>
+      <div class="table-wrap" id="g-out"></div>
+    </section>`;
+  const name = (code) => accounts.find((a) => a.code === code)?.name || code;
+  const bal = (x) => `${money(Math.abs(x))} ${x >= 0 ? "Dr" : "Cr"}`;
+  let table = [];
+  let byId = new Map();
+
+  const load = async () => {
+    const code = body.querySelector("#g-acc").value;
+    const from = body.querySelector("#g-from").value || "0000-01-01";
+    const to = body.querySelector("#g-to").value || today;
+    body.querySelector("#g-out").innerHTML = `<div class="skeleton"></div>`;
+    const snap = await getDocs(query(collection(db, "journal"), where("date", "<=", to), orderBy("date", "asc")));
+    byId = new Map(snap.docs.map((d) => [d.id, { id: d.id, ...d.data() }]));
+    let opening = 0;
+    const lines = [];
+    for (const e of byId.values()) {
+      for (const l of e.lines || []) {
+        if (l.account !== code) continue;
+        const amt = (Number(l.debit) || 0) - (Number(l.credit) || 0);
+        if (e.date < from) opening += amt;
+        else lines.push({ id: e.id, date: e.date, jvNo: e.jvNo || "", memo: e.memo, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0, amt });
+      }
+    }
+    let run = opening, dr = 0, cr = 0;
+    table = lines.map((r) => { run += r.amt; dr += r.debit; cr += r.credit; return { ...r, running: run }; });
+    body.querySelector("#g-out").innerHTML = `
+      <table class="stack-mobile">
+        <thead><tr><th>Date</th><th>JV no.</th><th>Narration</th><th class="r">Debit</th><th class="r">Credit</th><th class="r">Balance</th></tr></thead>
+        <tbody>
+          <tr class="muted"><td colspan="5"><strong>Opening balance</strong> ${from === "0000-01-01" ? "" : `before ${esc(from)}`}</td><td class="r">${bal(opening)}</td></tr>
+          ${table.map((r) => `<tr>
+              <td data-label="Date">${esc(r.date)}</td>
+              <td data-label="JV no."><button class="link-btn" data-gview="${esc(r.id)}">${esc(r.jvNo || "—")}</button></td>
+              <td data-label="Narration">${esc(r.memo)}</td>
+              <td data-label="Debit" class="r">${r.debit ? money(r.debit) : ""}</td>
+              <td data-label="Credit" class="r">${r.credit ? money(r.credit) : ""}</td>
+              <td data-label="Balance" class="r">${bal(r.running)}</td></tr>`).join("")
+            || `<tr><td colspan="6" class="muted center">No lines for ${esc(code)} in this period.</td></tr>`}
+        </tbody>
+        <tfoot><tr><th colspan="3">Period total · ${esc(code)} ${esc(name(code))}</th><th class="r">${money(dr)}</th><th class="r">${money(cr)}</th><th class="r">${bal(run)}</th></tr></tfoot>
+      </table>`;
+    body.querySelector("#g-out").dataset.acc = code;
+  };
+
+  body.querySelector("#g-apply").addEventListener("click", load);
+  body.querySelector("#g-out").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-gview]");
+    if (b) openVoucher(byId.get(b.dataset.gview), name, () => {});
+  });
+  body.querySelector("#g-csv").addEventListener("click", () => {
+    const code = body.querySelector("#g-acc").value;
+    const rows = [["Date", "JV no.", "Narration", "Debit", "Credit", "Balance"]];
+    table.forEach((r) => rows.push([r.date, r.jvNo, r.memo, r.debit, r.credit, r.running]));
+    downloadCSV(`ledger-${code}-${todayISO()}.csv`, rows);
+  });
   load();
 }
 
@@ -349,7 +497,10 @@ function openManualEntry(accounts, reload) {
       })).filter((l) => l.account);
       try {
         const journal = buildJournal({ date: String(f.get("date")), memo: String(f.get("memo")), ref: String(f.get("ref") || ""), lines });
-        await addDoc(collection(db, "journal"), journal);
+        await runTransaction(db, async (tx) => {
+          const jvNo = await reserveJv(tx);
+          writeVoucher(tx, doc(collection(db, "journal")), journal, jvNo, "manual");
+        });
         await audit("journal.manual", { memo: journal.memo, amount: journal.debit });
         toast("Entry posted", "success");
         close();
@@ -364,7 +515,20 @@ function openManualEntry(accounts, reload) {
 /* ───────── Chart of accounts ───────── */
 
 async function viewChart(body) {
-  const accounts = await loadAccounts();
+  const [accounts, journalSnap] = await Promise.all([loadAccounts(), getDocs(collection(db, "journal"))]);
+  // Entries per account. An account with entries keeps its place in the books, so it cannot be deleted.
+  const entries = new Map();
+  journalSnap.docs.forEach((d) => (d.data().lines || []).forEach((l) => entries.set(l.account, (entries.get(l.account) || 0) + 1)));
+  const systemCodes = new Set(Object.values(ACCOUNTS));
+  const paymentCodes = new Set(settings.paymentMethods.map((m) => m.account));
+  const isSystem = (code) => systemCodes.has(code);
+  const deleteBlock = (a) => {
+    if (isSystem(a.code)) return "The system posts sales, purchases and payments to this account, so it cannot be deleted. You can still rename it.";
+    if (paymentCodes.has(a.code)) return "A payment method posts to this account. Point that payment method somewhere else first.";
+    const n = entries.get(a.code) || 0;
+    if (n) return `This account has ${n} journal ${n === 1 ? "entry" : "entries"}, so it cannot be deleted.`;
+    return "";
+  };
   body.innerHTML = `
     <section class="card">
       <div class="toolbar">
@@ -373,45 +537,82 @@ async function viewChart(body) {
         <button class="btn ghost" id="ch-seed">${icon("sync")}<span>Load defaults</span></button>
         <button class="btn primary" id="ch-new">${icon("plus")}<span>New account</span></button>
       </div>
+      <p class="muted small">Rename any account or change its type. The code is fixed once created. Accounts with journal entries cannot be deleted. Accounts marked “System” are used by sales, purchases and payments.</p>
       <div class="table-wrap"><table class="stack-mobile">
-        <thead><tr><th>Code</th><th>Name</th><th>Type</th></tr></thead>
+        <thead><tr><th>Code</th><th>Name</th><th>Type</th><th class="r">Entries</th><th></th></tr></thead>
         <tbody>
-          ${accounts.map((a) => `<tr class="row-in"><td data-label="Code">${esc(a.code)}</td><td data-label="Name">${esc(a.name)}</td><td data-label="Type"><span class="badge">${esc(a.type)}</span></td></tr>`).join("")
-            || `<tr><td colspan="3" class="muted center">No accounts yet. Tap “Load defaults”.</td></tr>`}
+          ${accounts.map((a) => `<tr class="row-in">
+            <td data-label="Code">${esc(a.code)}${isSystem(a.code) ? ` <span class="badge">System</span>` : ""}</td>
+            <td data-label="Name">${esc(a.name)}</td>
+            <td data-label="Type"><span class="badge">${esc(a.type)}</span></td>
+            <td data-label="Entries" class="r">${entries.get(a.code) || 0}</td>
+            <td class="actions">
+              <button class="icon-btn sm" data-acc-edit="${esc(a.code)}" aria-label="Edit account ${esc(a.code)}">${icon("edit")}</button>
+              <button class="icon-btn sm hover-danger" data-acc-del="${esc(a.code)}" aria-label="Delete account ${esc(a.code)}">${icon("trash")}</button>
+            </td></tr>`).join("")
+            || `<tr><td colspan="5" class="muted center">No accounts yet. Tap “Load defaults”.</td></tr>`}
         </tbody>
       </table></div>
     </section>`;
+  const byCode = new Map(accounts.map((a) => [a.code, a]));
   onAction(body.querySelector("#ch-seed"), async () => {
     await ensureChartOfAccounts();
     toast("Default accounts loaded", "success");
     viewChart(body);
   });
-  body.querySelector("#ch-new").addEventListener("click", () => openAccountForm(() => viewChart(body)));
+  body.querySelector("#ch-new").addEventListener("click", () => openAccountForm(null, () => viewChart(body), isSystem));
+  body.querySelectorAll("[data-acc-edit]").forEach((b) => b.addEventListener("click", () =>
+    openAccountForm(byCode.get(b.dataset.accEdit), () => viewChart(body), isSystem)));
+  body.querySelectorAll("[data-acc-del]").forEach((b) => b.addEventListener("click", async () => {
+    const a = byCode.get(b.dataset.accDel);
+    const why = deleteBlock(a);
+    if (why) return alertBox({ title: "Cannot delete", tone: "warn", message: why });
+    if (!(await confirmBox(`Delete account ${a.code} · ${a.name}? This cannot be undone.`))) return;
+    await deleteDoc(doc(db, "accounts", a.code));
+    await audit("account.delete", { code: a.code, name: a.name });
+    toast("Account deleted", "success");
+    viewChart(body);
+  }));
 }
 
-function openAccountForm(reload) {
-  openModal("New account", `
+// One form for create and edit. The code is fixed after creation; accounts the system uses keep their type.
+function openAccountForm(account, reload, isSystem = () => false) {
+  const editing = !!account;
+  const locked = editing && isSystem(account.code);
+  const a = account || { code: "", name: "", type: "asset" };
+  openModal(editing ? `Edit ${a.code}` : "New account", `
     <form id="af" class="form-grid">
-      <label>Code<input name="code" inputmode="numeric" required placeholder="e.g. 6500" /></label>
+      <label>Code<input name="code" inputmode="numeric" required placeholder="e.g. 6500" value="${esc(a.code)}" ${editing ? "readonly" : ""} /></label>
       <label>Type
-        <select name="type">
-          <option value="asset">Asset</option><option value="liability">Liability</option><option value="equity">Equity</option>
-          <option value="revenue">Revenue</option><option value="expense">Expense</option>
+        <select name="type" ${locked ? "disabled" : ""}>
+          ${[["asset", "Asset"], ["liability", "Liability"], ["equity", "Equity"], ["revenue", "Revenue"], ["expense", "Expense"]]
+            .map(([v, l]) => `<option value="${v}" ${a.type === v ? "selected" : ""}>${l}</option>`).join("")}
         </select>
       </label>
-      <label class="span-2">Name<input name="name" required /></label>
-      <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">Create</button></div>
+      <label class="span-2">Name<input name="name" required maxlength="80" value="${esc(a.name)}" /></label>
+      <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">${editing ? "Save changes" : "Create"}</button></div>
     </form>`, (body, close) => {
     body.querySelector("[data-cancel]").addEventListener("click", close);
     onSubmit(body.querySelector("#af"), async (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
-      const code = String(f.get("code")).trim();
-      const ref = doc(db, "accounts", code);
-      if ((await getDoc(ref)).exists()) return toast("That code already exists", "error");
-      await setDoc(ref, { code, name: String(f.get("name")).trim(), type: String(f.get("type")) });
-      await audit("account.create", { code });
-      toast("Account created", "success");
+      const name = String(f.get("name")).trim();
+      if (!name) throw new Error("Give the account a name.");
+      if (editing) {
+        const patch = { name };
+        if (!locked) patch.type = String(f.get("type"));
+        await updateDoc(doc(db, "accounts", a.code), patch);
+        await audit("account.update", { code: a.code, ...patch });
+        toast("Account saved", "success");
+      } else {
+        const code = String(f.get("code")).trim();
+        if (!/^\d{4,6}$/.test(code)) throw new Error("The code must be 4 to 6 digits.");
+        const ref = doc(db, "accounts", code);
+        if ((await getDoc(ref)).exists()) throw new Error("That code already exists.");
+        await setDoc(ref, { code, name, type: String(f.get("type")) });
+        await audit("account.create", { code });
+        toast("Account created", "success");
+      }
       close();
       reload();
     });
@@ -483,17 +684,18 @@ function openExpenseForm(expenseAccounts, accounts, reload) {
       try {
         const expRef = doc(collection(db, "expenses"));
         await runTransaction(db, async (tx) => {
+          const jvNo = await reserveJv(tx);
           tx.set(expRef, {
             date: String(f.get("date")), amount, account, accountName: accName, category,
             payee: String(f.get("payee") || ""), note: String(f.get("note") || ""),
-            paidFrom: method, paidFromName, by: session.name, createdAt: serverTimestamp(),
+            paidFrom: method, paidFromName, jvNo, by: session.name, createdAt: serverTimestamp(),
           });
-          tx.set(doc(collection(db, "journal")), buildJournal({
+          writeVoucher(tx, doc(collection(db, "journal")), buildJournal({
             date: String(f.get("date")),
             memo: `Expense: ${accName}${f.get("payee") ? " · " + f.get("payee") : ""}`,
             ref: `EXP-${expRef.id.slice(0, 6)}`,
             lines: [{ account, debit: amount }, { account: method, credit: amount }],
-          }));
+          }), jvNo, "expense");
         });
         await audit("expense.create", { amount, account });
         toast("Expense recorded", "success");

@@ -5,6 +5,7 @@ import { passwordFields } from "./password-ui.js";
 import { post } from "./api.js";
 import { showSplash } from "./splash.js";
 import { firebaseConfig, APP_NAME, APP_VERSION } from "./config.js";
+import { startIdleLogout, stopIdleLogout } from "./idle.js";
 import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast, confirmBox, alertBox } from "./core.js";
 import { startNotifications, toggleNotifications, runStockChecks } from "./notifications.js";
 
@@ -347,6 +348,21 @@ function navItems() {
   return roles[session.role].pages.map((p) => ({ key: p, label: PAGES[p], icon: PAGE_ICON[p] }));
 }
 
+// Sidebar sections: pages are grouped by what people do with them. Pages not listed here go under "More".
+const NAV_GROUPS = [
+  ["Sell", ["dashboard", "pos"]],
+  ["Stock & parties", ["inventory", "purchasing", "partners"]],
+  ["Money & reports", ["accounting", "reports"]],
+  ["Administration", ["admin"]],
+];
+function navGroups(items) {
+  const left = new Map(items.map((p) => [p.key, p]));
+  const groups = NAV_GROUPS.map(([label, keys]) => ({ label, items: keys.filter((k) => left.has(k)).map((k) => left.get(k)) }));
+  groups.forEach((g) => g.items.forEach((p) => left.delete(p.key)));
+  if (left.size) groups.push({ label: "More", items: [...left.values()] });
+  return groups.filter((g) => g.items.length);
+}
+
 function buildShell() {
   setState("app");
   const items = navItems();
@@ -357,20 +373,24 @@ function buildShell() {
     <div class="shell">
       <div class="scrim" id="scrim"></div>
       <aside class="sidebar" id="sidebar">
-        <div class="brand">
-          ${branding.logoUrl ? `<img class="brand-logo-sm" src="${branding.logoUrl}" alt="" />` : `<div class="brand-mark">${icon("pos")}</div>`}
-          <div><strong>${esc(settings.shopName)}</strong><small>POS & Accounts</small></div>
+        <div class="brand-card">
+          <div class="brand-logo-wrap">${branding.logoUrl ? `<img class="brand-logo-sm" src="${branding.logoUrl}" alt="" />` : `<div class="brand-mark">${icon("pos")}</div>`}</div>
+          <div class="brand-text"><strong>${esc(settings.shopName)}</strong><small>POS &amp; Accounts</small></div>
         </div>
         <nav class="nav">
-          ${items.map((p, i) => `
-            <a class="nav-link" href="#/${p.key}" data-page="${p.key}" style="--i:${i}">
-              ${icon(p.icon)}<span>${esc(PAGE_TITLE[p.key])}</span>
-            </a>`).join("")}
+          ${navGroups(items).map((g) => `
+            <p class="nav-group">${esc(g.label)}</p>
+            ${g.items.map((p) => `
+              <a class="nav-link" href="#/${p.key}" data-page="${p.key}">
+                <span class="nav-ico">${icon(p.icon)}</span><span class="nav-text">${esc(PAGE_TITLE[p.key])}</span>
+              </a>`).join("")}`).join("")}
         </nav>
         <div class="sidebar-foot avatar-trigger" id="avatar-side" role="button" tabindex="0" aria-label="Your account">
-          <div class="avatar">${esc((session.name || "?").charAt(0).toUpperCase())}</div>
-          <div class="who"><strong>${esc(session.name)}</strong><small>${esc(roles[session.role].label)}</small></div>
+          <div class="avatar-ring"><div class="avatar">${esc((session.name || "?").charAt(0).toUpperCase())}</div></div>
+          <div class="who"><strong>${esc(session.name)}</strong><span class="role-pill">${esc(roles[session.role].label)}</span></div>
+          <span class="foot-chev" aria-hidden="true">›</span>
         </div>
+        <p class="sidebar-ver"><span>MediPOS</span> <b>v${esc(APP_VERSION)}</b></p>
       </aside>
       <div class="main">
         <header class="topbar">
@@ -494,8 +514,69 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
+/* ───────── sign-in code: for staff whose account asks for one at every sign-in ───────── */
+
+const OTP_KEY = "medipos.otp";
+
+// True when this tab already confirmed the code for this same sign-in (a page reload does not ask again).
+async function codePassed(user) {
+  const claims = (await user.getIdTokenResult()).claims;
+  return claims.otp === true && sessionStorage.getItem(OTP_KEY) === user.uid;
+}
+
+function showSignInCode(user) {
+  setState("login");
+  root.innerHTML = `
+    <section class="login-screen">
+      <div class="login-art" aria-hidden="true"><span class="orb o1"></span><span class="orb o2"></span><span class="orb o3"></span></div>
+      <div class="login-card">
+        ${logoHtml(icon("shield"))}
+        <h1>Confirm it is you</h1>
+        <p class="muted small" id="code-help">Sending a 6-digit code to your email…</p>
+        <form id="code-form" autocomplete="one-time-code">
+          <input id="code-input" inputmode="numeric" maxlength="6" placeholder="••••••" aria-label="6-digit code" required />
+          <button class="btn primary block xl" type="submit" id="code-btn">${icon("check")}<span>Continue</span></button>
+        </form>
+        <p class="error-text" id="code-msg" role="status"></p>
+        <div class="code-row">
+          <button class="link-btn" type="button" id="code-resend">Send a new code</button>
+          <button class="link-btn" type="button" id="code-out">Sign out</button>
+        </div>
+      </div>
+    </section>`;
+  const help = root.querySelector("#code-help");
+  const msg = root.querySelector("#code-msg");
+  const send = async () => {
+    msg.textContent = "";
+    try {
+      const out = await post("/api/auth/login-otp-request", {}, { secure: true });
+      help.textContent = `We sent a 6-digit code to ${out.sentTo}.`;
+    } catch (err) {
+      help.textContent = "Check your email for the code.";
+      msg.textContent = err.message;
+    }
+  };
+  root.querySelector("#code-resend").addEventListener("click", send);
+  root.querySelector("#code-out").addEventListener("click", () => signOut(auth));
+  root.querySelector("#code-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    msg.textContent = "";
+    try {
+      await post("/api/auth/login-otp-verify", { code: root.querySelector("#code-input").value.trim() }, { secure: true });
+      // Refresh the token so the database rules see the confirmed state at once.
+      await user.getIdToken(true);
+      sessionStorage.setItem(OTP_KEY, user.uid);
+      await handleAuthChange(user);
+    } catch (err) {
+      msg.textContent = err.message;
+    }
+  });
+  send();
+}
+
 async function handleAuthChange(user) {
   if (!isConfigured()) return showSetup();
+  if (!user) { stopIdleLogout(); sessionStorage.removeItem(OTP_KEY); }
   showSplash(root, "Checking your session…");
   await brandingReady;
   // Draw the loader again now that the saved shop name and logo are known.
@@ -524,6 +605,7 @@ async function handleAuthChange(user) {
       showForcePasswordChange(user);
       return;
     }
+    if (p.requireOtp === true && !(await codePassed(user))) return showSignInCode(user);
     showSplash(root, "Loading your workspace…");
     const rolesExist = await loadSettings();
     if (session.role === "admin") await syncPublicBranding();
@@ -534,6 +616,7 @@ async function handleAuthChange(user) {
     }
     Object.assign(session, { uid: user.uid, name: p.name || user.email, email: user.email, role: p.role });
     buildShell();
+    startIdleLogout((message) => { pendingMessage = message; });
     route();
   } catch (err) {
     console.error(err);

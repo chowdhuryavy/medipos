@@ -5,6 +5,7 @@ import { pushToSheets } from "../sheets.js";
 import { printReport } from "../print.js";
 import { REPORTS, buildReportTables, toSections } from "../report-tables.js";
 import { toPdf, toXlsx } from "../export-files.js";
+import { branding } from "../branding.js";
 
 const GROUPS = [["day", "Day"], ["month", "Month"], ["year", "Year"]];
 // Only admins can read the Sheets secret (settings/integrations), so only they can send reports.
@@ -112,8 +113,9 @@ export async function render(el) {
   const sectionsFor = (keys) => toSections(tables, keys).map((s) => ({ ...s, title: s.title }));
   const shopTitle = () => `${settings.shopName || "MediPOS"}`;
   const subtitle = () => `${range().from} to ${range().to} · Made ${new Date().toLocaleString()}`;
-  const makePdf = (keys, title) => toPdf({ title, subtitle: subtitle(), footer: `${shopTitle()} · MediPOS`, sections: sectionsFor(keys) });
-  const makeXlsx = (keys) => toXlsx(sectionsFor(keys));
+  const brand = () => ({ shop: settings.shopName || "MediPOS", color: branding.brandColor, subtitle: subtitle() });
+  const makePdf = (keys, title) => toPdf({ title, subtitle: subtitle(), footer: `${shopTitle()} · MediPOS`, sections: sectionsFor(keys), brand: brand() });
+  const makeXlsx = (keys) => toXlsx(sectionsFor(keys), brand());
   const allKeys = () => REPORTS.map(([k]) => k);
 
   el.querySelector("#r-kind").addEventListener("change", paint);

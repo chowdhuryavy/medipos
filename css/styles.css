@@ -874,3 +874,103 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
   .notif-panel { top: auto; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 8px); left: 8px; right: 8px; width: auto; max-height: 72vh; border-radius: 22px; }
   .avatar-top { display: none; }
 }
+
+/* sidebar: visible account card and version on phones (dvh ignores the browser address bar) */
+.sidebar .avatar { background: #fff; color: var(--brand); }
+.sidebar-foot .avatar { width: 42px; height: 42px; font-size: 17px; }
+.sidebar-foot .who { min-width: 0; overflow: hidden; }
+.sidebar-foot .who strong, .sidebar-foot .who small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.sidebar-ver { margin: 0; text-align: center; font-size: 11px; opacity: .6; flex: none; }
+@media (max-width: 900px) {
+  .sidebar { height: 100vh; height: 100dvh; }
+  .sidebar-foot { flex: none; margin-top: 12px; }
+}
+
+/* ───────── sidebar, redesigned: layered teal night gradient, grouped sections, icon tiles, account card ───────── */
+.sidebar {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto; overflow-x: hidden;
+  padding: 16px 14px 14px; gap: 14px; color: #e6fffb;
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(45, 212, 191, .28), transparent 60%),
+    radial-gradient(90% 50% at 100% 100%, rgba(20, 184, 166, .22), transparent 60%),
+    linear-gradient(175deg, #0d5f58 0%, #0a4a46 55%, #072f2d 100%);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, .06), 10px 0 30px -18px rgba(0, 0, 0, .5);
+  scrollbar-width: none;
+}
+.sidebar::-webkit-scrollbar { display: none; }
+.sidebar::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: radial-gradient(rgba(255, 255, 255, .07) 1px, transparent 1px);
+  background-size: 14px 14px; mask-image: linear-gradient(#000, transparent 70%);
+}
+.sidebar > * { position: relative; }
+
+.brand-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px;
+  border-radius: 18px; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .12);
+  box-shadow: 0 10px 30px -18px rgba(0, 0, 0, .6);
+}
+.brand-logo-wrap {
+  width: 46px; height: 46px; border-radius: 14px; flex: none; display: grid; place-items: center;
+  background: #fff; box-shadow: 0 0 0 4px rgba(45, 212, 191, .18), 0 8px 18px -8px rgba(0, 0, 0, .5); overflow: hidden;
+}
+.brand-logo-wrap .brand-logo-sm { width: 100%; height: 100%; object-fit: cover; }
+.brand-logo-wrap .brand-mark { width: 100%; height: 100%; border-radius: 0; background: linear-gradient(135deg, #14b8a6, #0f766e); color: #fff; }
+.brand-text { min-width: 0; }
+.brand-text strong { display: block; font-size: 16px; line-height: 1.2; letter-spacing: .1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-text small {
+  display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .6px; text-transform: uppercase; color: #a7f3ea; background: rgba(45, 212, 191, .14); opacity: 1;
+}
+
+.nav { display: block; gap: 0; }
+.nav-group {
+  margin: 16px 6px 6px; font-size: 10.5px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(204, 251, 241, .55); display: flex; align-items: center; gap: 8px;
+}
+.nav-group::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(204, 251, 241, .25), transparent); }
+.nav-link {
+  position: relative; display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 6px 12px 6px 8px;
+  margin: 3px 0; border-radius: 14px; color: #d7fbf5; font-weight: 600; font-size: 14.5px;
+  transition: background .2s, transform .2s, box-shadow .2s, color .2s;
+  animation: none;
+}
+.nav-link .nav-ico {
+  width: 34px; height: 34px; border-radius: 11px; flex: none; display: grid; place-items: center;
+  background: rgba(255, 255, 255, .09); transition: background .2s, transform .25s;
+}
+.nav-link .nav-ico svg { width: 18px; height: 18px; }
+.nav-link:hover { background: rgba(255, 255, 255, .08); transform: translateX(3px); color: #fff; }
+.nav-link:hover .nav-ico { transform: scale(1.06); background: rgba(255, 255, 255, .16); }
+.nav-link.active {
+  background: linear-gradient(90deg, #ffffff, #e9fffb); color: #0a4a46; font-weight: 800;
+  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .6) inset; transform: none;
+}
+.nav-link.active .nav-ico { background: linear-gradient(135deg, #14b8a6, #0f766e); color: #fff; }
+.nav-link.active::before {
+  content: ""; position: absolute; left: -14px; top: 12px; bottom: 12px; width: 4px; border-radius: 0 4px 4px 0; background: #5eead4;
+  box-shadow: 0 0 12px #5eead4;
+}
+
+.sidebar-foot {
+  margin-top: auto; display: flex; gap: 12px; align-items: center; padding: 12px; border-radius: 18px;
+  background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .12); cursor: pointer;
+  transition: background .2s, transform .2s;
+}
+.sidebar-foot:hover { background: rgba(255, 255, 255, .14); transform: translateY(-1px); }
+.avatar-ring { padding: 3px; border-radius: 50%; background: conic-gradient(#5eead4, #14b8a6, #ffffff, #5eead4); flex: none; }
+.sidebar .avatar-ring .avatar { width: 40px; height: 40px; font-size: 17px; background: #fff; color: #0f766e; }
+.sidebar-foot .who { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.sidebar-foot .who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; }
+.role-pill {
+  justify-self: start; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; padding: 2px 9px; border-radius: 999px;
+  background: #5eead4; color: #053b38;
+}
+.foot-chev { font-size: 22px; line-height: 1; opacity: .6; }
+.sidebar-ver { margin: 0; display: flex; justify-content: center; gap: 8px; align-items: center; font-size: 11px; color: rgba(204, 251, 241, .6); letter-spacing: .4px; }
+.sidebar-ver b { font-weight: 800; color: #a7f3ea; background: rgba(255, 255, 255, .08); padding: 2px 8px; border-radius: 999px; }
+@media (max-width: 900px) {
+  .sidebar { height: 100vh; height: 100dvh; width: min(300px, 88vw); }
+  .sidebar-foot { flex: none; margin-top: 12px; }
+  .nav-link.active::before { display: none; }
+}

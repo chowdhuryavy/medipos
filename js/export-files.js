@@ -1,7 +1,9 @@
 // Writes PDF, Excel (.xlsx) and zip files with plain code: no libraries, so the same file runs in the browser and on the server.
-// Input is a list of report sections: { title, summary: [[label, value]], headers, rows, numeric: [columnIndexes] }.
+// Input is a list of report sections: { title, summary: [[label, value]], headers, rows, numeric: [columnIndexes], sheetName? }.
+// Optional brand: { shop, color, subtitle } puts the shop name, brand colour and period on every file.
 
 const enc = new TextEncoder();
+export const DEFAULT_COLOR = "#0f766e";
 
 /* ───────── zip (stored, no compression) ───────── */
 
@@ -60,6 +62,30 @@ export function zip(files) {
   return concat([...locals, ...centrals, end]);
 }
 
+/* ───────── brand colours (shared by PDF and Excel) ───────── */
+
+const safeHex = (c) => (/^#[0-9a-f]{6}$/i.test(String(c || "")) ? String(c).toLowerCase() : DEFAULT_COLOR);
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+const mix = (rgb, to, t) => rgb.map((v, i) => v + (to[i] - v) * t);
+function palette(color) {
+  const hex = safeHex(color);
+  const main = hexRgb(hex);
+  return {
+    hex,
+    main,
+    dark: mix(main, [0, 0, 0], 0.35),
+    soft: mix(main, [1, 1, 1], 0.9),
+    tint: [0.965, 0.97, 0.975],
+    ink: [0.09, 0.12, 0.16],
+    grey: [0.42, 0.45, 0.5],
+    line: [0.88, 0.9, 0.92],
+    white: [1, 1, 1],
+  };
+}
+const hex2 = (v) => Math.round(v * 255).toString(16).padStart(2, "0");
+const argb = (c) => ("FF" + c.map(hex2).join("")).toUpperCase();
+const rgbOp = (c) => c.map((v) => v.toFixed(3)).join(" ");
+
 /* ───────── Excel ───────── */
 
 const xmlEsc = (s) => String(s).replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" }[c]));
@@ -76,43 +102,92 @@ const sheetName = (s, used) => {
   return name;
 };
 
-const STYLE_NUM = 1, STYLE_BOLD = 2;
-function sheetXml(sec) {
-  const numeric = new Set(sec.numeric || []);
-  const rows = [];
-  let r = 0;
-  const cell = (v, style = 0) => {
-    const ref = `${colName(0)}`; // placeholder, replaced below
-    return { v, style, ref };
-  };
-  const put = (cells) => { r += 1; rows.push({ r, cells }); };
-  const colsUsed = Math.max(sec.headers.length, 2);
-  put([{ v: sec.title, style: STYLE_BOLD }]);
-  (sec.summary || []).forEach(([l, v]) => put([{ v: l, style: 0 }, { v, style: 0 }]));
-  if (sec.summary?.length) put([]);
-  put(sec.headers.map((h, i) => ({ v: h, style: STYLE_BOLD, numeric: numeric.has(i) })));
-  sec.rows.forEach((row) => put(row.map((v, i) => ({ v, style: typeof v === "number" && numeric.has(i) ? STYLE_NUM : 0 }))));
+// Cell style numbers, in the order they are written into styles.xml below.
+const STY = { normal: 0, num: 1, bold: 2, title: 3, sub: 4, head: 5, zebra: 6, zebraNum: 7, totalText: 8, totalNum: 9, section: 10 };
 
-  // Column widths from the longest text in each column.
-  const widths = Array.from({ length: colsUsed }, (_, i) => {
-    const lens = rows.map((row) => String(row.cells[i]?.v ?? "").length);
-    return Math.min(48, Math.max(10, ...lens) + 2);
+function stylesXml(p) {
+  const font = (inner) => `<font>${inner}<name val="Calibri"/></font>`;
+  const fonts = [
+    font(`<sz val="10"/><color rgb="FF171F29"/>`),
+    font(`<b/><sz val="10"/><color rgb="FF171F29"/>`),
+    font(`<b/><sz val="15"/><color rgb="${argb(p.main)}"/>`),
+    font(`<i/><sz val="9"/><color rgb="FF6B7280"/>`),
+    font(`<b/><sz val="10"/><color rgb="FFFFFFFF"/>`),
+    font(`<b/><sz val="12"/><color rgb="${argb(p.dark)}"/>`),
+  ];
+  const fill = (c) => `<fill><patternFill patternType="solid"><fgColor rgb="${argb(c)}"/><bgColor indexed="64"/></patternFill></fill>`;
+  const fills = [
+    `<fill><patternFill patternType="none"/></fill>`,
+    `<fill><patternFill patternType="gray125"/></fill>`,
+    fill(p.main),
+    fill(p.tint),
+  ];
+  // numFmtId 4 is the built-in #,##0.00
+  const xf = (num, fontId, fillId) => `<xf numFmtId="${num}" fontId="${fontId}" fillId="${fillId}" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1"/>`;
+  const xfs = [
+    xf(0, 0, 0), xf(4, 0, 0), xf(0, 1, 0), xf(0, 2, 0), xf(0, 3, 0), xf(0, 4, 2), xf(0, 0, 3), xf(4, 0, 3),
+    xf(0, 1, 0), xf(4, 1, 0), xf(0, 5, 0),
+  ];
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="${fonts.length}">${fonts.join("")}</fonts><fills count="${fills.length}">${fills.join("")}</fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xfs.length}">${xfs.join("")}</cellXfs></styleSheet>`;
+}
+
+function sheetXml(sec, brand) {
+  const numeric = new Set(sec.numeric || []);
+  const headers = sec.headers || [];
+  const cols = Math.max(headers.length, 2);
+  const rows = [];
+  const put = (cells) => { const r = rows.length + 1; rows.push({ r, cells }); return r; };
+  const shop = brand.shop || "";
+
+  if (shop) put([{ v: shop, s: STY.title }]);
+  put([{ v: sec.title, s: STY.section }]);
+  if (brand.subtitle) put([{ v: brand.subtitle, s: STY.sub }]);
+  put([]);
+  if (sec.summary?.length) {
+    sec.summary.forEach(([l, v]) => put([{ v: l, s: STY.normal }, { v, s: STY.bold }]));
+    put([]);
+  }
+  const headerRow = put(headers.map((h) => ({ v: h, s: STY.head })));
+  sec.rows.forEach((row, ri) => {
+    const total = /^total/i.test(String(row[0] ?? ""));
+    const zebra = ri % 2 === 1 && !total;
+    put(headers.map((_, i) => {
+      const v = row[i];
+      const isNum = typeof v === "number" && numeric.has(i);
+      const s = total
+        ? (isNum ? STY.totalNum : STY.totalText)
+        : zebra ? (isNum ? STY.zebraNum : STY.zebra) : (isNum ? STY.num : STY.normal);
+      return { v, s };
+    }));
   });
+
+  // Column widths from the table and summary (the title lines are left out, so they do not widen column A).
+  const measured = rows.filter((row) => row.cells.length > 1);
+  const widths = Array.from({ length: cols }, (_, i) => {
+    let longest = 10;
+    for (const row of measured) longest = Math.max(longest, String(row.cells[i]?.v ?? "").length);
+    return Math.min(48, longest + 2);
+  });
+
   const body = rows.map((row) => {
     const cells = row.cells.map((c, i) => {
       const ref = `${colName(i)}${row.r}`;
-      if (typeof c.v === "number" && Number.isFinite(c.v)) return `<c r="${ref}" s="${c.style}"><v>${c.v}</v></c>`;
+      if (typeof c.v === "number" && Number.isFinite(c.v)) return `<c r="${ref}" s="${c.s}"><v>${c.v}</v></c>`;
       if (c.v === undefined || c.v === null || c.v === "") return "";
-      return `<c r="${ref}" s="${c.style}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(c.v)}</t></is></c>`;
+      return `<c r="${ref}" s="${c.s}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(c.v)}</t></is></c>`;
     }).join("");
     return `<row r="${row.r}">${cells}</row>`;
   }).join("");
-  const cols = widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("");
+  const colsXml = widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("");
+  const footer = `${shop ? `${xmlEsc(shop)} · ` : ""}MediPOS`;
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"/></sheetViews><cols>${cols}</cols><sheetData>${body}</sheetData></worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="${headerRow - 1}" topLeftCell="A${headerRow}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${colsXml}</cols><sheetData>${body}</sheetData><pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/><headerFooter><oddFooter>${footer}&amp;RPage &amp;P of &amp;N</oddFooter></headerFooter></worksheet>`;
 }
 
-export function toXlsx(sections) {
+/** brand: { shop, color, subtitle } — optional. */
+export function toXlsx(sections, brand = {}) {
+  const b = { shop: "", color: DEFAULT_COLOR, subtitle: "", ...brand };
   const used = new Set();
   const names = sections.map((s) => sheetName(s.sheetName || s.title, used));
   const files = [];
@@ -124,13 +199,12 @@ export function toXlsx(sections) {
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${names.map((n, i) => `<sheet name="${xmlEsc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets></workbook>`) });
   files.push({ name: "xl/_rels/workbook.xml.rels", data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${names.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${names.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`) });
-  files.push({ name: "xl/styles.xml", data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>`) });
-  sections.forEach((s, i) => files.push({ name: `xl/worksheets/sheet${i + 1}.xml`, data: enc.encode(sheetXml(s)) }));
+  files.push({ name: "xl/styles.xml", data: enc.encode(stylesXml(palette(b.color))) });
+  sections.forEach((s, i) => files.push({ name: `xl/worksheets/sheet${i + 1}.xml`, data: enc.encode(sheetXml(s, b)) }));
   return zip(files);
 }
 
-/* ───────── PDF (A4, Helvetica, tables that repeat their header across pages) ───────── */
+/* ───────── PDF (A4, Helvetica, branded header band, summary cards, striped tables) ───────── */
 
 // PDF text here is plain ASCII: symbols that do not exist in the font are mapped to close ASCII forms.
 export function pdfSafe(v) {
@@ -143,87 +217,129 @@ const pdfEsc = (s) => s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)
 const fmtNum = (n) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const cellText = (v) => pdfSafe(typeof v === "number" ? fmtNum(v) : v);
 
-export function toPdf({ title, subtitle = "", footer = "", sections }) {
-  const W = 595, H = 842, M = 40, CW = W - 2 * M, BOTTOM = M + 30;
+/** brand: { shop, color } — the shop name and brand colour shown in the header band. */
+export function toPdf({ title, subtitle = "", footer = "", sections, brand = {} }) {
+  const P = palette(brand.color);
+  const shop = brand.shop || "MediPOS";
+  const W = 595, H = 842, M = 40, CW = W - 2 * M, BOTTOM = 60, BAND = 92;
   const pages = [];
   let ops = null, y = 0;
-  const newPage = () => { ops = []; pages.push(ops); y = H - M; };
-  const need = (h) => { if (y - h < BOTTOM) newPage(); };
-  const text = (x, yy, s, size = 9, bold = false) =>
-    ops.push(`0 0 0 rg BT /${bold ? "F2" : "F1"} ${size} Tf ${x.toFixed(1)} ${yy.toFixed(1)} Td (${pdfEsc(pdfSafe(s))}) Tj ET`);
-  const tw = (s, size, bold) => s.length * size * (bold ? 0.56 : 0.52);
+
+  const rect = (x, yy, w, h, c) => ops.push(`${rgbOp(c)} rg ${x.toFixed(1)} ${yy.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)} re f`);
+  const hline = (x1, x2, yy, c) => ops.push(`${rgbOp(c)} RG 0.5 w ${x1.toFixed(1)} ${yy.toFixed(1)} m ${x2.toFixed(1)} ${yy.toFixed(1)} l S`);
+  const text = (x, yy, s, size = 9, bold = false, c = P.ink) =>
+    ops.push(`${rgbOp(c)} rg BT /${bold ? "F2" : "F1"} ${size} Tf ${x.toFixed(1)} ${yy.toFixed(1)} Td (${pdfEsc(pdfSafe(s))}) Tj ET`);
+  const tw = (s, size, bold) => pdfSafe(s).length * size * (bold ? 0.56 : 0.52);
+  const right = (xr, yy, s, size, bold, c) => text(xr - tw(s, size, bold), yy, s, size, bold, c);
   const fitText = (s, w, size, bold) => {
+    const t = pdfSafe(s);
     const max = Math.max(1, Math.floor((w - 8) / (size * (bold ? 0.56 : 0.52))));
-    return s.length > max ? s.slice(0, Math.max(1, max - 2)) + ".." : s;
+    return t.length > max ? t.slice(0, Math.max(1, max - 2)) + ".." : t;
+  };
+  const maxWidth = (texts, size, bold) => {
+    let m = 0;
+    for (const s of texts) m = Math.max(m, tw(s, size, bold));
+    return m;
   };
 
-  newPage();
-  text(M, y - 14, title, 16, true);
-  y -= 22;
-  if (subtitle) { text(M, y - 10, subtitle, 9); y -= 16; }
-  y -= 8;
+  // First page: full brand band. Later pages: a slim band with the shop name and report title.
+  const newPage = () => {
+    ops = []; pages.push(ops);
+    if (pages.length === 1) {
+      rect(0, H - BAND, W, BAND, P.main);
+      rect(0, H - BAND - 3, W, 3, P.dark);
+      text(M, H - 38, shop, 18, true, P.white);
+      text(M, H - 58, title, 11.5, false, P.white);
+      if (subtitle) text(M, H - 74, subtitle, 8, false, P.soft);
+      y = H - BAND - 30;
+    } else {
+      rect(0, H - 30, W, 30, P.main);
+      text(M, H - 19, shop, 9, true, P.white);
+      right(W - M, H - 19, title, 8, false, P.white);
+      y = H - 30 - 26;
+    }
+  };
+  const need = (h) => { if (y - h < BOTTOM) newPage(); };
 
+  newPage();
   for (const sec of sections) {
     const headers = sec.headers || [];
     const numeric = new Set(sec.numeric || []);
     const summary = sec.summary || [];
-    need(40 + summary.length * 13);
-    if (y < H - M - 5) y -= 6;
-    text(M, y - 12, sec.title, 12, true);
-    y -= 20;
-    for (const [l, v] of summary) {
-      need(14);
-      text(M, y - 9, `${l}`, 9);
-      text(M + 200, y - 9, cellText(v), 9, true);
-      y -= 13;
+
+    need(60);
+    rect(M, y - 14, 3, 15, P.main);
+    text(M + 10, y - 11, sec.title, 12, true, P.dark);
+    y -= 26;
+
+    if (summary.length) {
+      const per = Math.min(4, summary.length);
+      const gap = 8, cw = (CW - gap * (per - 1)) / per, ch = 44;
+      for (let k = 0; k < summary.length; k += per) {
+        need(ch + 8);
+        summary.slice(k, k + per).forEach(([l, v], j) => {
+          const x = M + j * (cw + gap);
+          rect(x, y - ch, cw, ch, P.soft);
+          rect(x, y - ch, 3, ch, P.main);
+          text(x + 10, y - 16, fitText(l, cw - 14, 7.5, false), 7.5, false, P.grey);
+          text(x + 10, y - 34, fitText(cellText(v), cw - 14, 10.5, true), 10.5, true, P.ink);
+        });
+        y -= ch + 8;
+      }
+      y -= 6;
     }
-    if (summary.length) y -= 8;
 
     if (headers.length) {
       // Column widths from the content, scaled to the full page width.
-      const nat = headers.map((h, i) => Math.max(tw(pdfSafe(h), 8.5, true), ...sec.rows.map((r) => tw(cellText(r[i]), 8.5, false))) + 12);
+      const nat = headers.map((h, i) => Math.max(tw(h, 8.5, true), maxWidth(sec.rows.map((r) => cellText(r[i])), 8.5, false)) + 14);
       const total = nat.reduce((s, w) => s + w, 0) || 1;
       const widths = nat.map((w) => (w * CW) / total);
-      const xs = widths.reduce((acc, w, i) => { acc.push(i ? acc[i - 1] + widths[i - 1] : M); return acc; }, []);
-      const drawHeader = () => {
-        need(18);
-        ops.push(`0.9 g ${M} ${(y - 15).toFixed(1)} ${CW} 16 re f`);
+      const xs = [];
+      widths.reduce((x, w, i) => { xs[i] = x; return x + w; }, M);
+
+      const drawHead = () => {
+        need(20);
+        rect(M, y - 19, CW, 19, P.main);
         headers.forEach((h, i) => {
-          const s = fitText(pdfSafe(h), widths[i], 8.5, true);
-          const x = numeric.has(i) ? xs[i] + widths[i] - 6 - tw(s, 8.5, true) : xs[i] + 6;
-          text(x, y - 11, s, 8.5, true);
+          const s = fitText(h, widths[i], 8.5, true);
+          if (numeric.has(i)) right(xs[i] + widths[i] - 7, y - 12, s, 8.5, true, P.white);
+          else text(xs[i] + 7, y - 12, s, 8.5, true, P.white);
         });
-        y -= 17;
+        y -= 19;
       };
-      drawHeader();
-      if (!sec.rows.length) { need(14); text(M + 6, y - 10, "Nothing to show for this period.", 8.5); y -= 14; }
-      sec.rows.forEach((row) => {
-        if (y - 14 < BOTTOM) { newPage(); drawHeader(); }
+      drawHead();
+      if (!sec.rows.length) { need(20); text(M + 7, y - 13, "Nothing to show for this period.", 8.5, false, P.grey); y -= 20; }
+      sec.rows.forEach((row, ri) => {
+        if (y - 16 < BOTTOM) { newPage(); drawHead(); }
+        const total = /^total/i.test(String(row[0] ?? ""));
+        if (total) rect(M, y - 16, CW, 16, P.soft);
+        else if (ri % 2 === 1) rect(M, y - 16, CW, 16, P.tint);
         headers.forEach((_, i) => {
-          const raw = cellText(row[i]);
-          const s = fitText(raw, widths[i], 8.5, false);
-          const x = numeric.has(i) ? xs[i] + widths[i] - 6 - tw(s, 8.5, false) : xs[i] + 6;
-          text(x, y - 10, s, 8.5);
+          const s = fitText(cellText(row[i]), widths[i], 8.5, total);
+          if (numeric.has(i)) right(xs[i] + widths[i] - 7, y - 11, s, 8.5, total);
+          else text(xs[i] + 7, y - 11, s, 8.5, total);
         });
-        ops.push(`0.85 G ${M} ${(y - 13).toFixed(1)} m ${M + CW} ${(y - 13).toFixed(1)} l S`);
-        y -= 14;
+        hline(M, M + CW, y - 16, P.line);
+        y -= 16;
       });
     }
-    y -= 14;
+    y -= 18;
   }
 
-  // Page numbers and footer on every page.
-  const total = pages.length;
+  // Footer and page numbers on every page.
+  const count = pages.length;
   pages.forEach((p, i) => {
-    p.push(`0.45 g BT /F1 7.5 Tf ${M} 22 Td (${pdfEsc(pdfSafe(footer))}) Tj ET`);
-    p.push(`0.45 g BT /F1 7.5 Tf ${W - M - 60} 22 Td (Page ${i + 1} of ${total}) Tj ET`);
+    ops = p;
+    hline(M, W - M, 40, P.line);
+    text(M, 26, footer || `${shop} · MediPOS`, 7.5, false, P.grey);
+    right(W - M, 26, `Page ${i + 1} of ${count}`, 7.5, false, P.grey);
   });
 
   // Objects: 1 catalog, 2 pages, 3-4 fonts, then page + content pairs.
   const objs = [];
   const kids = pages.map((_, i) => `${5 + 2 * i} 0 R`).join(" ");
   objs[1] = "<< /Type /Catalog /Pages 2 0 R >>";
-  objs[2] = `<< /Type /Pages /Kids [${kids}] /Count ${total} >>`;
+  objs[2] = `<< /Type /Pages /Kids [${kids}] /Count ${count} >>`;
   objs[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
   objs[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>";
   pages.forEach((p, i) => {
