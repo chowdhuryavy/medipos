@@ -6,6 +6,7 @@ import {
 import { branding } from "../branding.js";
 import { locationText, breakdown, baseName } from "../packs.js";
 import { printHtml } from "../print.js";
+import { allOpenBills, billDue, billRemaining, dayDiff } from "../payables.js";
 
 // Quick buttons. Each one only appears for pages the signed-in role can open.
 const QUICK = [
@@ -25,12 +26,14 @@ export async function render(el) {
   const from = weekStart < monthStart ? weekStart : monthStart;
   const soon = daysFromNowISO(settings.expiryWarnDays);
 
-  const [salesSnap, productSnap, batchSnap, recentSnap, expenseSnap] = await Promise.all([
+  const [salesSnap, productSnap, batchSnap, recentSnap, expenseSnap, openBills] = await Promise.all([
     getDocs(query(collection(db, "sales"), where("date", ">=", from))),
     getDocs(collection(db, "products")),
     getDocs(query(collection(db, "batches"), where("remaining", ">", 0))),
     getDocs(query(collection(db, "sales"), orderBy("createdAt", "desc"), limit(6))),
     getDocs(query(collection(db, "expenses"), where("date", ">=", monthStart))),
+    // Supplier bills on credit. Roles that cannot read purchases still get the dashboard, without this card.
+    allOpenBills().catch(() => []),
   ]);
 
   const sales = salesSnap.docs.map((d) => d.data());
@@ -68,6 +71,7 @@ export async function render(el) {
     { label: "Low-stock items", value: lowStock.length, icon: "alert" },
     { label: `Expiring in ${settings.expiryWarnDays} days`, value: expiring.length, icon: "alert" },
     { label: "On order list", value: onOrder.length, icon: "cart" },
+    { label: "Supplier bills overdue", value: round2(openBills.filter((b) => dayDiff(billDue(b)) < 0).reduce((a, b) => a + billRemaining(b), 0)), fmt: money, icon: "alert" },
   ];
 
   // Stock health: out, low and healthy products (active only).

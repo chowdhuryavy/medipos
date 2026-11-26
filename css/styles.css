@@ -1079,3 +1079,42 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 }
 .pay-summary span { color: var(--muted); font-size: 13px; }
 .pay-summary strong { font-variant-numeric: tabular-nums; }
+
+/* ───────── loading screen: choice of animation, page-change loader ───────── */
+.route-loader { position: fixed; inset: 0; z-index: 500; }
+.splash { isolation: isolate; }
+.splash-logo { display: grid; place-items: center; }
+.splash-logo > .brand-mark, .splash-logo > .brand-logo { position: relative; z-index: 1; }
+.splash-logo .anim { position: absolute; }
+.anim { display: none; }
+.style-orbit .anim-orbit, .style-ripple .anim-ripple { display: block; }
+.style-wave .anim-wave, .style-dots .anim-dots { display: flex; }
+.anim-ripple { inset: 0; }
+.anim-ripple i { position: absolute; left: 50%; top: 50%; width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 50%; border: 2px solid rgba(94, 234, 212, .7); animation: ripple 2.4s ease-out infinite; }
+.anim-ripple i:nth-child(2) { animation-delay: .8s; }
+.anim-ripple i:nth-child(3) { animation-delay: 1.6s; }
+.anim-wave { align-items: flex-end; gap: 7px; height: 38px; margin-top: 6px; }
+.anim-wave i { width: 7px; height: 12px; border-radius: 99px; background: linear-gradient(180deg, #ffffff, #5eead4); animation: wave 1s ease-in-out infinite; }
+.anim-wave i:nth-child(2) { animation-delay: .12s; }
+.anim-wave i:nth-child(3) { animation-delay: .24s; }
+.anim-wave i:nth-child(4) { animation-delay: .36s; }
+.anim-wave i:nth-child(5) { animation-delay: .48s; }
+.anim-dots { gap: 12px; margin-top: 6px; height: 24px; align-items: center; }
+.anim-dots i { width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 0 14px #5eead4; animation: bounce 1s ease-in-out infinite; }
+.anim-dots i:nth-child(2) { animation-delay: .15s; background: #fcd34d; box-shadow: 0 0 14px #f59e0b; }
+.anim-dots i:nth-child(3) { animation-delay: .3s; }
+.sparkle { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #fff; opacity: .55; box-shadow: 0 0 12px #5eead4; animation: float 9s ease-in-out infinite; }
+.sparkle.s1 { top: 18%; left: 14%; }
+.sparkle.s2 { top: 70%; left: 22%; width: 4px; height: 4px; animation-delay: -3s; }
+.sparkle.s3 { top: 26%; right: 16%; width: 5px; height: 5px; animation-delay: -6s; background: #fde68a; box-shadow: 0 0 12px #f59e0b; }
+.sparkle.s4 { top: 76%; right: 24%; width: 4px; height: 4px; animation-delay: -4.5s; }
+@keyframes ripple { 0% { transform: scale(.7); opacity: .9; } 100% { transform: scale(2.4); opacity: 0; } }
+@keyframes wave { 0%, 100% { height: 10px; } 50% { height: 36px; } }
+@keyframes bounce { 0%, 80%, 100% { transform: translateY(0); opacity: .45; } 40% { transform: translateY(-16px); opacity: 1; } }
+
+/* ───────── camera barcode scanning ───────── */
+.scan-btn { white-space: nowrap; }
+.scan-field { display: flex; gap: 8px; align-items: end; }
+.scan-field label { flex: 1; }
+.scan-box { display: grid; gap: 10px; justify-items: center; }
+.scan-box video { width: 100%; max-height: 60vh; border-radius: 18px; background: #000; object-fit: cover; }

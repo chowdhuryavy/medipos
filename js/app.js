@@ -3,11 +3,12 @@ import { auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, upda
 import { loadBranding, branding, logoHtml } from "./branding.js";
 import { passwordFields } from "./password-ui.js";
 import { post } from "./api.js";
-import { showSplash } from "./splash.js";
+import { showSplash, showRouteLoader, hideRouteLoader } from "./splash.js";
 import { firebaseConfig, APP_NAME, APP_VERSION } from "./config.js";
 import { startIdleLogout, stopIdleLogout } from "./idle.js";
 import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast, confirmBox, alertBox } from "./core.js";
 import { startNotifications, toggleNotifications, runStockChecks } from "./notifications.js";
+import "./scanner.js";
 
 // Email + password only. No third-party (Google) sign-in is offered anywhere.
 
@@ -458,6 +459,7 @@ async function route() {
     return;
   }
 
+  const loader = showRouteLoader(`Opening ${PAGE_TITLE[page]}…`);
   el.innerHTML = `<div class="skeleton-grid"><div class="skeleton"></div><div class="skeleton"></div></div>`;
   try {
     const mod = await import(`./pages/${page}.js`);
@@ -475,6 +477,8 @@ async function route() {
         <div class="empty-state card">${icon("alert")}<h3>${denied ? "Not allowed by the database" : "Something went wrong"}</h3>
         <p class="muted">${esc(err.message)}</p></div>`;
     }
+  } finally {
+    await hideRouteLoader(loader);
   }
 }
 

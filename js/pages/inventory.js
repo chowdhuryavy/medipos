@@ -213,7 +213,7 @@ function productForm(p = {}) {
     <form id="pf" class="form-grid">
       <label class="span-2">Product name<input name="name" required value="${esc(p.name || "")}" /></label>
       <label>SKU<input name="sku" value="${esc(p.sku || "")}" /></label>
-      <label>Barcode<input name="barcode" inputmode="numeric" value="${esc(p.barcode || "")}" /></label>
+      <div class="scan-field span-2"><label>Barcode<input name="barcode" inputmode="numeric" value="${esc(p.barcode || "")}" /></label><button type="button" class="btn ghost sm scan-btn" data-scan-into="[name=barcode]">Scan with camera</button></div>
       <label>Group<select name="category">${cats.map((c) => `<option ${c === p.category ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
       <label>Sub group<input name="subGroup" list="sg-list" autocomplete="off" placeholder="e.g. Antibiotics" value="${esc(p.subGroup || "")}" /></label>
       <datalist id="sg-list">${knownSubGroups.map((s) => `<option value="${esc(s)}"></option>`).join("")}</datalist>

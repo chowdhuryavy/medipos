@@ -5,6 +5,7 @@ import {
 } from "../firebase.js";
 import { firebaseConfig } from "../config.js";
 import { nextExpenseCode, expenseCategories } from "../expense-categories.js";
+import { LOADING_STYLES, loadingStyle, showRouteLoader, hideRouteLoader } from "../splash.js";
 import {
   session, roles, DEFAULT_ROLES, WRITE_AREAS, settings, DEFAULT_SETTINGS, esc, icon, toast, openModal, confirmBox, alertBox,
   audit, ensureChartOfAccounts, fmtDateTime, money,
@@ -1372,6 +1373,17 @@ async function viewBranding(body) {
   body.innerHTML = `
     <form id="bf" class="settings-form">
       <section class="card">
+        <h3>Loading screen</h3>
+        <p class="muted small">Shown when the app opens and each time someone switches to another screen. Applies to everyone, including the sign-in page.</p>
+        <div class="form-grid">
+          <label>Animation
+            <select name="loadingStyle">${LOADING_STYLES.map(([k, l]) => `<option value="${k}" ${k === loadingStyle(brand.loadingStyle) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
+          </label>
+          <label>Message<input name="loadingMessage" maxlength="60" placeholder="Loading…" value="${esc(brand.loadingMessage || "")}" /></label>
+        </div>
+        <div class="form-actions"><button type="button" class="btn ghost sm" id="ls-preview">Preview loading screen</button></div>
+      </section>
+      <section class="card">
         <h3>Brand colour</h3>
         <p class="muted small">Used for the header, code box and buttons in every email. The logo and shop name are set in Settings → Shop profile.</p>
         <div class="form-grid">
@@ -1393,6 +1405,13 @@ async function viewBranding(body) {
         <button class="btn primary" type="submit">${icon("check")}<span>Save branding & emails</span></button>
       </div>
     </form>`;
+
+  body.querySelector("#ls-preview").addEventListener("click", () => {
+    const style = loadingStyle(body.querySelector('[name="loadingStyle"]').value);
+    const msg = body.querySelector('[name="loadingMessage"]').value.trim() || "Loading…";
+    const loader = showRouteLoader(msg, style);
+    setTimeout(() => hideRouteLoader(loader, 0), 2600);
+  });
 
   const form = body.querySelector("#bf");
   body.addEventListener("click", (e) => {
@@ -1419,6 +1438,8 @@ async function viewBranding(body) {
     try {
       await setDoc(doc(db, "branding", "public"), {
         appName, shopName: settings.shopName, brandColor, updatedAt: serverTimestamp(),
+        loadingStyle: loadingStyle(String(f.get("loadingStyle") || "")),
+        loadingMessage: String(f.get("loadingMessage") || "").trim().slice(0, 60),
       }, { merge: true });
       await setDoc(doc(db, "settings", "emails"), { ...emails, updatedAt: serverTimestamp() });
       await audit("branding.update", { appName, brandColor });
