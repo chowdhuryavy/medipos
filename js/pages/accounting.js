@@ -238,7 +238,7 @@ async function viewExpenses(body) {
 }
 
 function openExpenseForm(expenseAccounts, accounts, reload) {
-  const payMethods = settings.paymentMethods.filter((m) => !m.credit);
+  const payMethods = settings.paymentMethods.filter((m) => !m.credit && m.active !== false);
   openModal("Record expense", `
     <form id="exf" class="form-grid">
       <label>Date<input name="date" type="date" value="${todayISO()}" required /></label>

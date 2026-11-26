@@ -121,7 +121,7 @@ function openForm(type, p, reload) {
 
 function openSettle(type, p, reload) {
   const isCustomer = type === "customers";
-  const methods = settings.paymentMethods.filter((m) => !m.credit);
+  const methods = settings.paymentMethods.filter((m) => !m.credit && m.active !== false);
   openModal(isCustomer ? `Receive from ${p.name}` : `Pay ${p.name}`, `
     <form id="sf" class="form-grid">
       <p class="span-2 muted">Balance: <strong>${money(p.balance || 0)}</strong></p>

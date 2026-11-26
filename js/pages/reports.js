@@ -4,6 +4,7 @@ import {
   session, money, esc, icon, toast, todayISO, monthStartISO, daysFromNowISO, downloadCSV, round2, audit, settings,
 } from "../core.js";
 import { pushToSheets } from "../sheets.js";
+import { printReport } from "../print.js";
 
 const KINDS = [["sales", "Sales"], ["productSummary", "Products"], ["stock", "Stock"], ["expiry", "Expiry"]];
 // Only admins can read the Sheets secret (settings/integrations), so only they can send reports.
@@ -24,6 +25,7 @@ export async function render(el) {
           </select>
         </label>
         <div class="grow"></div>
+        <button class="btn ghost" id="r-print">${icon("print")}<span>Print A4</span></button>
         <button class="btn ghost" id="r-csv">${icon("download")}<span>Download CSV</span></button>
         ${CAN_SYNC.includes(session.role) ? `<button class="btn primary" id="r-sync">${icon("sync")}<span>Send to Google Sheets</span></button>` : ""}
       </div>
@@ -72,6 +74,16 @@ export async function render(el) {
 
   el.querySelector("#r-kind").addEventListener("change", paint);
   ["#r-from", "#r-to", "#r-days"].forEach((s) => el.querySelector(s).addEventListener("change", load));
+
+  el.querySelector("#r-print").addEventListener("click", () => {
+    const k = kind();
+    const d = data[k];
+    printReport({
+      title: KINDS.find(([key]) => key === k)[1] + " report",
+      from: el.querySelector("#r-from").value, to: el.querySelector("#r-to").value,
+      summary: d.summary || [], headers: d.headers, rows: d.rows, numeric: d.numeric || [],
+    });
+  });
 
   el.querySelector("#r-csv").addEventListener("click", () => {
     const d = data[kind()];

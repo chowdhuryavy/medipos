@@ -482,14 +482,51 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 }
 
 /* ───────── printing (receipts) ───────── */
+#print-root { display: none; }
+@page thermal { size: 80mm auto; margin: 3mm; }
+@page a4 { size: A4; margin: 12mm; }
 @media print {
-  body * { visibility: hidden; }
-  .print-area, .print-area * { visibility: visible; }
-  .print-area { position: fixed; left: 0; top: 0; width: 80mm; border: 0; margin: 0; padding: 4mm; box-shadow: none; }
-  .modal-backdrop { background: none; backdrop-filter: none; }
-  .modal header, .form-actions { display: none !important; }
-  .modal { box-shadow: none; max-height: none; overflow: visible; }
+  body > *:not(#print-root) { display: none !important; }
+  #print-root { display: block !important; position: static; background: #fff; color: #000; }
+  .print-root.thermal { page: thermal; width: 74mm; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.35; }
+  .print-root.a4 { page: a4; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 12px; color: #111; }
 }
+/* 80mm thermal receipt */
+.thermal { width: 100%; }
+.thermal .t-logo { max-width: 40mm; max-height: 16mm; margin: 0 auto 3px; filter: grayscale(1); }
+.thermal .t-center { text-align: center; }
+.thermal .t-shop { font-weight: 800; font-size: 14px; }
+.thermal .t-dash { border-top: 1px dashed #000; margin: 5px 0; }
+.thermal .t-row { display: flex; justify-content: space-between; gap: 6px; }
+.thermal .t-name { font-weight: 700; }
+.thermal .t-item { margin: 3px 0; }
+.thermal .t-big { font-size: 14px; font-weight: 800; }
+.thermal .t-foot { margin-top: 6px; }
+/* A4 invoice and report */
+.a4 { display: grid; gap: 14px; }
+.a4-head { display: flex; gap: 16px; align-items: center; border-bottom: 3px solid #0f766e; padding-bottom: 12px; }
+.a4-head .print-logo { max-height: 22mm; max-width: 50mm; object-fit: contain; }
+.a4-shop { flex: 1; display: grid; gap: 2px; }
+.a4-title { text-align: right; display: grid; gap: 2px; }
+.a4-title h1 { margin: 0; font-size: 20px; color: #0f766e; }
+.a4 small { color: #555; }
+.a4 table { width: 100%; border-collapse: collapse; }
+.a4 th, .a4 td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+.a4 th { background: #f1f5f9; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; }
+.a4 .r { text-align: right; }
+.a4 tr.total td, .a4 tr.grand-row td { font-weight: 700; }
+.p-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.p-kpi { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; display: grid; gap: 2px; }
+.p-kpi strong { font-size: 15px; }
+.inv-bill { display: flex; justify-content: space-between; gap: 12px; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; }
+.inv-bill .r { text-align: right; }
+.inv-bill small { display: block; }
+.inv-totals { margin-left: auto; width: 46%; display: grid; gap: 4px; }
+.inv-totals div { display: flex; justify-content: space-between; }
+.inv-totals .grand { font-weight: 800; font-size: 14px; border-top: 2px solid #111; padding-top: 4px; }
+.inv-sign { margin-top: 30px; }
+.muted-print { color: #666; font-size: 11px; text-align: center; }
+.a4-foot { display: flex; justify-content: space-between; font-size: 10px; color: #666; border-top: 1px solid #e5e7eb; padding-top: 6px; margin-top: 10px; }
 
 /* ───────── login, icons and password fields (v2) ───────── */
 .brand-logo { display: block; margin: 0 auto; max-height: 72px; max-width: 220px; width: auto; object-fit: contain; animation: pop .5s var(--ease) both; }
@@ -616,3 +653,24 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .rank-top b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; background: var(--brand); color: #fff; font-size: 11px; margin-right: 6px; }
 .rank-bar { height: 8px; border-radius: 99px; background: rgba(127,127,127,.15); overflow: hidden; margin: 6px 0 2px; }
 .rank-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--brand), var(--brand-2, var(--brand))); transition: width .8s var(--ease); }
+
+/* ───────── lists: payment method cards and chips ───────── */
+.pm-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); margin: 12px 0; }
+.pm-card { border: 1px solid var(--line, #e5e7eb); border-radius: 14px; padding: 12px; display: grid; gap: 10px; background: var(--surface, #fff); animation: fadeUp .4s var(--d, 0ms) var(--ease) both; transition: box-shadow .2s, transform .2s; }
+.pm-card:hover { box-shadow: 0 8px 20px rgba(15, 118, 110, .12); transform: translateY(-2px); }
+.pm-card.is-off { opacity: .55; }
+.pm-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pm-top input { flex: 1; min-width: 120px; }
+.pm-num { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 99px; background: rgba(15, 118, 110, .12); color: var(--brand); }
+.pm-move { display: flex; gap: 4px; align-items: center; }
+.pm-bottom { display: grid; gap: 8px; }
+.pm-account { display: grid; gap: 4px; font-size: 13px; }
+.switch { display: flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+.switch input { width: 18px; height: 18px; accent-color: var(--brand); }
+.chips-edit { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.chip-edit { display: inline-flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; border-radius: 99px; background: rgba(15, 118, 110, .1); font-weight: 600; font-size: 14px; animation: pop .3s var(--ease) both; }
+.chip-edit small { font-weight: 500; opacity: .7; font-size: 11px; }
+.chip-x { width: 22px; height: 22px; border: 0; border-radius: 99px; background: transparent; cursor: pointer; font-size: 16px; line-height: 1; color: inherit; }
+.chip-x:hover { background: rgba(220, 38, 38, .15); color: #dc2626; }
+.add-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.add-row input { flex: 1; min-width: 180px; }

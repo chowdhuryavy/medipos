@@ -1,5 +1,6 @@
 import { db, collection, doc, getDoc, getDocs, query, where, runTransaction, serverTimestamp, increment } from "../firebase.js";
 import { onAction } from "../core.js";
+import { printReceipt } from "../print.js";
 import {
   session, settings, paymentMethod, money, esc, icon, toast, openModal, todayISO, calcTotals,
   buildJournal, allocateFEFO, audit, round2, ACCOUNTS,
@@ -22,14 +23,15 @@ export async function render(el) {
     if (!nearest[b.productId] || b.expiry < nearest[b.productId]) nearest[b.productId] = b.expiry;
   });
 
+  const methods0 = () => settings.paymentMethods.find((m) => m.active !== false);
   const st = {
     cat: "All", q: "", disc: 0,
-    pay: settings.paymentMethods[0]?.key || "cash",
+    pay: methods0()?.key || "cash",
     customerId: "",
     cart: new Map(), // productId -> qty
     holds: [], // parked bills
   };
-  const methods = settings.paymentMethods;
+  const methods = settings.paymentMethods.filter((m) => m.active !== false);
   const creditOk = settings.allowCreditSales;
 
   el.innerHTML = `
@@ -315,10 +317,12 @@ export async function render(el) {
         <p class="r-foot">${esc(settings.receiptFooter || "")}</p>
       </div>
       <div class="form-actions">
-        <button class="btn ghost" type="button" data-print>${icon("print")}<span>Print</span></button>
+        <button class="btn ghost" type="button" data-print-thermal>${icon("print")}<span>Receipt 80mm</span></button>
+        <button class="btn ghost" type="button" data-print-a4>${icon("print")}<span>A4 invoice</span></button>
         <button class="btn primary" type="button" data-done>${icon("check")}<span>New sale</span></button>
       </div>`, (body, close) => {
-      body.querySelector("[data-print]").addEventListener("click", () => window.print());
+      body.querySelector("[data-print-thermal]").addEventListener("click", () => printReceipt(sale, "thermal"));
+      body.querySelector("[data-print-a4]").addEventListener("click", () => printReceipt(sale, "a4"));
       body.querySelector("[data-done]").addEventListener("click", close);
     });
   }
@@ -418,7 +422,7 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
 
     return {
       id: saleRef.id, invoiceNo, ...totals,
-      lines: totals.lines, paymentLabel: method.label,
+      lines: totals.lines, paymentLabel: method.label, customerName: customer?.name || "Walk-in",
       tendered, change: tendered === null ? null : round2(tendered - totals.total),
     };
   });

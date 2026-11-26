@@ -238,77 +238,175 @@ async function saveGeneral(patch, message) {
 
 /* ───────── Lists & payment methods ───────── */
 
-function viewLists(body) {
-  const pm = settings.paymentMethods;
-  body.innerHTML = `
-    <form id="lf" class="settings-form">
-      <section class="card">
-        <h3>Product categories</h3>
-        <p class="muted small">One per line. Used when adding products.</p>
-        <textarea name="categories" rows="5" aria-label="Categories">${esc(settings.categories.join("\n"))}</textarea>
-      </section>
-      <section class="card">
-        <h3>Units of measure</h3>
-        <p class="muted small">One per line, e.g. Pack, Strip, Bottle.</p>
-        <textarea name="units" rows="4" aria-label="Units">${esc(settings.units.join("\n"))}</textarea>
-      </section>
-      <section class="card">
-        <h3>Write-off reasons</h3>
-        <p class="muted small">One per line. Used for stock-out entries.</p>
-        <textarea name="writeOffReasons" rows="4" aria-label="Write-off reasons">${esc(settings.writeOffReasons.join("\n"))}</textarea>
-      </section>
-      <section class="card">
-        <h3>Payment methods</h3>
-        <p class="muted small">Name what the customer sees, and choose which ledger account the money goes to. Tick “On account” for credit sales.</p>
-        <div class="pm-list" id="pm-list">
-          ${pm.map((m, i) => pmRow(m, i)).join("")}
-        </div>
-        <button type="button" class="btn ghost sm" id="pm-add">${icon("plus")}<span>Add method</span></button>
-      </section>
-      <div class="sticky-actions">
-        <button class="btn primary" type="submit">${icon("check")}<span>Save lists</span></button>
+/* ───────── Lists & payment methods ───────── */
+
+const clean = (arr) => [...new Set(arr.map((v) => String(v).trim()).filter(Boolean))];
+
+async function viewLists(body) {
+  const [accSnap, prodSnap] = await Promise.all([getDocs(collection(db, "accounts")), getDocs(collection(db, "products"))]);
+  const products = prodSnap.docs.map((d) => d.data());
+  // Ledger accounts a till payment can post to: every asset account, plus any already in use.
+  const accounts = accSnap.docs.map((d) => ({ code: d.id, ...d.data() })).filter((a) => a.type === "asset");
+  const accountChoices = [...new Map([
+    ...accounts.map((a) => [a.code, a.name]),
+    ...settings.paymentMethods.map((m) => [m.account, m.account]),
+  ]).entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  const state = {
+    categories: [...settings.categories],
+    units: [...settings.units],
+    writeOffReasons: [...settings.writeOffReasons],
+    methods: settings.paymentMethods.map((m) => ({ ...m, active: m.active !== false })),
+  };
+
+  const root = document.createElement("div");
+  body.innerHTML = "";
+  body.appendChild(root);
+
+  // Read what is typed in the payment-method cards into state before anything is re-drawn.
+  const syncFromDom = () => {
+    root.querySelectorAll(".pm-card").forEach((c, i) => {
+      const m = state.methods[i];
+      if (!m) return;
+      m.label = c.querySelector('[data-f="label"]').value;
+      m.account = c.querySelector('[data-f="account"]').value;
+      m.credit = c.querySelector('[data-f="credit"]').checked;
+      m.active = c.querySelector('[data-f="active"]').checked;
+    });
+  };
+
+  const usageOf = (listKey, value) => {
+    if (listKey === "categories") return products.filter((p) => p.category === value).length;
+    if (listKey === "units") return products.filter((p) => p.unit === value).length;
+    return null;
+  };
+
+  const chipSection = (key, title, help) => `
+    <section class="card list-card" data-list="${key}">
+      <header class="card-head"><h3>${title}</h3><span class="badge">${state[key].length}</span></header>
+      <p class="muted small">${help}</p>
+      <div class="chips-edit">
+        ${state[key].map((v, i) => {
+          const used = usageOf(key, v);
+          return `<span class="chip-edit">${esc(v)}${used !== null ? `<small>${used} product${used === 1 ? "" : "s"}</small>` : ""}
+            <button type="button" class="chip-x" data-rm-chip="${i}" aria-label="Remove ${esc(v)}">×</button></span>`;
+        }).join("") || `<span class="muted small">Nothing here yet.</span>`}
       </div>
-    </form>`;
+      <div class="add-row">
+        <input data-new maxlength="40" placeholder="Type a new one, then press Enter" aria-label="New ${esc(title)}" />
+        <button type="button" class="btn ghost sm" data-add-chip>${icon("plus")}<span>Add</span></button>
+      </div>
+    </section>`;
 
-  const list = body.querySelector("#pm-list");
-  body.querySelector("#pm-add").addEventListener("click", () => {
-    list.insertAdjacentHTML("beforeend", pmRow({ key: "", label: "", account: "1000", credit: false }, list.children.length));
-  });
-  list.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-rm-pm]");
-    if (b && list.children.length > 1) b.closest(".pm-row").remove();
+  const methodCard = (m, i) => `
+    <article class="pm-card ${m.active ? "" : "is-off"}" style="--d:${i * 70}ms">
+      <div class="pm-top">
+        <span class="pm-num">${i === 0 ? "Default" : `#${i + 1}`}</span>
+        <input data-f="label" value="${esc(m.label)}" placeholder="Name shown to staff" maxlength="30" aria-label="Payment method name" />
+        <div class="pm-move">
+          ${i > 0 ? `<button type="button" class="icon-btn sm" data-pm-up="${i}" aria-label="Move up">↑</button>` : ""}
+          ${i > 0 ? `<button type="button" class="btn ghost sm" data-pm-top="${i}">Make default</button>` : ""}
+          <button type="button" class="icon-btn sm hover-danger" data-pm-del="${i}" aria-label="Delete ${esc(m.label)}">${icon("trash")}</button>
+        </div>
+      </div>
+      <div class="pm-bottom">
+        <label class="pm-account">Posts to ledger account
+          <select data-f="account">${accountChoices.map(([code, name]) => `<option value="${esc(code)}" ${code === m.account ? "selected" : ""}>${esc(code)} · ${esc(name)}</option>`).join("")}</select>
+        </label>
+        <label class="switch"><input type="checkbox" data-f="credit" ${m.credit ? "checked" : ""} /><span>Sale on account (customer pays later)</span></label>
+        <label class="switch"><input type="checkbox" data-f="active" ${m.active ? "checked" : ""} /><span>Shown at the till</span></label>
+      </div>
+    </article>`;
+
+  const paint = () => {
+    root.innerHTML = `
+      <form id="lf" class="settings-form">
+        <section class="card">
+          <header class="card-head"><h3>Payment methods</h3><span class="muted small">The first one is the default at the till</span></header>
+          <p class="muted small">Add, rename, reorder or delete payment methods. Turn one off to hide it at the till without losing its history. Every method posts to a ledger account.</p>
+          <div class="pm-grid">${state.methods.map(methodCard).join("")}</div>
+          <button type="button" class="btn ghost" data-pm-add>${icon("plus")}<span>Add payment method</span></button>
+        </section>
+        ${chipSection("categories", "Product categories", "Used when adding products. Shows how many products use each one.")}
+        ${chipSection("units", "Units of measure", "e.g. Pack, Strip, Bottle. Shows how many products use each one.")}
+        ${chipSection("writeOffReasons", "Write-off reasons", "Used when you record stock lost, damaged or expired.")}
+        <div class="sticky-actions">
+          <button class="btn primary" type="submit">${icon("check")}<span>Save lists</span></button>
+        </div>
+      </form>`;
+  };
+
+  root.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    const sec = b.closest("[data-list]");
+    if (b.hasAttribute("data-add-chip")) {
+      const input = sec.querySelector("[data-new]");
+      const v = input.value.trim();
+      if (!v) return;
+      const key = sec.dataset.list;
+      if (state[key].some((x) => x.toLowerCase() === v.toLowerCase())) return toast("That is already in the list", "error");
+      syncFromDom();
+      state[key].push(v);
+      paint();
+      root.querySelector(`[data-list="${key}"] [data-new]`).focus();
+    } else if (b.hasAttribute("data-rm-chip")) {
+      const key = sec.dataset.list;
+      syncFromDom();
+      state[key].splice(Number(b.dataset.rmChip), 1);
+      paint();
+    } else if (b.hasAttribute("data-pm-add")) {
+      syncFromDom();
+      state.methods.push({ key: `m${Date.now().toString(36)}`, label: "", account: accountChoices[0]?.[0] || "1000", credit: false, active: true });
+      paint();
+      root.querySelector(".pm-card:last-of-type [data-f='label']")?.focus();
+    } else if (b.hasAttribute("data-pm-up")) {
+      syncFromDom();
+      const i = Number(b.dataset.pmUp);
+      [state.methods[i - 1], state.methods[i]] = [state.methods[i], state.methods[i - 1]];
+      paint();
+    } else if (b.hasAttribute("data-pm-top")) {
+      syncFromDom();
+      const i = Number(b.dataset.pmTop);
+      const [m] = state.methods.splice(i, 1);
+      state.methods.unshift(m);
+      paint();
+    } else if (b.hasAttribute("data-pm-del")) {
+      const i = Number(b.dataset.pmDel);
+      syncFromDom();
+      const m = state.methods[i];
+      const others = state.methods.filter((x, j) => j !== i && x.active && !x.credit);
+      if (!others.length && m.active && !m.credit) return toast("Keep at least one active cash-type payment method", "error");
+      confirmBox(`Delete "${m.label || "this payment method"}"? Past sales keep their payment record. It just stops being offered at the till.`).then((ok) => {
+        if (!ok) return;
+        state.methods.splice(i, 1);
+        paint();
+      });
+    }
   });
 
-  onSubmit(body.querySelector("#lf"), async (e) => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    const lines = (k) => String(f.get(k) || "").split("\n").map((s) => s.trim()).filter(Boolean);
-    const methods = [...list.querySelectorAll(".pm-row")].map((r, i) => {
-      const label = r.querySelector('[data-k="label"]').value.trim();
-      return {
-        key: r.querySelector('[data-k="key"]').value.trim() || `m${i + 1}`,
-        label: label || `Method ${i + 1}`,
-        account: r.querySelector('[data-k="account"]').value.trim(),
-        credit: r.querySelector('[data-k="credit"]').checked,
-      };
-    }).filter((m) => m.account);
-    if (!methods.length) return toast("Add at least one payment method", "error");
-    if (new Set(methods.map((m) => m.key)).size !== methods.length) return toast("Each payment method needs a unique key", "error");
-    const categories = lines("categories"), units = lines("units"), writeOffReasons = lines("writeOffReasons");
-    if (!categories.length || !units.length) return toast("Categories and units cannot be empty", "error");
-    await saveGeneral({ categories, units, writeOffReasons, paymentMethods: methods }, "Lists saved. Reloading to apply them.");
+  root.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.matches("[data-new]")) {
+      e.preventDefault();
+      root.querySelector(`[data-list="${e.target.closest("[data-list]").dataset.list}"] [data-add-chip]`).click();
+    }
   });
-}
 
-function pmRow(m, i) {
-  return `
-    <div class="pm-row">
-      <input data-k="label" placeholder="Name shown to staff" value="${esc(m.label)}" aria-label="Method name" />
-      <input data-k="key" placeholder="key" value="${esc(m.key)}" aria-label="Method key" />
-      <input data-k="account" placeholder="Ledger account code" value="${esc(m.account)}" inputmode="numeric" aria-label="Ledger account" />
-      <label class="check"><input type="checkbox" data-k="credit" ${m.credit ? "checked" : ""} /> <span>On account</span></label>
-      <button type="button" class="icon-btn sm hover-danger" data-rm-pm aria-label="Remove method">${icon("x")}</button>
-    </div>`;
+  paint();
+
+  onSubmit(root.querySelector("#lf"), async () => {
+    syncFromDom();
+    const categories = clean(state.categories), units = clean(state.units), writeOffReasons = clean(state.writeOffReasons);
+    if (!categories.length || !units.length) throw new Error("Keep at least one category and one unit.");
+    if (state.methods.some((m) => !m.label.trim())) throw new Error("Every payment method needs a name.");
+    const names = state.methods.map((m) => m.label.trim().toLowerCase());
+    if (new Set(names).size !== names.length) throw new Error("Two payment methods have the same name.");
+    if (!state.methods.some((m) => m.active && !m.credit)) throw new Error("Keep at least one active payment method that is not on account.");
+    const paymentMethods = state.methods.map((m) => ({
+      key: m.key, label: m.label.trim(), account: m.account, credit: !!m.credit, active: !!m.active,
+    }));
+    await saveGeneral({ categories, units, writeOffReasons, paymentMethods }, "Lists saved. Reloading to apply them.");
+  });
 }
 
 /* ───────── Role access ───────── */
