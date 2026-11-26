@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS = {
   maxDiscountPct: 100,
   allowCreditSales: true,
   allowPriceChange: true,
+  floatWarnAmount: 1000,
   walletProviders: ["bKash", "Nagad", "Rocket"],
   // Service fee rules. mode "percent" = % of the amount, "flat" = fixed amount. min/max 0 = no limit.
   serviceFees: {
@@ -145,6 +146,7 @@ export const fmtDateTime = (ts) => {
 /* ───────────────────────── icons ───────────────────────── */
 
 const ICONS = {
+  bell: '<path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/>',
   dashboard: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
   pos: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
   cart: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/>',

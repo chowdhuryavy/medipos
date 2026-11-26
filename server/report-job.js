@@ -1,5 +1,13 @@
 // Scheduled reports: each schedule the admin saves sends the chosen reports for YESTERDAY (shop time) at its set time, by email.
 import { adminDb } from "./firebase-admin.js";
+
+// Tells administrators in the app's bell when a scheduled report went out or failed.
+async function notifyAdmins(title, body) {
+  await adminDb().collection("notifications").add({
+    roles: ["admin"], title: title.slice(0, 160), body: body.slice(0, 400), kind: "report", link: "admin",
+    readBy: [], createdBy: "system", createdAt: new Date(),
+  }).catch(() => {});
+}
 import { sendMail } from "./mail.js";
 import { loadEmailConfig } from "./templates.js";
 import { brandPalette, shell, esc } from "./email-layout.js";
@@ -125,10 +133,12 @@ export async function runDueSchedules(now = new Date()) {
       s.lastRunDate = due.today;
       s.lastRunStatus = `Sent ${sent.reportDate}`;
       results.push({ id: s.id, ok: true, ...sent });
+      await notifyAdmins(`Report sent: ${s.name}`, `Reports for ${due.reportDate} were emailed to ${s.recipients.join(", ")}.`);
     } catch (err) {
       // A failed send is recorded and retried on the next run that day.
       s.lastRunStatus = `Failed: ${err.message}`.slice(0, 200);
       results.push({ id: s.id, ok: false, error: err.message });
+      await notifyAdmins(`Report failed: ${s.name}`, `${err.message}`.slice(0, 300));
     }
   }
   if (results.length) await ref.set({ items }, { merge: true });

@@ -6,6 +6,7 @@ import {
   buildJournal, allocateFEFO, audit, round2, ACCOUNTS,
 } from "../core.js";
 import { unitsOf, unitByKey, toPieces, unitOptions, baseName } from "../packs.js";
+import { notifyOnce, rolesWith } from "../notifications.js";
 import { SERVICE_TYPES, serviceProviders, serviceLine, serviceJournalLines, serviceBreakdown, floatKey, applyFloat, calcFee } from "../services.js";
 
 export async function render(el) {
@@ -501,6 +502,7 @@ export async function render(el) {
       await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: method.key, services: sale.serviceCount });
       for (const l of lines) if (!isService(l)) byId[l.id].stock = (Number(byId[l.id].stock) || 0) - l.pieces;
       Object.assign(floats, sale.floatBalances || {});
+      afterSale(lines, sale);
       clearBill();
       paintGrid();
       if (sale.priceExtra > 0) {
@@ -513,6 +515,30 @@ export async function render(el) {
     } finally {
       btn.disabled = false;
       btn.classList.remove("loading");
+    }
+  }
+
+  // Alerts after a sale: out of stock, low stock, and a wallet float that has run low. Once per item per day.
+  function afterSale(lines, sale) {
+    const today = todayISO();
+    const inv = rolesWith("inventory");
+    for (const l of lines) {
+      if (isService(l)) continue;
+      const p = byId[l.id];
+      const stock = Number(p.stock) || 0;
+      if (stock <= 0) notifyOnce(`out-${l.id}-${today}`, { roleKeys: inv, kind: "stock", title: `Out of stock: ${p.name}`, body: "Reorder now.", link: "inventory" });
+      else if ((Number(p.reorderLevel) || 0) > 0 && stock <= Number(p.reorderLevel)) {
+        notifyOnce(`low-${l.id}-${today}`, { roleKeys: inv, kind: "stock", title: `Low stock: ${p.name}`, body: `${stock} left, reorder level ${p.reorderLevel}.`, link: "inventory" });
+      }
+    }
+    const warn = Number(settings.floatWarnAmount ?? 1000);
+    for (const [k, b] of Object.entries(sale.floatBalances || {})) {
+      if (b < warn) {
+        notifyOnce(`float-${k}-${today}`, {
+          roleKeys: rolesWith("accounting"), kind: "float", title: `Float running low: ${k.replace(/_/g, " ")}`,
+          body: `Balance ${money(b)}. Top it up in Accounting.`, link: "accounting",
+        });
+      }
     }
   }
 

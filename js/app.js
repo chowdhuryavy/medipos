@@ -6,6 +6,7 @@ import { post } from "./api.js";
 import { showSplash } from "./splash.js";
 import { firebaseConfig, APP_NAME, APP_VERSION } from "./config.js";
 import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast, confirmBox, alertBox } from "./core.js";
+import { startNotifications, toggleNotifications, runStockChecks } from "./notifications.js";
 
 // Email + password only. No third-party (Google) sign-in is offered anywhere.
 
@@ -378,6 +379,7 @@ function buildShell() {
           <h2 id="page-title"></h2>
           <div class="grow"></div>
           <span class="clock" id="clock"></span>
+          <button class="icon-btn bell-btn" id="bell-btn" type="button" aria-label="Notifications" title="Notifications">${icon("bell")}<span class="bell-count" id="bell-count" hidden></span></button>
           <button class="icon-btn" id="theme-btn" aria-label="Toggle dark mode">${icon(document.documentElement.dataset.theme === "dark" ? "sun" : "moon")}</button>
           <button class="avatar-top" id="avatar-top" type="button" aria-label="Your account" title="${esc(session.name || "Account")}">${esc((session.name || "?").charAt(0).toUpperCase())}</button>
         </header>
@@ -397,6 +399,7 @@ function buildShell() {
   scrim.addEventListener("click", () => setDrawer(false));
   sidebar.querySelectorAll(".nav-link").forEach((a) => a.addEventListener("click", () => setDrawer(false)));
   document.getElementById("theme-btn").addEventListener("click", toggleTheme);
+  document.getElementById("bell-btn").addEventListener("click", toggleNotifications);
   const openAccount = () => openAccountMenu();
   document.getElementById("avatar-top").addEventListener("click", openAccount);
   const side = document.getElementById("avatar-side");
@@ -410,6 +413,8 @@ function buildShell() {
   clearInterval(clockTimer);
   tick();
   clockTimer = setInterval(tick, 15000);
+  startNotifications();
+  runStockChecks();
 }
 
 /* ───────── router ───────── */

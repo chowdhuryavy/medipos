@@ -199,6 +199,7 @@ const FIELDS = [
   ]],
   ["Inventory rules", [
     ["expiryWarnDays", "Warn this many days before expiry", "number"],
+    ["floatWarnAmount", "Warn when a wallet or operator float falls below", "number"],
     ["defaultReorderLevel", "Default reorder level for new products", "number"],
   ]],
 ];

@@ -838,3 +838,35 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .sched-fmt legend, .sched-reports legend { font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 4px; }
 .sched-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 700px) { .sched-grid { grid-template-columns: 1fr; } .sched-grid .span-2 { grid-column: auto; } }
+
+/* ───────── Notifications bell and panel (1.1.27) ───────── */
+.bell-btn { position: relative; }
+.bell-btn.has-new svg { animation: bellRing 1.6s var(--ease) 1; transform-origin: 50% 0; }
+@keyframes bellRing { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(14deg); } 30% { transform: rotate(-12deg); } 45% { transform: rotate(8deg); } 60% { transform: rotate(-4deg); } }
+.bell-count { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--surface); }
+.bell-count[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .bell-btn.has-new svg { animation: none; } }
+
+.notif-panel { position: fixed; top: 66px; right: 16px; width: min(380px, calc(100vw - 32px)); max-height: min(70vh, 560px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); z-index: 60; overflow: hidden; animation: slideIn .25s var(--ease) both; }
+.np-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 8%, var(--surface)), var(--surface)); }
+.np-head small { display: block; color: var(--muted); }
+.np-actions { display: flex; gap: 6px; align-items: center; }
+.np-list { overflow: auto; padding: 6px; display: grid; gap: 4px; -webkit-overflow-scrolling: touch; }
+.np-item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 10px; border-radius: 14px; border: 0; background: none; text-align: left; color: var(--text); cursor: pointer; width: 100%; }
+.np-item:hover { background: var(--surface-2); }
+.np-item.unread { background: color-mix(in srgb, var(--brand) 7%, var(--surface)); }
+.np-ico { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-2); color: var(--brand); }
+.np-ico svg { width: 18px; height: 18px; }
+.np-ico.kind-stock, .np-ico.kind-expiry { color: var(--warn); }
+.np-ico.kind-float { color: var(--ok); }
+.np-text { display: grid; gap: 2px; min-width: 0; }
+.np-text strong { font-size: 14px; line-height: 1.3; }
+.np-text small { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.np-text em { color: var(--muted); font-size: 11.5px; font-style: normal; }
+.np-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--brand); margin-top: 6px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 18%, transparent); }
+.np-empty { display: grid; justify-items: center; gap: 6px; padding: 28px 12px; color: var(--muted); }
+.np-empty svg { width: 28px; height: 28px; color: var(--ok); }
+@media (max-width: 900px) {
+  .notif-panel { top: auto; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 8px); left: 8px; right: 8px; width: auto; max-height: 72vh; border-radius: 22px; }
+  .avatar-top { display: none; }
+}

@@ -7,6 +7,7 @@ import {
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, runTransaction, serverTimestamp, increment,
+  onSnapshot, writeBatch, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
 
@@ -22,4 +23,5 @@ export {
   reauthenticateWithCredential, EmailAuthProvider,
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, runTransaction, serverTimestamp, increment,
+  onSnapshot, writeBatch, arrayUnion,
 };
