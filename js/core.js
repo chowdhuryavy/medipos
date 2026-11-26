@@ -1,0 +1,282 @@
+import { db, doc, getDoc, setDoc, addDoc, collection, serverTimestamp } from "./firebase.js";
+
+/* ───────────────────────── admin-editable settings ─────────────────────────
+   Defaults live here. The admin overrides them in Firestore
+   (settings/general and settings/roles) from Administration → Settings.   */
+
+export const DEFAULT_SETTINGS = {
+  shopName: "My Pharmacy",
+  shopAddress: "",
+  shopPhone: "",
+  taxNumber: "",
+  currency: "QAR",
+  defaultVatRate: 0,
+  invoicePrefix: "INV",
+  purchasePrefix: "PUR",
+  receiptFooter: "Thank you for your visit. Get well soon!",
+  expiryWarnDays: 60,
+  defaultReorderLevel: 10,
+  maxDiscountPct: 100,
+  allowCreditSales: true,
+  categories: ["Medicines", "OTC", "Cosmetics", "Baby care", "Medical devices", "General"],
+  units: ["Pack", "Strip", "Bottle", "Box", "Piece"],
+  paymentMethods: [
+    { key: "cash", label: "Cash", account: "1000", credit: false },
+    { key: "card", label: "Card", account: "1010", credit: false },
+    { key: "credit", label: "On account", account: "1100", credit: true },
+  ],
+  writeOffReasons: ["Expired", "Damaged", "Lost / theft", "Counting error", "Other"],
+};
+
+export const settings = structuredClone(DEFAULT_SETTINGS);
+
+export const DEFAULT_ROLES = {
+  admin:       { label: "Administrator", pages: ["dashboard", "pos", "inventory", "purchasing", "partners", "accounting", "reports", "admin"] },
+  pharmacist:  { label: "Pharmacist",    pages: ["dashboard", "pos", "inventory", "purchasing", "partners", "reports"] },
+  cashier:     { label: "Cashier",       pages: ["dashboard", "pos", "partners"] },
+  storekeeper: { label: "Storekeeper",   pages: ["inventory", "purchasing", "partners"] },
+  accountant:  { label: "Accountant",    pages: ["dashboard", "accounting", "reports", "purchasing", "partners"] },
+};
+
+// Filled by loadSettings(); edited by the admin.
+export const roles = structuredClone(DEFAULT_ROLES);
+
+export const session = { uid: null, name: "", email: "", role: null };
+
+export const can = (page) => !!session.role && !!roles[session.role]?.pages.includes(page);
+
+/** Loads shop settings and role permissions from Firestore, merged over the defaults. */
+export async function loadSettings() {
+  const [g, r] = await Promise.all([getDoc(doc(db, "settings", "general")), getDoc(doc(db, "settings", "roles"))]);
+  Object.assign(settings, structuredClone(DEFAULT_SETTINGS), g.exists() ? g.data() : {});
+  const saved = r.exists() ? r.data() : {};
+  for (const key of Object.keys(DEFAULT_ROLES)) {
+    roles[key] = { ...structuredClone(DEFAULT_ROLES[key]), ...(saved[key] || {}) };
+  }
+  fmtCache = null;
+}
+
+/* ───────────────────────── accounting constants ───────────────────────── */
+
+export const ACCOUNTS = {
+  CASH: "1000", BANK: "1010", AR: "1100", INVENTORY: "1200", VAT_INPUT: "1300",
+  AP: "2000", VAT_PAYABLE: "2100", EQUITY: "3000", SALES: "4000", COGS: "5000",
+  OTHER_EXPENSE: "6900",
+};
+
+export const DEFAULT_ACCOUNTS = [
+  { code: "1000", name: "Cash on Hand", type: "asset" },
+  { code: "1010", name: "Bank Account", type: "asset" },
+  { code: "1100", name: "Accounts Receivable (Customers)", type: "asset" },
+  { code: "1200", name: "Inventory (Medicines & Goods)", type: "asset" },
+  { code: "1300", name: "VAT Input (Recoverable)", type: "asset" },
+  { code: "2000", name: "Accounts Payable (Suppliers)", type: "liability" },
+  { code: "2100", name: "VAT Payable", type: "liability" },
+  { code: "3000", name: "Owner's Equity", type: "equity" },
+  { code: "4000", name: "Sales Revenue", type: "revenue" },
+  { code: "5000", name: "Cost of Goods Sold", type: "expense" },
+  { code: "6100", name: "Salaries & Wages", type: "expense" },
+  { code: "6200", name: "Rent", type: "expense" },
+  { code: "6300", name: "Utilities", type: "expense" },
+  { code: "6400", name: "Maintenance", type: "expense" },
+  { code: "6900", name: "Other Expenses / Stock Write-off", type: "expense" },
+];
+
+export const PURCHASE_PAYMENT_ACCOUNT = { cash: ACCOUNTS.CASH, bank: ACCOUNTS.BANK, credit: ACCOUNTS.AP };
+
+/* ───────────────────────── formatting & dates ───────────────────────── */
+
+let fmtCache = null;
+export function money(n) {
+  if (!fmtCache) {
+    try {
+      fmtCache = new Intl.NumberFormat(undefined, { style: "currency", currency: settings.currency, minimumFractionDigits: 2 });
+    } catch {
+      fmtCache = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2 });
+    }
+  }
+  return fmtCache.format(Number(n) || 0);
+}
+export const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+export const todayISO = () => new Date().toLocaleDateString("en-CA");
+export const daysAgoISO = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toLocaleDateString("en-CA"); };
+export const daysFromNowISO = (n) => daysAgoISO(-n);
+export const monthStartISO = () => todayISO().slice(0, 8) + "01";
+export const fmtDateTime = (ts) => {
+  const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null;
+  return d ? d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
+};
+
+/* ───────────────────────── icons ───────────────────────── */
+
+const ICONS = {
+  dashboard: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
+  pos: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  cart: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/>',
+  inventory: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/>',
+  purchase: '<path d="M3 3h2l2.4 12.4a2 2 0 002 1.6h7.7a2 2 0 002-1.5L21 7H6"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/>',
+  partners: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0114 0M16 4a4 4 0 010 8M22 21a7 7 0 00-5-6.7"/>',
+  accounting: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>',
+  reports: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
+  admin: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  trash: '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>',
+  edit: '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/>',
+  x: '<path d="M18 6L6 18M6 6l12 12"/>',
+  logout: '<path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>',
+  alert: '<path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  check: '<path d="M20 6L9 17l-5-5"/>',
+  print: '<path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/>',
+  sync: '<path d="M21 12a9 9 0 01-15.5 6.2L3 16M3 12a9 9 0 0115.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/>',
+  download: '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+  moon: '<path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+};
+
+export const icon = (name, cls = "") =>
+  `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
+
+/* ───────────────────────── UI helpers ───────────────────────── */
+
+export function toast(message, type = "info") {
+  const host = document.getElementById("toast-root");
+  const el = document.createElement("div");
+  el.className = `toast ${type}`;
+  el.innerHTML = `${icon(type === "error" ? "alert" : "check")}<span>${esc(message)}</span>`;
+  host.appendChild(el);
+  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 300); }, 3200);
+}
+
+export function openModal(title, html, onMount) {
+  const host = document.getElementById("modal-root");
+  host.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+        <header><h3>${esc(title)}</h3>
+          <button class="icon-btn sm" type="button" data-close aria-label="Close">${icon("x")}</button>
+        </header>
+        <div class="modal-body">${html}</div>
+      </div>
+    </div>`;
+  const backdrop = host.querySelector(".modal-backdrop");
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    backdrop.classList.add("closing");
+    setTimeout(() => { if (host.contains(backdrop)) host.innerHTML = ""; }, 180);
+  };
+  host.querySelector("[data-close]").addEventListener("click", close);
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
+  onMount?.(host.querySelector(".modal-body"), close);
+  return close;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") document.querySelector("#modal-root [data-close]")?.click();
+});
+
+export function confirmBox(message) {
+  return new Promise((resolve) => {
+    openModal("Please confirm", `
+      <p>${esc(message)}</p>
+      <div class="form-actions">
+        <button class="btn ghost" type="button" data-no>Cancel</button>
+        <button class="btn danger" type="button" data-yes>Confirm</button>
+      </div>`, (body, close) => {
+      body.querySelector("[data-no]").addEventListener("click", () => { close(); resolve(false); });
+      body.querySelector("[data-yes]").addEventListener("click", () => { close(); resolve(true); });
+    });
+  });
+}
+
+export function animateCount(el, to, fmt = (v) => Math.round(v).toLocaleString()) {
+  const start = performance.now();
+  const dur = 900;
+  const tick = (now) => {
+    const p = Math.min(1, (now - start) / dur);
+    el.textContent = fmt(to * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(tick);
+    else el.textContent = fmt(to);
+  };
+  requestAnimationFrame(tick);
+}
+
+export function downloadCSV(filename, rows) {
+  const csv = rows.map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ───────────────────────── business helpers ───────────────────────── */
+
+// Bill totals. Prices are VAT-exclusive; the bill-level discount % is spread across lines.
+export function calcTotals(lines, discountPct = 0) {
+  const pct = Math.min(100, Math.max(0, Number(discountPct) || 0));
+  let subtotal = 0, net = 0, vat = 0;
+  const out = lines.map((l) => {
+    const gross = round2(l.price * l.qty);
+    const lineDisc = round2(gross * pct / 100);
+    const lineNet = round2(gross - lineDisc);
+    const lineVat = round2(lineNet * (l.vatRate || 0) / 100);
+    subtotal += gross; net += lineNet; vat += lineVat;
+    return { ...l, gross, lineDisc, lineNet, lineVat, lineTotal: round2(lineNet + lineVat) };
+  });
+  subtotal = round2(subtotal); net = round2(net); vat = round2(vat);
+  return { lines: out, subtotal, discount: round2(subtotal - net), net, vat, total: round2(net + vat) };
+}
+
+// First-expired-first-out allocation. Expired batches are skipped unless includeExpired is set.
+export function allocateFEFO(batches, qty, { includeExpired = false } = {}) {
+  const today = todayISO();
+  const usable = batches
+    .filter((b) => (b.remaining || 0) > 0 && (includeExpired || b.expiry >= today))
+    .sort((a, b) => (a.expiry || "").localeCompare(b.expiry || ""));
+  const plan = [];
+  let need = qty;
+  for (const b of usable) {
+    if (need <= 0) break;
+    const take = Math.min(b.remaining, need);
+    plan.push({ id: b.id, take, cost: b.cost || 0 });
+    need -= take;
+  }
+  if (need > 0) throw new Error(`Not enough usable stock in batches (short by ${need})`);
+  return plan;
+}
+
+// Double-entry guard: every journal must balance before it is written.
+export function buildJournal({ date = todayISO(), memo, ref = "", lines }) {
+  const norm = lines
+    .filter((l) => (Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0)
+    .map((l) => ({ account: String(l.account), debit: round2(Number(l.debit) || 0), credit: round2(Number(l.credit) || 0) }));
+  if (!norm.length) throw new Error("Journal has no amounts");
+  const debit = round2(norm.reduce((s, l) => s + l.debit, 0));
+  const credit = round2(norm.reduce((s, l) => s + l.credit, 0));
+  if (Math.abs(debit - credit) > 0.005) throw new Error(`Journal not balanced: debit ${debit} vs credit ${credit}`);
+  return { date, memo, ref, lines: norm, debit, credit, by: session.name, byUid: session.uid, createdAt: serverTimestamp() };
+}
+
+export async function audit(action, details = {}) {
+  try {
+    await addDoc(collection(db, "audit"), { action, details, by: session.name, byUid: session.uid, at: serverTimestamp() });
+  } catch (err) {
+    console.warn("Audit write failed", err);
+  }
+}
+
+export async function ensureChartOfAccounts() {
+  for (const a of DEFAULT_ACCOUNTS) {
+    const ref = doc(db, "accounts", a.code);
+    if (!(await getDoc(ref)).exists()) await setDoc(ref, a);
+  }
+}
+
+/** Looks up a configured payment method by key (cash, card, credit, or any admin-added key). */
+export const paymentMethod = (key) => settings.paymentMethods.find((m) => m.key === key) || settings.paymentMethods[0];
