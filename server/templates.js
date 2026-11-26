@@ -21,7 +21,7 @@ export async function loadEmailConfig() {
     templates[key] = { ...DEFAULT_TEMPLATES[key], ...(s[key] || {}) };
   }
   return {
-    appName: b.appName || "MediPOS",
+    appName: b.shopName || b.appName || "MediPOS",
     shopName: b.shopName || "My Pharmacy",
     hasLogo: !!b.logoUrl,
     templates,

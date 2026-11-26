@@ -697,3 +697,15 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .account-action small { display: block; opacity: .7; font-size: 13px; }
 .account-action.danger .ico { color: #dc2626; }
 .account-action.danger:hover { border-color: #dc2626; box-shadow: 0 8px 20px rgba(220, 38, 38, .14); }
+
+/* ───────── app alert and confirm dialogs ───────── */
+.app-alert { display: grid; justify-items: center; text-align: center; gap: 14px; padding: 4px 0 2px; }
+.app-alert .form-actions { width: 100%; }
+.aa-ico { width: 68px; height: 68px; border-radius: 50%; display: grid; place-items: center; color: var(--brand); background: rgba(15, 118, 110, .12);
+  animation: pop .5s var(--ease) both, ringPulse 1.8s .5s 2; }
+.aa-ico .ico { width: 30px; height: 30px; }
+.tone-success .aa-ico { color: #16a34a; background: rgba(22, 163, 74, .14); }
+.tone-error .aa-ico { color: #dc2626; background: rgba(220, 38, 38, .14); }
+.tone-warn .aa-ico { color: #d97706; background: rgba(217, 119, 6, .14); }
+.aa-msg { margin: 0; font-size: 15px; line-height: 1.55; max-width: 42ch; }
+@keyframes ringPulse { to { box-shadow: 0 0 0 16px transparent; } }

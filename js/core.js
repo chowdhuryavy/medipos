@@ -213,13 +213,33 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") document.querySelector("#modal-root [data-close]")?.click();
 });
 
-export function confirmBox(message) {
+const TONE_ICON = { success: "check", error: "alert", warn: "alert", info: "reports" };
+
+/** App-styled message box. Resolves when the user presses OK. */
+export function alertBox({ title = "Notice", message = "", tone = "info", button = "OK" } = {}) {
   return new Promise((resolve) => {
-    openModal("Please confirm", `
-      <p>${esc(message)}</p>
-      <div class="form-actions">
-        <button class="btn ghost" type="button" data-no>Cancel</button>
-        <button class="btn danger" type="button" data-yes>Confirm</button>
+    openModal(title, `
+      <div class="app-alert tone-${tone}">
+        <div class="aa-ico">${icon(TONE_ICON[tone] || "reports")}</div>
+        <p class="aa-msg">${esc(message)}</p>
+        <div class="form-actions"><button class="btn primary" type="button" data-ok>${esc(button)}</button></div>
+      </div>`, (body, close) => {
+      body.querySelector("[data-ok]").addEventListener("click", () => { close(); resolve(true); });
+    });
+  });
+}
+
+/** App-styled yes/no box. Resolves true only when the user confirms. */
+export function confirmBox(message, { title = "Please confirm", confirmText = "Confirm", tone = "warn" } = {}) {
+  return new Promise((resolve) => {
+    openModal(title, `
+      <div class="app-alert tone-${tone}">
+        <div class="aa-ico">${icon(TONE_ICON[tone] || "alert")}</div>
+        <p class="aa-msg">${esc(message)}</p>
+        <div class="form-actions">
+          <button class="btn ghost" type="button" data-no>Cancel</button>
+          <button class="btn ${tone === "error" ? "danger" : "primary"}" type="button" data-yes>${esc(confirmText)}</button>
+        </div>
       </div>`, (body, close) => {
       body.querySelector("[data-no]").addEventListener("click", () => { close(); resolve(false); });
       body.querySelector("[data-yes]").addEventListener("click", () => { close(); resolve(true); });

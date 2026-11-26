@@ -5,7 +5,7 @@ import { passwordFields } from "./password-ui.js";
 import { post } from "./api.js";
 import { showSplash } from "./splash.js";
 import { firebaseConfig, APP_NAME, APP_VERSION } from "./config.js";
-import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast, confirmBox } from "./core.js";
+import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast, confirmBox, alertBox } from "./core.js";
 
 // Email + password only. No third-party (Google) sign-in is offered anywhere.
 
@@ -87,7 +87,7 @@ function showLogin(message = "", tone = "error") {
       <div class="login-card">
         ${logoHtml(icon("pos"))}
         <h1>${esc(branding.appName || APP_NAME)}</h1>
-        <p class="muted">${esc(branding.shopName || settings.shopName)} · Staff sign-in</p>
+        <p class="muted">Staff sign-in</p>
         ${message ? `<div class="alert ${tone === "ok" ? "ok" : ""}" role="alert">${esc(message)}</div>` : ""}
         <form id="login-form" novalidate class="login-form">
           <label class="field"><span class="field-label">Email</span>
@@ -268,6 +268,17 @@ function showForcePasswordChange(user) {
   });
 }
 
+/* The loading and sign-in screens read the public branding record, so keep its shop name in step with Settings. */
+async function syncPublicBranding() {
+  if (!settings.shopName || branding.shopName === settings.shopName) return;
+  try {
+    await setDoc(doc(db, "branding", "public"), { shopName: settings.shopName, appName: settings.shopName }, { merge: true });
+    Object.assign(branding, { shopName: settings.shopName, appName: settings.shopName });
+  } catch (err) {
+    console.warn("Could not sync the shop name:", err.message);
+  }
+}
+
 /* ───────── account menu (tap the avatar) ───────── */
 
 function openAccountMenu() {
@@ -324,7 +335,7 @@ function openChangePassword() {
       await updatePassword(user, fields.value());
       await updateDoc(doc(db, "users", user.uid), { passwordChangedAt: serverTimestamp() });
       close();
-      toast("Password changed.", "success");
+      alertBox({ title: "Password changed", message: "Your new password is saved. Use it the next time you sign in.", tone: "success" });
     });
   });
 }
@@ -347,7 +358,7 @@ function buildShell() {
       <aside class="sidebar" id="sidebar">
         <div class="brand">
           ${branding.logoUrl ? `<img class="brand-logo-sm" src="${branding.logoUrl}" alt="" />` : `<div class="brand-mark">${icon("pos")}</div>`}
-          <div><strong>${esc(settings.shopName)}</strong><small>${esc(branding.appName || APP_NAME)} · POS & Accounts</small></div>
+          <div><strong>${esc(settings.shopName)}</strong><small>POS & Accounts</small></div>
         </div>
         <nav class="nav">
           ${items.map((p, i) => `
@@ -507,6 +518,7 @@ async function handleAuthChange(user) {
     }
     showSplash(root, "Loading your workspace…");
     const rolesExist = await loadSettings();
+    if (session.role === "admin") await syncPublicBranding();
     // First sign-in after setup: create the role matrix from the defaults so it can be edited.
     if (!rolesExist && p.role === "admin") {
       await setDoc(doc(db, "settings", "roles"), structuredClone(DEFAULT_ROLES));

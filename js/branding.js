@@ -11,6 +11,8 @@ export async function loadBranding() {
   } catch (err) {
     console.warn("Branding unavailable:", err.message);
   }
+  // The shop name from Settings is the name shown everywhere.
+  if (branding.shopName) branding.appName = branding.shopName;
   document.title = branding.appName || "MediPOS";
   return branding;
 }

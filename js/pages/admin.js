@@ -5,7 +5,7 @@ import {
 } from "../firebase.js";
 import { firebaseConfig } from "../config.js";
 import {
-  session, roles, DEFAULT_ROLES, WRITE_AREAS, settings, DEFAULT_SETTINGS, esc, icon, toast, openModal, confirmBox,
+  session, roles, DEFAULT_ROLES, WRITE_AREAS, settings, DEFAULT_SETTINGS, esc, icon, toast, openModal, confirmBox, alertBox,
   audit, ensureChartOfAccounts, fmtDateTime,
 } from "../core.js";
 
@@ -230,7 +230,7 @@ function viewSettings(body) {
 async function saveGeneral(patch, message) {
   await setDoc(doc(db, "settings", "general"), { ...patch, updatedAt: serverTimestamp() }, { merge: true });
   // The loading screen and sign-in page read branding/public before anyone is signed in.
-  if (patch.shopName) await setDoc(doc(db, "branding", "public"), { shopName: patch.shopName }, { merge: true });
+  if (patch.shopName) await setDoc(doc(db, "branding", "public"), { shopName: patch.shopName, appName: patch.shopName }, { merge: true });
   await audit("settings.update", { keys: Object.keys(patch) });
   toast(message, "success");
   setTimeout(() => location.reload(), 900);
@@ -376,7 +376,7 @@ async function viewLists(body) {
       syncFromDom();
       const m = state.methods[i];
       const others = state.methods.filter((x, j) => j !== i && x.active && !x.credit);
-      if (!others.length && m.active && !m.credit) return toast("Keep at least one active cash-type payment method", "error");
+      if (!others.length && m.active && !m.credit) return alertBox({ title: "Cannot delete", tone: "warn", message: "Keep at least one active cash-type payment method." });
       confirmBox(`Delete "${m.label || "this payment method"}"? Past sales keep their payment record. It just stops being offered at the till.`).then((ok) => {
         if (!ok) return;
         state.methods.splice(i, 1);
@@ -520,7 +520,7 @@ function viewRoles(body) {
     await withBusy(btn, async () => {
       const snap = await getDocs(query(collection(db, "users"), where("role", "==", key)));
       const count = snap.size;
-      if (count > 0) return toast(`${count} staff member${count === 1 ? " uses" : "s use"} this role. Move them to another role first.`, "error");
+      if (count > 0) return alertBox({ title: "Role is in use", tone: "warn", message: `${count} staff member${count === 1 ? " uses" : "s use"} this role. Move them to another role first.` });
       if (!(await confirmBox(`Delete the role "${working[key].label}"? Its permissions are removed when you save.`))) return;
       readScreen();
       delete working[key];
@@ -659,7 +659,7 @@ async function viewBranding(body) {
         <h3>App name and logo</h3>
         <p class="muted small">Shown on the sign-in page, in the sidebar and in every email.</p>
         <div class="form-grid">
-          <label>App name<input name="appName" required maxlength="40" value="${esc(brand.appName || "MediPOS")}" /></label>
+          <p class="muted small">The shop name from Settings is shown on the loading and sign-in screens, the menu, receipts and emails. Change it in Settings.</p>
           <div class="span-2 logo-editor">
             <div class="logo-preview" id="logo-preview">${logoUrl ? `<img src="${logoUrl}" alt="Current logo" />` : `<span class="muted small">No logo yet</span>`}</div>
             <div class="logo-actions">
@@ -718,7 +718,7 @@ async function viewBranding(body) {
   onSubmit(form, async (e) => {
     e.preventDefault();
     const f = new FormData(form);
-    const appName = String(f.get("appName") || "").trim() || "MediPOS";
+    const appName = settings.shopName || "MediPOS";
     const emails = {};
     for (const k of Object.keys(DEFAULT_TEMPLATES)) {
       emails[k] = {
