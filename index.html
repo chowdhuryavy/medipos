@@ -38,6 +38,21 @@
     window.addEventListener("error", function (e) { showBootError((e && e.message) || "script failed to load"); });
     window.addEventListener("unhandledrejection", function (e) { showBootError((e && e.reason && e.reason.message) || String(e.reason)); });
   </script>
-  <script type="module" src="js/app.js"></script>
+  <script type="module">
+    // Load the app inside try/catch so a failure to load it shows its real message on this screen.
+    function bootError(err) {
+      var m = document.getElementById("splash-msg");
+      var text = (err && err.message) ? err.message : String(err);
+      if (m) m.textContent = "Startup error: " + text;
+      var n = document.querySelector(".splash-name");
+      if (n) n.textContent = "MediPOS could not start";
+      console.error(err);
+    }
+    try {
+      await import("./js/app.js");
+    } catch (err) {
+      bootError(err);
+    }
+  </script>
 </body>
 </html>
