@@ -134,9 +134,9 @@ function showLogin(message = "", tone = "error") {
         ${message ? `<div class="alert ${tone === "ok" ? "ok" : ""}" role="alert">${esc(message)}</div>` : ""}
         <form id="login-form" novalidate class="login-form">
           <label class="field"><span class="field-label">Email</span>
-            <span class="input-wrap">${icon("mail")}<input type="email" name="email" inputmode="email" autocomplete="username" required /></span></label>
+            <span class="input-wrap">${icon("mail")}<input type="email" name="email" inputmode="email" autocomplete="username" placeholder="Email" required /></span></label>
           <label class="field"><span class="field-label">Password</span>
-            <span class="input-wrap">${icon("lock")}<input type="password" name="password" autocomplete="current-password" required />
+            <span class="input-wrap">${icon("lock")}<input type="password" name="password" autocomplete="current-password" placeholder="Password" required />
               <button type="button" class="eye" id="eye-login" aria-label="Show password">${icon("eye")}</button></span></label>
           <button class="btn primary block xl" type="submit" id="login-btn">${icon("key")}<span>Sign in</span></button>
         </form>
@@ -184,11 +184,11 @@ function openForgotPassword(prefillEmail = "") {
       <form id="fp-form" class="stack" novalidate>
         <div id="fp-step1">
           <label class="field"><span class="field-label">Email</span>
-            <span class="input-wrap">${icon("mail")}<input type="email" name="email" inputmode="email" autocomplete="username" value="${esc(prefillEmail)}" required /></span></label>
+            <span class="input-wrap">${icon("mail")}<input type="email" name="email" inputmode="email" autocomplete="username" value="${esc(prefillEmail)}" placeholder="Email" required /></span></label>
         </div>
         <div id="fp-step2" hidden class="stack">
           <label class="field"><span class="field-label">6-digit code</span>
-            <span class="input-wrap">${icon("key")}<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required /></span></label>
+            <span class="input-wrap">${icon("key")}<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit code" required /></span></label>
         </div>
         <div id="fp-step3" hidden class="stack">
           <div id="fp-pw"></div>

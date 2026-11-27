@@ -9,13 +9,13 @@ export function passwordFields(host, { confirm = true, label = "New password" } 
   host.innerHTML = `
     <label class="field"><span class="field-label">${esc(label)}</span>
       <span class="input-wrap">${icon("lock")}
-        <input type="password" name="password" autocomplete="new-password" required />
+        <input type="password" name="password" autocomplete="new-password" placeholder="New password" required />
         <button type="button" class="eye" data-eye aria-label="Show password">${icon("eye")}</button>
       </span></label>
     ${confirm ? `
     <label class="field"><span class="field-label">Confirm new password</span>
       <span class="input-wrap">${icon("lock")}
-        <input type="password" name="confirm" autocomplete="new-password" required />
+        <input type="password" name="confirm" autocomplete="new-password" placeholder="Confirm new password" required />
         <button type="button" class="eye" data-eye aria-label="Show password">${icon("eye")}</button>
       </span></label>` : ""}
     <ul class="rules" aria-live="polite">
