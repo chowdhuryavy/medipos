@@ -1,11 +1,13 @@
 // Bulk product import: reads a CSV file, checks every row, shows a preview, then creates the valid products.
-// Products are created with zero stock. Opening stock is received through Purchasing or Inventory, where its expiry is recorded.
-import { db, collection, doc, getDocs, writeBatch, serverTimestamp } from "../firebase.js";
+// A product with an opening quantity is received as stock with its expiry date, the same way Inventory does it.
+import { db, collection, doc, getDocs, setDoc, writeBatch, serverTimestamp } from "../firebase.js";
 import { settings, session, audit, toast, esc, icon, onSubmit, downloadCSV } from "../core.js";
+import { receiveStock } from "./inventory.js";
 
-const COLUMNS = ["name", "sku", "barcode", "group", "subGroup", "unit", "rack", "shelf", "costPrice", "salePrice", "minPrice", "vatRate", "reorderLevel"];
+const COLUMNS = ["name", "sku", "barcode", "group", "subGroup", "unit", "rack", "shelf", "costPrice", "salePrice", "minPrice", "vatRate", "reorderLevel", "openingQty", "openingExpiry"];
 const REQUIRED = ["name", "costPrice", "salePrice"];
-const NUMERIC = ["costPrice", "salePrice", "minPrice", "vatRate", "reorderLevel"];
+const NUMERIC = ["costPrice", "salePrice", "minPrice", "vatRate", "reorderLevel", "openingQty"];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Splits CSV text into rows. Handles quoted fields, commas and line breaks inside quotes.
 export function parseCsv(text) {
@@ -62,6 +64,8 @@ export function checkRows(rows, existing) {
     if (data.group && settings.categories?.length && !settings.categories.includes(data.group)) errors.push(`group "${data.group}" is not in Settings`);
     if (data.unit && settings.units?.length && !settings.units.includes(data.unit)) errors.push(`unit "${data.unit}" is not in Settings`);
     if (data.salePrice && data.costPrice && Number(data.salePrice) < Number(data.costPrice)) errors.push("sale price is below cost");
+    const openingQty = data.openingQty === "" ? 0 : Math.floor(Number(data.openingQty));
+    if (openingQty > 0 && !DATE_RE.test(data.openingExpiry)) errors.push("opening stock needs an expiry date (YYYY-MM-DD)");
 
     if (errors.length) { problems.push({ line, message: errors.join("; ") }); return; }
     if (data.name) seenNames.add(data.name.toLowerCase());
@@ -85,6 +89,8 @@ export function checkRows(rows, existing) {
       active: true,
       stub: false,
       stock: 0,
+      openingQty,
+      openingExpiry: openingQty > 0 ? data.openingExpiry : "",
     });
   });
   return { valid, problems };
@@ -92,7 +98,7 @@ export function checkRows(rows, existing) {
 
 const TEMPLATE = [
   COLUMNS,
-  ["Paracetamol 500mg tablet", "PCM-500", "8901234567890", "", "Analgesics", "", "A", "2", "1.20", "2.00", "1.80", "0", "50"],
+  ["Paracetamol 500mg tablet", "PCM-500", "8901234567890", "", "Analgesics", "", "A", "2", "1.20", "2.00", "1.80", "0", "50", "100", "2027-06-30"],
 ];
 
 export async function render(el) {
@@ -101,7 +107,7 @@ export async function render(el) {
       <section class="card">
         <header class="card-head"><h3>${icon("inventory")} Import products from CSV</h3></header>
         <p class="muted small">Save your sheet as CSV (File → Save as → CSV in Excel or Google Sheets). The first row must hold column names. Required: <b>name, costPrice, salePrice</b>. Optional: ${COLUMNS.filter((c) => !REQUIRED.includes(c)).join(", ")}.</p>
-        <p class="muted small">Groups and units must already exist in Settings. Barcodes and SKUs must be unique. Stock is added later through Purchasing, where expiry dates are recorded.</p>
+        <p class="muted small">Groups and units must already exist in Settings. Barcodes and SKUs must be unique. Add <b>openingQty</b> and <b>openingExpiry</b> (YYYY-MM-DD) to receive opening stock. Without them the product is created with zero stock and shows as Out on the sale screen.</p>
         <div class="row-actions wrap">
           <button type="button" class="btn ghost" id="im-template">${icon("download")}<span>Download template</span></button>
         </div>
@@ -143,14 +149,25 @@ export async function render(el) {
   onSubmit(el.querySelector("#im-form"), async () => {
     if (!pending || !pending.length) throw new Error("Choose a CSV file with valid rows first.");
     let done = 0;
+    const plain = pending.filter((p) => !p.openingQty);
+    const withStock = pending.filter((p) => p.openingQty > 0);
+    const strip = ({ openingQty, openingExpiry, ...rest }) => rest;
     // Firestore batches hold at most 500 writes; 400 leaves room.
-    for (let i = 0; i < pending.length; i += 400) {
+    for (let i = 0; i < plain.length; i += 400) {
       const batch = writeBatch(db);
-      for (const p of pending.slice(i, i + 400)) {
-        batch.set(doc(collection(db, "products")), { ...p, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      for (const p of plain.slice(i, i + 400)) {
+        batch.set(doc(collection(db, "products")), { ...strip(p), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
       }
       await batch.commit();
-      done += Math.min(400, pending.length - i);
+      done += Math.min(400, plain.length - i);
+    }
+    // Products with opening stock are created one by one, so each batch and its expiry is recorded like any stock-in.
+    for (const p of withStock) {
+      const ref = doc(collection(db, "products"));
+      const { openingQty, openingExpiry, ...rest } = p;
+      await setDoc(ref, { ...rest, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      await receiveStock({ productId: ref.id, pieces: openingQty, cost: p.costPrice, expiry: openingExpiry, batchNo: "" });
+      done += 1;
     }
     await audit("product.import", { count: done, by: session.name });
     toast(`${done} products imported`, "success");

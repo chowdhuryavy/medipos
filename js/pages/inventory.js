@@ -432,7 +432,7 @@ function openStock({ products, batches, preId, reload }) {
 }
 
 // Stock is always stored in pieces. Cost is per piece.
-async function receiveStock({ productId, pieces, cost, expiry, batchNo }) {
+export async function receiveStock({ productId, pieces, cost, expiry, batchNo }) {
   const pRef = doc(db, "products", productId);
   const jvNo = await runTransaction(db, async (tx) => {
     const snap = await tx.get(pRef);

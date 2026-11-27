@@ -33,6 +33,7 @@ const PAGE_TITLE = { ...PAGES, pos: "Point of Sale", partners: "Customers & Supp
 const PAGE_ICON = {
   dashboard: "dashboard", pos: "cart", inventory: "inventory", purchasing: "purchase",
   partners: "partners", accounting: "accounting", reports: "reports", returns: "cart", admin: "admin",
+  shift: "accounting", import: "inventory", prescriptions: "reports", activity: "partners",
 };
 const MOBILE_MAX_TABS = 4;
 
