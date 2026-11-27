@@ -269,7 +269,7 @@ export function toast(message, type = "info") {
 export function openModal(title, html, onMount, opts = {}) {
   const host = document.getElementById("modal-root");
   host.innerHTML = `
-    <div class="modal-backdrop${opts.center ? " modal-center" : ""}">
+    <div class="modal-backdrop${opts.center ? " modal-center" : ""}${opts.dialog ? " modal-dialog" : ""}">
       <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
         <header><h3>${esc(title)}</h3>
           <button class="icon-btn sm" type="button" data-close aria-label="Close">${icon("x")}</button>

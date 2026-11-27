@@ -282,7 +282,7 @@ function openForgotPassword(prefillEmail = "") {
         resend.disabled = false;
       }
     });
-  });
+  }, { dialog: true });
 }
 
 /* ───────── forced password change (new users and administrator resets) ───────── */
