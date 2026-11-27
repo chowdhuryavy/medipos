@@ -1,7 +1,7 @@
 // Standalone journal voucher page (voucher.html?jv=JV-000123). Opened in its own tab after a posting.
 // It uses the same Firebase sign-in as the app, reads the voucher with the same rules, and offers
 // Print, Save PDF and Excel. It changes nothing in the books.
-import { auth, db, onAuthStateChanged, doc, getDoc, getDocs, collection, query, where, limit } from "./firebase.js";
+import { auth, db, onAuthStateChanged, doc, getDoc, getDocs, collection, query, where, limit, addDoc, serverTimestamp } from "./firebase.js";
 import { voucherHtml, isPastDay } from "./journal.js";
 import { toPdf, toXlsx, rasterLogo } from "./export-files.js";
 
@@ -114,6 +114,17 @@ function download(name, bytes, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// Every print, PDF or Excel copy of a voucher is written to the activity log, so reprints can be traced.
+async function logCopy(kind) {
+  const u = auth.currentUser;
+  if (!u) return;
+  try {
+    await addDoc(collection(db, "audit"), { action: "voucher.copy", details: { kind, jvNo: state.v?.jvNo || jv }, by: u.email || u.uid, byUid: u.uid, at: serverTimestamp() });
+  } catch (err) {
+    console.warn("Copy log failed", err);
+  }
+}
+
 async function savePdf() {
   const { branding } = state;
   const bytes = await toPdf({
@@ -124,11 +135,13 @@ async function savePdf() {
     brand: { shop: shopName(), color: branding.brandColor || "", logo: await rasterLogo(branding.logoUrl || "") },
   });
   download(`${state.v.jvNo}.pdf`, bytes, "application/pdf");
+  logCopy("pdf");
 }
 
 function saveExcel() {
   const bytes = toXlsx([voucherSection()], { shop: shopName(), color: state.branding.brandColor || "" });
   download(`${state.v.jvNo}.xlsx`, bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  logCopy("excel");
 }
 
 function guarded(fn, label) {
@@ -144,7 +157,7 @@ function guarded(fn, label) {
   };
 }
 
-$("vch-print").addEventListener("click", () => window.print());
+$("vch-print").addEventListener("click", () => { logCopy("print"); window.print(); });
 $("vch-pdf").addEventListener("click", guarded(savePdf, "Preparing PDF"));
 $("vch-xlsx").addEventListener("click", guarded(async () => saveExcel(), "Preparing Excel"));
 
