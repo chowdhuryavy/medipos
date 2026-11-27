@@ -1,4 +1,5 @@
 import { reserveJv, writeVoucher, reverseVoucher, numberExistingVouchers, voucherHtml } from "../journal.js";
+import { branding } from "../branding.js";
 import { manageExpenseCategories, expenseCategories } from "../expense-categories.js";
 import { onSubmit, onAction, downloadCSV } from "../core.js";
 import { printHtml } from "../print.js";
@@ -338,7 +339,7 @@ async function viewJournal(body) {
 function openVoucher(v, name, reload) {
   if (!v) return;
   const html = voucherHtml(v, {
-    shop: settings.shopName || "MediPOS", address: settings.shopAddress || "", phone: settings.shopPhone || "", accountName: name,
+    shop: settings.shopName || "MediPOS", address: settings.shopAddress || "", phone: settings.shopPhone || "", logo: branding.logoUrl || "", accountName: name,
   });
   openModal(v.jvNo ? `Voucher ${v.jvNo}` : "Voucher", `<div class="jv-view">${html}</div>
     <div class="form-actions"><button class="btn ghost" data-cancel>Close</button><button class="btn primary" id="jv-print">${icon("print")}<span>Print</span></button></div>`,

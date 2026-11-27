@@ -72,7 +72,7 @@ export async function numberExistingVouchers() {
 }
 
 /** Printable journal voucher: shop name, JV number, dates, lines, totals and sign-off boxes. */
-export function voucherHtml(v, { shop, address = "", phone = "", accountName = (c) => c }) {
+export function voucherHtml(v, { shop, address = "", phone = "", logo = "", accountName = (c) => c }) {
   const reversedNote = v.status === "reversed" ? `Reversed by ${esc(v.reversedBy)}` : v.reverses ? `Reversal of ${esc(v.reverses)}` : "";
   const rows = (v.lines || []).map((l) => `
     <tr><td>${esc(l.account)}</td><td>${esc(accountName(l.account))}</td>
@@ -81,6 +81,7 @@ export function voucherHtml(v, { shop, address = "", phone = "", accountName = (
   <div class="jv">
     <header class="jv-head">
       <div>
+        ${logo ? `<img class="jv-logo" src="${esc(logo)}" alt="" />` : ""}
         <h1>${esc(shop)}</h1>
         ${address ? `<div>${esc(address)}</div>` : ""}
         ${phone ? `<div>${esc(phone)}</div>` : ""}
@@ -110,6 +111,7 @@ export function voucherHtml(v, { shop, address = "", phone = "", accountName = (
   </div>
   <style>
     .jv{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px}
+    .jv-logo{display:block;max-height:60px;max-width:180px;object-fit:contain;margin:0 0 6px}
     .jv-head{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid #111;padding-bottom:10px}
     .jv-head h1{margin:0 0 4px;font-size:20px}
     .jv-title{text-align:right}

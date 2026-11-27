@@ -1179,3 +1179,7 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .sa-modal .sa-page { display: grid; gap: 14px; }
 .sa-modal .sa-hero { margin: 0; }
 .sa-modal .sa-actions { justify-content: flex-end; }
+
+/* Admin and other pages: each block fits the screen width. A wide table scrolls inside its own box instead of pushing the page. */
+.view { grid-template-columns: minmax(0, 1fr); }
+.view > * { min-width: 0; }
