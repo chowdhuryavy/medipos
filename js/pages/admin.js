@@ -27,6 +27,7 @@ import { REPORTS } from "../report-tables.js";
 const TABS = [
   ["users", "Staff"],
   ["settings", "Shop & rules"],
+  ["versions", "App version"],
   ["lists", "Lists & payments"],
   ["roles", "Role access"],
   ["branding", "Branding & email"],
@@ -46,7 +47,7 @@ export async function render(el) {
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
-  const views = { users: viewUsers, settings: viewSettings, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, integrations: viewIntegrations, audit: viewAudit };
+  const views = { users: viewUsers, settings: viewSettings, versions: viewVersions, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, integrations: viewIntegrations, audit: viewAudit };
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
@@ -232,37 +233,47 @@ const FIELDS = [
   ]],
 ];
 
-// Lists recent releases. "Go back" asks for confirmation, then makes that release live.
-function openVersionsModal() {
-  openModal("App versions", `<div class="vs-list" id="vs-list"><p class="muted">Loading recent releases…</p></div>`, (body) => {
-    post("/api/admin/app", { action: "versions" }, { secure: true }).then(({ deployments }) => {
-      body.querySelector("#vs-list").innerHTML = deployments.length ? deployments.map((d, i) => {
-        const live = d.version === VERSION;
-        return `
-          <article class="vs-row ${live ? "is-live" : ""}">
-            <div class="vs-info">
-              <strong>${d.version ? `Version ${esc(d.version)}` : "Release"} ${live ? `<span class="badge ok">Running now</span>` : i === 0 ? `<span class="badge">Newest</span>` : ""}</strong>
-              <small>${esc(fmtDateTime(d.created))}</small>
-              <small>${esc(d.commit)}</small>
-            </div>
-            ${live ? "" : `<button type="button" class="btn ghost sm" data-go="${esc(d.id)}" data-ver="${esc(d.version ? "version " + d.version : "this release")}">${icon("sync")}<span>Go back</span></button>`}
-          </article>`;
-      }).join("") : `<p class="muted">No earlier releases found.</p>`;
-    }).catch((err) => { body.querySelector("#vs-list").innerHTML = `<p class="muted">${esc(err.message)}</p>`; });
+// App version: its own tab. Lists recent releases; "Go back" asks first, then makes that release live.
+async function viewVersions(body) {
+  body.innerHTML = `
+    <section class="card">
+      <h3>App version</h3>
+      <p class="muted small">You are running version ${esc(VERSION)}. If the app misbehaves after an update, go back to an earlier release. Going back changes the app code only. Your data and Firestore rules are not changed.</p>
+      <div class="vs-list" id="vs-list"><p class="muted">Loading recent releases…</p></div>
+    </section>`;
+  const list = body.querySelector("#vs-list");
+  let deployments;
+  try {
+    ({ deployments } = await post("/api/admin/app", { action: "versions" }, { secure: true }));
+  } catch (err) {
+    list.innerHTML = `<p class="muted">${esc(err.message)}</p>`;
+    return;
+  }
+  list.innerHTML = deployments.length ? deployments.map((d, i) => {
+    const live = d.version === VERSION;
+    return `
+      <article class="vs-row ${live ? "is-live" : ""}">
+        <div class="vs-info">
+          <strong>${d.version ? `Version ${esc(d.version)}` : "Release"} ${live ? `<span class="badge ok">Running now</span>` : i === 0 ? `<span class="badge">Newest</span>` : ""}</strong>
+          <small>${esc(fmtDateTime(d.created))}</small>
+          <small>${esc(d.commit)}</small>
+        </div>
+        ${live ? "" : `<button type="button" class="btn ghost sm" data-go="${esc(d.id)}" data-ver="${esc(d.version ? "version " + d.version : "this release")}">${icon("sync")}<span>Go back</span></button>`}
+      </article>`;
+  }).join("") : `<p class="muted">No earlier releases found.</p>`;
 
-    body.addEventListener("click", async (e) => {
-      const b = e.target.closest("[data-go]");
-      if (!b) return;
-      const ok = await confirmBox(`Go back to ${b.dataset.ver}? Everyone gets it the next time they reload. Your data and Firestore rules stay as they are.`, { title: "Go back to an earlier version", tone: "warn", confirmText: "Go back" });
-      if (!ok) return;
-      try {
-        await post("/api/admin/app", { action: "rollback", deploymentId: b.dataset.go }, { secure: true });
-        toast("Done. A banner will ask everyone to reload.", "success");
-        setTimeout(checkForUpdate, 4000);
-      } catch (err) {
-        toast(err.message, "error");
-      }
-    });
+  list.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-go]");
+    if (!b) return;
+    const ok = await confirmBox(`Go back to ${b.dataset.ver}? Everyone gets it the next time they reload. Your data and Firestore rules stay as they are.`, { title: "Go back to an earlier version", tone: "warn", confirmText: "Go back" });
+    if (!ok) return;
+    try {
+      await post("/api/admin/app", { action: "rollback", deploymentId: b.dataset.go }, { secure: true });
+      toast("Done. A banner will ask everyone to reload.", "success");
+      setTimeout(checkForUpdate, 4000);
+    } catch (err) {
+      toast(err.message, "error");
+    }
   });
 }
 
@@ -301,15 +312,6 @@ async function viewSettings(body) {
       </div>
     </form>`;
 
-  // App version: see recent releases and go back to one if the current version misbehaves.
-  const versionCard = document.createElement("section");
-  versionCard.className = "card";
-  versionCard.innerHTML = `
-    <h3>App version</h3>
-    <p class="muted small">You are running version ${esc(VERSION)}. If the app misbehaves after an update, go back to an earlier release. Your data and Firestore rules are not changed.</p>
-    <div class="form-actions"><button type="button" class="btn ghost" id="vs-open">${icon("sync")}<span>Show versions</span></button></div>`;
-  body.querySelector("#sf").children[0].insertAdjacentElement("afterend", versionCard);
-  versionCard.querySelector("#vs-open").addEventListener("click", openVersionsModal);
 
   body.querySelector("#logo-file").addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
@@ -435,13 +437,14 @@ async function viewLists(body) {
   const expenseAccounts = allAccounts.filter((a) => a.type === "expense");
   // Expense categories: name plus the ledger account each one posts to. New ones have no account yet.
   const ecState = expenseCategories(expenseAccounts).map((c) => ({ name: c.name, account: c.account || null }));
-  const accounts = accSnap.docs.map((d) => ({ code: d.id, ...d.data() })).filter((a) => a.type === "asset");
+  const accounts = allAccounts.filter((a) => a.type === "asset");
   const accountChoices = [...new Map([
     ...accounts.map((a) => [a.code, a.name]),
     ...settings.paymentMethods.map((m) => [m.account, m.account]),
   ]).entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const accountName = (code) => accountChoices.find(([c]) => c === code)?.[1] || "";
 
-  // orig: the saved lists. ids: for each entry on screen, its position in orig (null when it was just added).
+  // orig: the saved lists. ids: for each entry, its position in orig (null when it was just added).
   const orig = {
     categories: [...settings.categories],
     units: [...settings.units],
@@ -463,48 +466,6 @@ async function viewLists(body) {
   };
   const walletKey = (name) => floatKey("cashin", name);
   const operatorKey = (name) => floatKey("recharge", name);
-
-  const ecCard = () => `
-    <section class="card list-card">
-      <header class="card-head"><h3>Expense categories</h3><span class="badge">${ecState.length}</span></header>
-      <p class="muted small">Each category has its own ledger account, so expenses post to the right place. Renaming keeps the account. Removing keeps past expenses.</p>
-      <div class="chips-edit">
-        ${ecState.map((c, i) => `<span class="chip-edit">
-            <input class="chip-input" data-ec="${i}" value="${esc(c.name)}" maxlength="40" aria-label="Expense category name" />
-            <small>${c.account ? `ledger ${esc(c.account)}` : "new ledger account"}</small>
-            <button type="button" class="chip-x" data-rm-ec="${i}" aria-label="Remove ${esc(c.name)}">×</button></span>`).join("")
-          || `<span class="muted small">Nothing here yet.</span>`}
-      </div>
-      <div class="add-row">
-        <input data-new-ec maxlength="40" placeholder="Type a new category, then press Enter" aria-label="New expense category" />
-        <button type="button" class="btn ghost sm" data-add-ec>${icon("plus")}<span>Add</span></button>
-      </div>
-    </section>`;
-
-  const root = document.createElement("div");
-  body.innerHTML = "";
-  body.appendChild(root);
-
-  // Read what is typed in the payment-method cards into state before anything is re-drawn.
-  const syncFromDom = () => {
-    root.querySelectorAll("[data-chip]").forEach((inp) => {
-      const key = inp.closest("[data-list]").dataset.list;
-      state[key][Number(inp.dataset.chip)] = inp.value.trim();
-    });
-    root.querySelectorAll("[data-ec]").forEach((inp) => { ecState[Number(inp.dataset.ec)].name = inp.value.trim(); });
-    root.querySelectorAll("[data-fee]").forEach((r) => {
-      const t = r.dataset.fee, f = (k) => r.querySelector(`[data-k="${k}"]`);
-      state.serviceFees[t] = { mode: f("mode").value, value: Number(f("value").value) || 0, min: Number(f("min").value) || 0, max: Number(f("max").value) || 0 };
-    });
-    root.querySelectorAll(".pm-card").forEach((c, i) => {
-      const m = state.methods[i];
-      if (!m) return;
-      m.label = c.querySelector('[data-f="label"]').value;
-      m.account = c.querySelector('[data-f="account"]').value;
-      m.credit = c.querySelector('[data-f="credit"]').checked;
-      m.active = c.querySelector('[data-f="active"]').checked;
-    });
-  };
 
   // What uses an entry: products for categories and units, float money for wallets and operators.
   const usageOf = (listKey, value) => {
@@ -532,177 +493,236 @@ async function viewLists(body) {
     return "";
   };
 
-  const chipSection = (key, title, help) => `
-    <section class="card list-card" data-list="${key}">
-      <header class="card-head"><h3>${title}</h3><span class="badge">${state[key].length}</span></header>
-      <p class="muted small">${help} Tap a name to rename it.</p>
-      <div class="chips-edit">
-        ${state[key].map((v, i) => `<span class="chip-edit">
-            <input class="chip-input" data-chip="${i}" value="${esc(v)}" maxlength="40" aria-label="Name" />
-            ${noteOf(key, v) ? `<small>${esc(noteOf(key, v))}</small>` : ""}
-            <button type="button" class="chip-x" data-rm-chip="${i}" aria-label="Remove ${esc(v)}">×</button></span>`).join("")
-          || `<span class="muted small">Nothing here yet.</span>`}
-      </div>
-      <div class="add-row">
-        <input data-new maxlength="40" placeholder="Type a new one, then press Enter" aria-label="New ${esc(title)}" />
-        <button type="button" class="btn ghost sm" data-add-chip>${icon("plus")}<span>Add</span></button>
-      </div>
-    </section>`;
-
-  const methodCard = (m, i) => `
-    <article class="pm-card ${m.active ? "" : "is-off"}" style="--d:${i * 70}ms">
-      <div class="pm-top">
-        <span class="pm-num">${i === 0 ? "Default" : `#${i + 1}`}</span>
-        <input data-f="label" value="${esc(m.label)}" placeholder="Name shown to staff" maxlength="30" aria-label="Payment method name" />
-        <div class="pm-move">
-          ${i > 0 ? `<button type="button" class="icon-btn sm" data-pm-up="${i}" aria-label="Move up">↑</button>` : ""}
-          ${i > 0 ? `<button type="button" class="btn ghost sm" data-pm-top="${i}">Make default</button>` : ""}
-          <button type="button" class="icon-btn sm hover-danger" data-pm-del="${i}" aria-label="Delete ${esc(m.label)}">${icon("trash")}</button>
-        </div>
-      </div>
-      <div class="pm-bottom">
-        <label class="pm-account">Posts to ledger account
-          <select data-f="account">${accountChoices.map(([code, name]) => `<option value="${esc(code)}" ${code === m.account ? "selected" : ""}>${esc(code)} · ${esc(name)}</option>`).join("")}</select>
-        </label>
-        <label class="switch"><input type="checkbox" data-f="credit" ${m.credit ? "checked" : ""} /><span>Sale on account (customer pays later)</span></label>
-        <label class="switch"><input type="checkbox" data-f="active" ${m.active ? "checked" : ""} /><span>Shown at the till</span></label>
-      </div>
-    </article>`;
-
-  const paint = () => {
-    root.innerHTML = `
-      <form id="lf" class="settings-form">
-        <section class="card">
-          <header class="card-head"><h3>Payment methods</h3><span class="muted small">The first one is the default at the till</span></header>
-          <p class="muted small">Add, rename, reorder or delete payment methods. Turn one off to hide it at the till without losing its history. Every method posts to a ledger account.</p>
-          <div class="pm-grid">${state.methods.map(methodCard).join("")}</div>
-          <button type="button" class="btn ghost" data-pm-add>${icon("plus")}<span>Add payment method</span></button>
-        </section>
-        ${chipSection("categories", "Product categories", "Used when adding products. Shows how many products use each one.")}
-        ${chipSection("units", "Units of measure", "e.g. Pack, Strip, Bottle. Shows how many products use each one.")}
-        ${chipSection("writeOffReasons", "Write-off reasons", "Used when you record stock lost, damaged or expired.")}
-        <section class="card">
-          <header class="card-head"><h3>Service fees</h3></header>
-          <p class="muted small">The till works out the fee from these rules. Percent is a share of the amount. Min and max limit the fee; leave 0 for no limit.</p>
-          <div class="fee-rules">
-            ${Object.keys(SERVICE_TYPES).map((t) => { const r = state.serviceFees[t]; return `
-              <div class="fee-row" data-fee="${t}">
-                <strong>${esc(SERVICE_TYPES[t].label)}</strong>
-                <select data-k="mode" aria-label="Fee type"><option value="percent" ${r.mode === "percent" ? "selected" : ""}>Percent of amount</option><option value="flat" ${r.mode === "flat" ? "selected" : ""}>Fixed amount</option></select>
-                <input data-k="value" type="number" step="0.01" min="0" value="${r.value}" aria-label="Fee value" />
-                <input data-k="min" type="number" step="0.01" min="0" value="${r.min}" aria-label="Minimum fee" placeholder="Min" />
-                <input data-k="max" type="number" step="0.01" min="0" value="${r.max}" aria-label="Maximum fee" placeholder="Max" />
-              </div>`; }).join("")}
-          </div>
-        </section>
-        ${chipSection("walletProviders", "Mobile wallets", "e.g. bKash, Nagad, Rocket. Shown when the cashier does a wallet cash-in or cash-out.")}
-        ${chipSection("rechargeOperators", "Mobile operators", "e.g. Grameenphone, Robi. Shown when the cashier sells a mobile recharge.")}
-        ${ecCard()}
-        ${chipSection("expiryDayOptions", "Expiry report options", "The day choices offered in the expiry report, e.g. 30, 60, 90.")}
-        <div class="sticky-actions">
-          <button class="btn primary" type="submit">${icon("check")}<span>Save lists</span></button>
-        </div>
-      </form>`;
+  // Each list has its own window with Edit, Delete and Add. Nothing is saved until "Save lists".
+  const SECTIONS = {
+    methods: { title: "Payment methods", help: "What staff see at the till, and the ledger account each one posts to.", noun: "payment method" },
+    expense: { title: "Expense categories", help: "Each one has its own ledger account.", noun: "expense category" },
+    categories: { title: "Product categories", help: "Used when adding products.", noun: "category" },
+    units: { title: "Units of measure", help: "e.g. Pack, Strip, Bottle.", noun: "unit" },
+    writeOffReasons: { title: "Write-off reasons", help: "Used when recording stock lost, damaged or expired.", noun: "reason" },
+    fees: { title: "Service fees", help: "How the till works out each service fee.", noun: "fee" },
+    walletProviders: { title: "Mobile wallets", help: "e.g. bKash, Nagad, Rocket.", noun: "wallet" },
+    rechargeOperators: { title: "Mobile operators", help: "e.g. Grameenphone, Robi.", noun: "operator" },
+    expiryDayOptions: { title: "Expiry report options", help: "Day choices in the expiry report, e.g. 30, 60, 90.", noun: "day option" },
+  };
+  const countOf = (key) => {
+    if (key === "methods") return state.methods.length;
+    if (key === "expense") return ecState.length;
+    if (key === "fees") return Object.keys(SERVICE_TYPES).length;
+    return state[key].length;
   };
 
-  // Expense category add and remove. Handled first so the list-section handler below does not see these buttons.
-  root.addEventListener("click", async (e) => {
-    const add = e.target.closest("[data-add-ec]");
-    const rm = e.target.closest("[data-rm-ec]");
-    if (!add && !rm) return;
-    e.stopImmediatePropagation();
-    syncFromDom();
-    if (add) {
-      const name = root.querySelector("[data-new-ec]").value.trim();
-      if (!name) return toast("Type a category name", "error");
-      if (ecState.some((c) => c.name.toLowerCase() === name.toLowerCase())) return toast("That category already exists", "error");
-      ecState.push({ name, account: null });
-      paint();
-      root.querySelector("[data-new-ec]").focus();
-    } else {
-      const i = Number(rm.dataset.rmEc);
-      const c = ecState[i];
-      if (!(await confirmBox(`Remove "${c.name}" from the list? Past expenses keep this category, and its ledger account is kept.`))) return;
-      ecState.splice(i, 1);
-      paint();
-    }
-  });
-  root.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && e.target.matches("[data-new-ec]")) {
-      e.preventDefault();
-      root.querySelector("[data-add-ec]").click();
-    }
-  });
+  const root = document.createElement("div");
+  body.innerHTML = "";
+  body.appendChild(root);
+  root.innerHTML = `
+    <form id="lf" class="settings-form">
+      <section class="card">
+        <header class="card-head"><h3>Lists & payments</h3></header>
+        <p class="muted small">Open a list to add, edit or delete its entries. Nothing changes until you press Save lists.</p>
+        <div class="list-index" id="lf-index"></div>
+      </section>
+      <div class="sticky-actions">
+        <button class="btn primary" type="submit">${icon("check")}<span>Save lists</span></button>
+      </div>
+    </form>`;
+
+  const paintIndex = () => {
+    root.querySelector("#lf-index").innerHTML = Object.keys(SECTIONS).map((key) => `
+      <button type="button" class="list-row" data-open="${key}">
+        <span class="list-row-main"><strong>${esc(SECTIONS[key].title)}</strong><small class="muted">${esc(SECTIONS[key].help)}</small></span>
+        <span class="badge">${countOf(key)}</span>
+      </button>`).join("");
+  };
+  paintIndex();
+
+  // One window per list. The window is a modal; its views are the list, a form, a delete confirmation, or the fee rules.
+  function openSection(key) {
+    const sec = SECTIONS[key];
+    openModal(sec.title, `<div class="ls-win"></div>`, (host, close) => {
+      const win = host.querySelector(".ls-win");
+
+      const rowHtml = (name, note, i, extraActions = "") => `
+        <div class="li-row">
+          <div class="li-main"><strong>${esc(name)}</strong>${note ? `<small class="muted">${esc(note)}</small>` : ""}</div>
+          <div class="li-actions">
+            ${extraActions}
+            <button type="button" class="btn ghost sm" data-edit="${i}">${icon("edit")}<span>Edit</span></button>
+            <button type="button" class="icon-btn sm hover-danger" data-del="${i}" aria-label="Delete ${esc(name)}">${icon("trash")}</button>
+          </div>
+        </div>`;
+
+      const listView = () => {
+        if (key === "fees") return feesView();
+        const items = key === "methods" ? state.methods : key === "expense" ? ecState : state[key];
+        const rows = items.map((it, i) => {
+          if (key === "methods") {
+            const top = i > 0 ? `<button type="button" class="btn ghost sm" data-top="${i}">Make default</button>` : "";
+            const flags = [i === 0 ? "Default" : "", it.credit ? "On account" : "", it.active ? "" : "Hidden at till"].filter(Boolean).join(" · ");
+            return rowHtml(it.label || "(no name)", `${it.account} · ${accountName(it.account)}${flags ? ` · ${flags}` : ""}`, i, top);
+          }
+          if (key === "expense") return rowHtml(it.name, it.account ? `ledger ${it.account}` : "new ledger account", i);
+          return rowHtml(it, noteOf(key, it), i);
+        }).join("");
+        win.innerHTML = `
+          <div class="li-head"><span class="badge">${items.length}</span><button type="button" class="btn primary sm" data-add>${icon("plus")}<span>Add ${esc(sec.noun)}</span></button></div>
+          <div class="li-list">${rows || `<p class="muted small">Nothing here yet. Press Add to create one.</p>`}</div>
+          <div class="form-actions"><button type="button" class="btn ghost" data-done>Done</button></div>`;
+      };
+
+      const formView = (i) => {
+        const adding = i < 0;
+        let fields;
+        if (key === "methods") {
+          const m = adding ? { label: "", account: accountChoices[0]?.[0] || "1000", credit: false, active: true } : state.methods[i];
+          fields = `
+            <label>Name<input name="name" maxlength="30" value="${esc(m.label)}" placeholder="Name shown to staff" required /></label>
+            <label>Posts to ledger account<select name="account">${accountChoices.map(([code, name]) => `<option value="${esc(code)}" ${code === m.account ? "selected" : ""}>${esc(code)} · ${esc(name)}</option>`).join("")}</select></label>
+            <label class="switch"><input type="checkbox" name="credit" ${m.credit ? "checked" : ""} /><span>Sale on account (customer pays later)</span></label>
+            <label class="switch"><input type="checkbox" name="active" ${m.active ? "checked" : ""} /><span>Shown at the till</span></label>`;
+        } else {
+          const current = adding ? "" : key === "expense" ? ecState[i].name : state[key][i];
+          fields = `<label>Name<input name="name" maxlength="40" value="${esc(current)}" required /></label>`;
+        }
+        win.innerHTML = `
+          <form class="ls-form settings-form" data-kind="item" data-i="${i}">
+            <h4>${adding ? "Add" : "Edit"} ${esc(sec.noun)}</h4>
+            <div class="form-grid">${fields}</div>
+            <div class="form-actions"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">${icon("check")}<span>${adding ? "Add" : "Save"}</span></button></div>
+          </form>`;
+        win.querySelector('[name="name"]')?.focus();
+      };
+
+      // What the delete confirmation says. A blocked entry only shows why it cannot go.
+      const deleteInfo = (i) => {
+        if (key === "expense") return { msg: `Remove "${ecState[i].name}" from the list? Past expenses keep this category, and its ledger account is kept.` };
+        if (key === "methods") {
+          const m = state.methods[i];
+          const others = state.methods.filter((x, j) => j !== i && x.active && !x.credit);
+          if (!others.length && m.active && !m.credit) return { msg: "Keep at least one active cash-type payment method.", blocked: true };
+          return { msg: `Delete "${m.label || "this payment method"}"? Past sales keep their payment record. It just stops being offered at the till.` };
+        }
+        const name = state[key][i];
+        const why = blockReason(key, name);
+        if (why) return { msg: why, blocked: true };
+        return { msg: `Remove "${name}" from the list? Existing records keep their text.` };
+      };
+      const confirmView = (i) => {
+        const { msg, blocked } = deleteInfo(i);
+        win.innerHTML = `
+          <div class="ls-confirm">
+            <p>${esc(msg)}</p>
+            <div class="form-actions">
+              <button type="button" class="btn ghost" data-cancel>${blocked ? "Back" : "Cancel"}</button>
+              ${blocked ? "" : `<button type="button" class="btn primary" data-yes="${i}">Delete</button>`}
+            </div>
+          </div>`;
+      };
+
+      const feesView = () => {
+        win.innerHTML = `
+          <form class="ls-form settings-form" data-kind="fees">
+            <p class="muted small">The till works out the fee from these rules. Percent is a share of the amount. Min and max limit the fee; leave 0 for no limit.</p>
+            <div class="fee-rules">
+              ${Object.keys(SERVICE_TYPES).map((t) => { const r = state.serviceFees[t]; return `
+                <div class="fee-row" data-fee="${t}">
+                  <strong>${esc(SERVICE_TYPES[t].label)}</strong>
+                  <select data-k="mode" aria-label="Fee type"><option value="percent" ${r.mode === "percent" ? "selected" : ""}>Percent of amount</option><option value="flat" ${r.mode === "flat" ? "selected" : ""}>Fixed amount</option></select>
+                  <input data-k="value" type="number" step="0.01" min="0" value="${r.value}" aria-label="Fee value" />
+                  <input data-k="min" type="number" step="0.01" min="0" value="${r.min}" aria-label="Minimum fee" placeholder="Min" />
+                  <input data-k="max" type="number" step="0.01" min="0" value="${r.max}" aria-label="Maximum fee" placeholder="Max" />
+                </div>`; }).join("")}
+            </div>
+            <div class="form-actions"><button type="button" class="btn ghost" data-done>Cancel</button><button class="btn primary" type="submit">${icon("check")}<span>Save fees</span></button></div>
+          </form>`;
+      };
+
+      const go = (view, i) => {
+        if (view === "form") return formView(i);
+        if (view === "confirm") return confirmView(i);
+        if (key === "fees") return feesView();
+        return listView();
+      };
+
+      const performDelete = (i) => {
+        if (key === "expense") ecState.splice(i, 1);
+        else if (key === "methods") state.methods.splice(i, 1);
+        else { state[key].splice(i, 1); ids[key].splice(i, 1); }
+        paintIndex();
+        go("list");
+      };
+
+      const saveItem = (f) => {
+        const i = Number(f.dataset.i), adding = i < 0;
+        const name = (f.querySelector('[name="name"]')?.value || "").trim();
+        if (!name) return toast("Type a name first", "error");
+        const taken = (list) => list.some((x, j) => j !== i && String(x).toLowerCase() === name.toLowerCase());
+        if (key === "methods") {
+          if (taken(state.methods.map((m) => m.label))) return toast("Another payment method has this name", "error");
+          const data = {
+            label: name,
+            account: f.querySelector('[name="account"]').value,
+            credit: f.querySelector('[name="credit"]').checked,
+            active: f.querySelector('[name="active"]').checked,
+          };
+          if (adding) state.methods.push({ key: `m${Date.now().toString(36)}`, ...data });
+          else state.methods[i] = { ...state.methods[i], ...data };
+        } else if (key === "expense") {
+          if (taken(ecState.map((c) => c.name))) return toast("That category already exists", "error");
+          if (adding) ecState.push({ name, account: null });
+          else ecState[i].name = name;
+        } else {
+          if (taken(state[key])) return toast("That is already in the list", "error");
+          if (adding) { state[key].push(name); ids[key].push(null); }
+          else state[key][i] = name;
+        }
+        paintIndex();
+        go("list");
+      };
+
+      const saveFees = (f) => {
+        f.querySelectorAll("[data-fee]").forEach((r) => {
+          const t = r.dataset.fee, g = (k) => r.querySelector(`[data-k="${k}"]`);
+          state.serviceFees[t] = { mode: g("mode").value, value: Number(g("value").value) || 0, min: Number(g("min").value) || 0, max: Number(g("max").value) || 0 };
+        });
+        paintIndex();
+        close();
+      };
+
+      win.addEventListener("click", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        if (b.hasAttribute("data-done")) return close();
+        if (b.hasAttribute("data-add")) return go("form", -1);
+        if (b.hasAttribute("data-edit")) return go("form", Number(b.dataset.edit));
+        if (b.hasAttribute("data-del")) return go("confirm", Number(b.dataset.del));
+        if (b.hasAttribute("data-yes")) return performDelete(Number(b.dataset.yes));
+        if (b.hasAttribute("data-cancel")) return go("list");
+        if (b.hasAttribute("data-top")) {
+          const i = Number(b.dataset.top);
+          const [m] = state.methods.splice(i, 1);
+          state.methods.unshift(m);
+          paintIndex();
+          go("list");
+        }
+      });
+      win.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const f = e.target;
+        if (f.dataset.kind === "fees") return saveFees(f);
+        saveItem(f);
+      });
+
+      go("list");
+    });
+  }
 
   root.addEventListener("click", (e) => {
-    const b = e.target.closest("button");
-    if (!b) return;
-    const sec = b.closest("[data-list]");
-    if (b.hasAttribute("data-add-chip")) {
-      const input = sec.querySelector("[data-new]");
-      const v = input.value.trim();
-      if (!v) return;
-      const key = sec.dataset.list;
-      if (state[key].some((x) => x.toLowerCase() === v.toLowerCase())) return toast("That is already in the list", "error");
-      syncFromDom();
-      state[key].push(v);
-      ids[key].push(null);
-      paint();
-      root.querySelector(`[data-list="${key}"] [data-new]`).focus();
-    } else if (b.hasAttribute("data-rm-chip")) {
-      const key = sec.dataset.list;
-      const i = Number(b.dataset.rmChip);
-      syncFromDom();
-      const why = blockReason(key, state[key][i]);
-      if (why) return alertBox({ title: "Cannot delete", tone: "warn", message: why });
-      const name = state[key][i];
-      confirmBox(`Remove "${name}" from the list? Existing records keep their text.`).then((ok) => {
-        if (!ok) return;
-        state[key].splice(i, 1);
-        ids[key].splice(i, 1);
-        paint();
-      });
-    } else if (b.hasAttribute("data-pm-add")) {
-      syncFromDom();
-      state.methods.push({ key: `m${Date.now().toString(36)}`, label: "", account: accountChoices[0]?.[0] || "1000", credit: false, active: true });
-      paint();
-      root.querySelector(".pm-card:last-of-type [data-f='label']")?.focus();
-    } else if (b.hasAttribute("data-pm-up")) {
-      syncFromDom();
-      const i = Number(b.dataset.pmUp);
-      [state.methods[i - 1], state.methods[i]] = [state.methods[i], state.methods[i - 1]];
-      paint();
-    } else if (b.hasAttribute("data-pm-top")) {
-      syncFromDom();
-      const i = Number(b.dataset.pmTop);
-      const [m] = state.methods.splice(i, 1);
-      state.methods.unshift(m);
-      paint();
-    } else if (b.hasAttribute("data-pm-del")) {
-      const i = Number(b.dataset.pmDel);
-      syncFromDom();
-      const m = state.methods[i];
-      const others = state.methods.filter((x, j) => j !== i && x.active && !x.credit);
-      if (!others.length && m.active && !m.credit) return alertBox({ title: "Cannot delete", tone: "warn", message: "Keep at least one active cash-type payment method." });
-      confirmBox(`Delete "${m.label || "this payment method"}"? Past sales keep their payment record. It just stops being offered at the till.`).then((ok) => {
-        if (!ok) return;
-        state.methods.splice(i, 1);
-        paint();
-      });
-    }
+    const b = e.target.closest("[data-open]");
+    if (b) openSection(b.dataset.open);
   });
-
-  root.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && e.target.matches("[data-new]")) {
-      e.preventDefault();
-      root.querySelector(`[data-list="${e.target.closest("[data-list]").dataset.list}"] [data-add-chip]`).click();
-    }
-  });
-
-  paint();
 
   onSubmit(root.querySelector("#lf"), async () => {
-    syncFromDom();
     for (const key of Object.keys(orig)) {
       if (state[key].some((v) => !v)) throw new Error("A list entry cannot be empty. Type a name or remove it.");
       const lower = state[key].map((v) => v.toLowerCase());

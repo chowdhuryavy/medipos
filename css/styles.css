@@ -1283,3 +1283,19 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .ls-pick { display: flex; gap: 8px; align-items: center; }
 .ls-pick select { flex: 1; min-width: 0; }
 .ls-pick .btn { flex: none; }
+
+/* Lists & payments: index of lists, and one window per list */
+.list-index { display: grid; gap: 10px; }
+.list-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: var(--surface); color: inherit; cursor: pointer; }
+.list-row:hover { border-color: var(--brand); }
+.list-row-main { display: grid; gap: 2px; min-width: 0; }
+.list-row-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-win { display: grid; gap: 14px; }
+.li-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.li-list { display: grid; gap: 8px; }
+.li-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.li-main { display: grid; gap: 2px; min-width: 0; }
+.li-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.li-actions { display: flex; align-items: center; gap: 6px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.ls-form h4 { margin: 0 0 8px; }
+.ls-confirm { display: grid; gap: 14px; }
