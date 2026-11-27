@@ -38,7 +38,7 @@ export function splashHtml(message, style) {
         <p class="splash-msg" id="splash-msg">${esc(msg)}</p>
         <div class="splash-bar" aria-hidden="true"><i></i></div>
       </div>
-      <p class="splash-ver">Version ${esc(APP_VERSION)}</p>
+      <p class="splash-ver ver-stack"><span class="ver-by">Designed by Avy</span><span class="ver-num">Version ${esc(APP_VERSION)}</span></p>
     </section>`;
 }
 

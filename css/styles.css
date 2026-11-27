@@ -1363,3 +1363,13 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 .menu-btn.is-open .menu-grid { transform: rotate(180deg); }
 .menu-btn.is-open .menu-grid i { border-radius: 50%; transform: scale(.7); }
 @media (prefers-reduced-motion: reduce) { .menu-btn, .menu-grid, .menu-grid i { transition: none; } }
+
+/* Version credit: "Designed by Avy" sits above the version number. */
+.ver-stack { display: grid; justify-items: center; gap: 3px; margin: 6px 0 0; text-align: center; }
+.ver-by {
+  font-family: Georgia, "Times New Roman", serif; font-style: italic; font-size: 14px; letter-spacing: .5px;
+  background: linear-gradient(90deg, #5eead4, #14b8a6 55%, #99f6e4); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.ver-num { font-size: 11.5px; opacity: .6; letter-spacing: .4px; }
+.sidebar-ver { flex-direction: column; gap: 5px; }
+.sidebar-ver .ver-by { font-size: 13px; }
