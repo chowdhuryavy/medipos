@@ -1345,21 +1345,6 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 .tab { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .tab .ico { width: 16px; height: 16px; flex: none; }
 
-/* Role access matrix: screens and data areas down, roles across. */
-[hidden] { display: none !important; }
-.role-matrix { width: 100%; min-width: 620px; border-collapse: collapse; }
-.role-matrix th, .role-matrix td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-.role-matrix thead th { background: var(--surface); }
-.role-matrix th.role-name { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; min-width: 190px; }
-.role-matrix th.role-name small { display: block; font-weight: 400; margin-top: 2px; }
-.role-matrix thead th.c, .role-matrix td.c { text-align: center; }
-.role-matrix .grp-row th { background: var(--surface-2); text-align: left; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-.role-head { display: grid; justify-items: center; gap: 2px; }
-.role-head-actions { display: inline-flex; gap: 2px; margin-top: 2px; }
-
-.update-banner .ub-actions { display: flex; gap: 8px; flex: none; }
-.update-banner .ub-actions .btn.ghost { color: #fff; border-color: rgba(255,255,255,.7); background: transparent; }
-
 /* ───────── menu button (phones): animated three-line icon that turns into an X ───────── */
 .menu-btn {
   display: none; position: relative; width: 44px; height: 44px; padding: 0; flex: none;
