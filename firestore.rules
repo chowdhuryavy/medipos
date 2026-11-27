@@ -277,6 +277,17 @@ service cloud.firestore {
       allow read: if false;
       allow write: if isAdmin();
     }
+    // Cash shifts: opened with a counted float and closed with a counted cash figure, by the same person.
+    match /shifts/{id} {
+      allow read: if isActive();
+      allow create: if canPage('pos') && request.resource.data.status == 'open' && request.resource.data.openedByUid == request.auth.uid;
+      allow update: if canPage('pos') && resource.data.status == 'open' && request.resource.data.status == 'closed'
+        && request.resource.data.closedByUid == request.auth.uid
+        && request.resource.data.openedByUid == resource.data.openedByUid
+        && request.resource.data.openingCash == resource.data.openingCash;
+      allow delete: if false;
+    }
+
     match /audit/{id} {
       allow read: if isAdmin();
       // Entries must name the signed-in person, so nobody can write a log entry as someone else.

@@ -1,5 +1,5 @@
 import { reserveJv, writeVoucher, postWithVoucher } from "../journal.js";
-import { db, collection, doc, getDocs, query, where, runTransaction, serverTimestamp, increment } from "../firebase.js";
+import { db, collection, doc, getDocs, query, where, orderBy, limit, runTransaction, serverTimestamp, increment } from "../firebase.js";
 import { post } from "../api.js";
 import { onAction, onSubmit, isPostable } from "../core.js";
 import { printReceipt } from "../print.js";
@@ -12,12 +12,16 @@ import { notifyOnce, rolesWith } from "../notifications.js";
 import { SERVICE_TYPES, serviceProviders, serviceLine, serviceJournalLines, serviceBreakdown, floatKey, applyFloat, calcFee } from "../services.js";
 
 export async function render(el) {
-  const [prodSnap, custSnap, batchSnap, floatSnap] = await Promise.all([
+  const [prodSnap, custSnap, batchSnap, floatSnap, shiftSnap] = await Promise.all([
     getDocs(collection(db, "products")),
     getDocs(collection(db, "customers")),
     getDocs(query(collection(db, "batches"), where("remaining", ">", 0))),
     getDocs(collection(db, "floats")).catch(() => ({ docs: [] })),
+    getDocs(query(collection(db, "shifts"), orderBy("openedAt", "desc"), limit(1))).catch(() => ({ docs: [] })),
   ]);
+  // The cash shift must be open before any sale is charged.
+  const latestShift = shiftSnap.docs[0];
+  const openShift = latestShift && latestShift.data().status === "open" ? { id: latestShift.id, ...latestShift.data() } : null;
   // Current float balance of each wallet and operator, kept up to date after every sale.
   const floats = Object.fromEntries(floatSnap.docs.map((d) => [d.id, Number(d.data().balance) || 0]));
   const products = prodSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -76,6 +80,7 @@ export async function render(el) {
             ${customers.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("")}
           </select>
         </label>
+        ${openShift ? "" : `<div class="shift-note" role="alert">No cash shift is open. <a href="#/shift">Open a shift</a> before you take payment.</div>`}
         <div class="bill-lines" id="p-lines"></div>
         <p class="muted small price-rule">${allowChange
           ? "You can raise a price. It can never go below the lowest price shown. Service fees can be changed."
@@ -566,6 +571,7 @@ export async function render(el) {
   document.addEventListener("keydown", onKey);
 
   async function charge() {
+    if (!openShift) return toast("Open a cash shift before you take payment.", "error");
     if (!st.cart.size) return toast("The bill is empty. Add a product first.", "error");
     const method = paymentMethod(st.pay);
     const lines = cartLines();

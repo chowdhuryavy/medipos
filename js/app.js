@@ -16,6 +16,7 @@ import "./scanner.js";
 const PAGES = {
   dashboard: "Dashboard",
   pos: "Sell",
+  shift: "Cash shift",
   inventory: "Inventory",
   purchasing: "Purchasing",
   partners: "Customers",
@@ -360,7 +361,7 @@ function navItems() {
 
 // Sidebar sections: pages are grouped by what people do with them. Pages not listed here go under "More".
 const NAV_GROUPS = [
-  ["Sell", ["dashboard", "pos"]],
+  ["Sell", ["dashboard", "pos", "shift"]],
   ["Stock & parties", ["inventory", "purchasing", "partners"]],
   ["Money & reports", ["accounting", "reports"]],
   ["Administration", ["admin"]],

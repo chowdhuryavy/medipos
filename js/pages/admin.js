@@ -38,7 +38,7 @@ const TABS = [
   ["audit", "Activity log", "search"],
 ];
 const PAGE_NAMES = {
-  dashboard: "Dashboard", pos: "Sell", inventory: "Inventory", purchasing: "Purchasing", partners: "Customers & suppliers",
+  dashboard: "Dashboard", pos: "Sell", shift: "Cash shift", inventory: "Inventory", purchasing: "Purchasing", partners: "Customers & suppliers",
   accounting: "Accounting", reports: "Reports", returns: "Returns & voids", admin: "Administration",
 };
 
@@ -1171,7 +1171,7 @@ async function viewIntegrations(body) {
 /* ───────── Staff page: one person's profile, role and screens/areas they can use ───────── */
 
 const ACCESS_ICON = {
-  dashboard: "dashboard", pos: "cart", inventory: "inventory", purchasing: "purchase",
+  dashboard: "dashboard", pos: "cart", shift: "accounting", inventory: "inventory", purchasing: "purchase",
   partners: "partners", accounting: "accounting", reports: "reports", admin: "admin",
 };
 const AREA_ICON = { pos: "cart", inventory: "inventory", purchasing: "purchase", partners: "partners", accounting: "accounting" };

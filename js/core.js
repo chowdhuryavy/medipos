@@ -93,9 +93,9 @@ export function applyAppFont() {
 export const WRITE_AREAS = ["pos", "inventory", "purchasing", "partners", "accounting"];
 
 export const DEFAULT_ROLES = {
-  admin:       { label: "Administrator", pages: ["dashboard", "pos", "returns", "inventory", "purchasing", "partners", "accounting", "reports", "admin"], write: [...WRITE_AREAS] },
-  pharmacist:  { label: "Pharmacist",    pages: ["dashboard", "pos", "returns", "inventory", "purchasing", "partners", "reports"], write: ["pos", "inventory", "purchasing", "partners"] },
-  cashier:     { label: "Cashier",       pages: ["dashboard", "pos", "returns", "partners"], write: ["pos", "partners"] },
+  admin:       { label: "Administrator", pages: ["dashboard", "pos", "shift", "returns", "inventory", "purchasing", "partners", "accounting", "reports", "admin"], write: [...WRITE_AREAS] },
+  pharmacist:  { label: "Pharmacist",    pages: ["dashboard", "pos", "shift", "returns", "inventory", "purchasing", "partners", "reports"], write: ["pos", "inventory", "purchasing", "partners"] },
+  cashier:     { label: "Cashier",       pages: ["dashboard", "pos", "shift", "returns", "partners"], write: ["pos", "partners"] },
   storekeeper: { label: "Storekeeper",   pages: ["inventory", "purchasing", "partners"], write: ["inventory", "purchasing"] },
   accountant:  { label: "Accountant",    pages: ["dashboard", "accounting", "reports", "purchasing", "partners"], write: ["accounting"] },
 };
@@ -133,6 +133,11 @@ export async function loadSettings() {
           pages: Array.isArray(s.pages) ? s.pages : [],
           write: Array.isArray(s.write) ? s.write : [],
         };
+  }
+  // The cash shift page goes with the sale screen, so anyone who can sell can open and close the shift.
+  for (const key of Object.keys(roles)) {
+    const pages = roles[key].pages || [];
+    if (pages.includes("pos") && !pages.includes("shift")) roles[key].pages = [...pages, "shift"];
   }
   fmtCache = null;
   return r.exists();

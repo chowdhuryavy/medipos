@@ -1488,3 +1488,17 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 .product-card .pc-sub { letter-spacing: .2px; }
 .product-card .pc-name { font-size: 15px; }
 @media (max-width: 900px) { .pos-strip { display: none; } }
+
+/* Cash shift page */
+.shift-page { display: grid; gap: 16px; max-width: 980px; }
+.shift-card .card-head h3 { font-size: 17px; }
+.shift-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 12px 0 16px; }
+.shift-figs > div { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; gap: 4px; }
+.shift-figs span { color: var(--muted); font-size: 12px; }
+.shift-figs strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.shift-figs .expected { border-color: var(--brand-2); }
+.shift-diff { font-weight: 600; min-height: 1.2em; margin: 0; }
+.shift-diff.ok { color: var(--ok); }
+.shift-diff.warn { color: var(--danger); }
+.shift-note { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: rgba(180, 83, 9, .12); color: var(--warn); font-weight: 600; }
+.shift-note a { color: inherit; text-decoration: underline; }
