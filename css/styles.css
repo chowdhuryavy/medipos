@@ -1413,3 +1413,12 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 .ver-num { font-size: 11.5px; opacity: .6; letter-spacing: .4px; }
 .sidebar-ver { flex-direction: column; gap: 5px; }
 .sidebar-ver .ver-by { font-size: 13px; }
+
+/* Sidebar account: a compact row. Tapping it opens the account window. */
+.sidebar .sidebar-foot { padding: 8px 10px; gap: 10px; border-radius: 14px; }
+.sidebar .sidebar-foot .avatar-ring { padding: 2px; }
+.sidebar .sidebar-foot .avatar-ring .avatar { width: 30px; height: 30px; font-size: 13px; }
+.sidebar .sidebar-foot .who { gap: 2px; }
+.sidebar .sidebar-foot .who strong { font-size: 13px; }
+.sidebar .sidebar-foot .role-pill { font-size: 9.5px; padding: 1px 7px; }
+.sidebar .sidebar-foot .foot-chev { font-size: 18px; }
