@@ -22,10 +22,10 @@ export const DEFAULT_TEMPLATES = {
   login: {
     label: "Sign-in code",
     help: "Sent at sign-in to staff whose account asks for a code every time. The code is shown in its own box.",
-    subject: "Your sign-in code – {{shopName}}",
+    subject: "Your MediPos sign-in verification code",
     eyebrow: "Security",
     heading: "Confirm it is you",
-    body: "Hello {{name}},\n\nSomeone is signing in to {{appName}}. Enter this code to continue:\n\n{{password}}\n\nThe code expires in {{minutes}} minutes. If this was not you, do not share the code and tell an administrator.",
+    body: "Hello {{name}},\n\nYour verification code is:\n\n{{password}}\n\nUse it to finish signing in to {{appName}}. The code expires in {{minutes}} minutes. If this was not you, do not share the code and tell an administrator.",
   },
   welcome: {
     label: "New staff account",

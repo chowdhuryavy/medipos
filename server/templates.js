@@ -64,7 +64,7 @@ export function renderEmail(key, cfg, values) {
   const footerText = esc(fill(cfg.emailFooter, vars)).replace(/\n/g, "<br/>");
   const html = shell({
     cfg, pal, subject,
-    preheader: text.replace(/\s+/g, " ").slice(0, 110),
+    preheader: (values?.password ? text.split(String(values.password)).join("") : text).replace(/\s+/g, " ").slice(0, 110),
     icon: ICONS[key] || DEFAULT_ICON,
     eyebrow, heading,
     bodyHtml: `${paragraphs}${btn}`,

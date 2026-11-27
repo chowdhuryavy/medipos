@@ -45,7 +45,7 @@ export function renderOtpEmail(cfg, { name, code }) {
     text: textParts.join("\n\n") + "\n",
     html: shell({
       cfg, pal, subject,
-      preheader: `${fill(t.codeLabel, vars)} ${vars.code}. ${fill(t.expiryNote, vars)}`,
+      preheader: `${fill(t.codeLabel, vars)} ${fill(t.expiryNote, vars)}`,
       icon: "&#128737;",
       eyebrow: fill(t.eyebrow, vars),
       heading: fill(t.heading, vars),
