@@ -178,7 +178,7 @@ function openForgotPassword(prefillEmail = "") {
   openModal("Reset password", `
     <div class="reset">
       <div class="reset-head">
-        <div class="reset-icon" aria-hidden="true">${icon("shield")}</div>
+        <div class="reset-icon" aria-hidden="true">${branding.logoUrl ? `<img class="reset-logo" src="${esc(branding.logoUrl)}" alt="" />` : icon("shield")}</div>
         <p class="muted small" id="fp-help">Enter your staff email. If an account exists, we'll send a 6-digit code.</p>
       </div>
       <form id="fp-form" class="stack" novalidate>
