@@ -1,7 +1,8 @@
 // Cash shift: the till is opened with a counted float and closed with a counted cash figure.
 // Expected cash = opening cash + cash sales − cash refunds, all since the shift opened. Sales can't be charged without an open shift.
 import { db, collection, doc, getDocs, addDoc, updateDoc, query, where, orderBy, limit, serverTimestamp } from "../firebase.js";
-import { session, money, esc, icon, toast, audit, onSubmit, confirmBox, canWrite } from "../core.js";
+import { session, settings, money, esc, icon, toast, audit, onSubmit, confirmBox, canWrite } from "../core.js";
+import { printHtml } from "../print.js";
 
 const num = (v) => Number(v) || 0;
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -21,6 +22,69 @@ async function figures(openedAt) {
   return { cashIn, cashRefunds };
 }
 
+// Printable shift report: cash count, sales and refunds by payment method, bills and voids, and signature lines.
+async function shiftReport(s) {
+  const from = new Date(s.openedAt.toMillis());
+  const to = s.closedAt ? new Date(s.closedAt.toMillis()) : new Date();
+  const [salesSnap, retSnap] = await Promise.all([
+    getDocs(query(collection(db, "sales"), where("createdAt", ">=", from), where("createdAt", "<=", to))),
+    getDocs(query(collection(db, "returns"), where("createdAt", ">=", from), where("createdAt", "<=", to))),
+  ]);
+  const sales = salesSnap.docs.map((d) => d.data());
+  const returns = retSnap.docs.map((d) => d.data());
+  const byMethod = new Map();
+  for (const x of sales) {
+    const k = x.paymentLabel || x.payment || "-";
+    const g = byMethod.get(k) || { bills: 0, amount: 0 };
+    g.bills += 1; g.amount += num(x.collect ?? x.total);
+    byMethod.set(k, g);
+  }
+  const sum = (arr, f) => round2(arr.reduce((t, x) => t + f(x), 0));
+  const cashSales = sum(sales.filter((x) => x.payment === "cash"), (x) => num(x.collect ?? x.total));
+  const cashRefunds = sum(returns.filter((r) => r.paymentKey === "cash"), (r) => num(r.total));
+  const isOpen = s.status === "open";
+  const expected = round2(num(s.openingCash) + cashSales - cashRefunds);
+  const counted = isOpen ? null : num(s.countedCash);
+  const diff = isOpen ? null : round2(counted - num(s.expectedCash ?? expected));
+  const invoices = sales.map((x) => x.invoiceNo).filter(Boolean).sort();
+  const voids = returns.filter((r) => r.type === "void").length;
+  const refunds = returns.filter((r) => r.type !== "void").length;
+  const methodRows = [...byMethod.entries()].sort((a, b) => b[1].amount - a[1].amount)
+    .map(([k, g]) => `<tr><td>${esc(k)}</td><td class="r">${g.bills}</td><td class="r">${money(round2(g.amount))}</td></tr>`).join("")
+    || `<tr><td colspan="3" class="muted">No sales in this shift.</td></tr>`;
+  const html = `
+    <h2>${esc(settings.shopName || "Pharmacy")}</h2>
+    <h3>${isOpen ? "Shift report (so far)" : "Cash shift report"}</h3>
+    <table class="a4-table">
+      <tr><th>Opened by</th><td>${esc(s.openedBy || "")}</td><th>Opened</th><td>${esc(when(s.openedAt))}</td></tr>
+      <tr><th>Closed by</th><td>${esc(s.closedBy || (isOpen ? "Still open" : ""))}</td><th>Closed</th><td>${esc(isOpen ? "" : when(s.closedAt))}</td></tr>
+    </table>
+    <h4>Cash in the drawer</h4>
+    <table class="a4-table">
+      <tr><td>Opening cash</td><td class="r">${money(num(s.openingCash))}</td></tr>
+      <tr><td>Cash sales</td><td class="r">+ ${money(cashSales)}</td></tr>
+      <tr><td>Cash refunds</td><td class="r">− ${money(cashRefunds)}</td></tr>
+      <tr><th>Expected in drawer</th><th class="r">${money(expected)}</th></tr>
+      ${isOpen ? "" : `<tr><td>Counted cash</td><td class="r">${money(counted)}</td></tr>
+      <tr><th>Difference</th><th class="r">${money(diff)}</th></tr>
+      ${s.note ? `<tr><td>Note</td><td>${esc(s.note)}</td></tr>` : ""}`}
+    </table>
+    <h4>Sales by payment method</h4>
+    <table class="a4-table">
+      <thead><tr><th>Payment method</th><th class="r">Bills</th><th class="r">Amount</th></tr></thead>
+      <tbody>${methodRows}</tbody>
+    </table>
+    <h4>Bills</h4>
+    <table class="a4-table">
+      <tr><td>Bills</td><td class="r">${sales.length}</td></tr>
+      <tr><td>Invoice range</td><td class="r">${invoices.length ? `${esc(invoices[0])} to ${esc(invoices[invoices.length - 1])}` : "-"}</td></tr>
+      <tr><td>Refunds</td><td class="r">${refunds}</td></tr>
+      <tr><td>Voids</td><td class="r">${voids}</td></tr>
+    </table>
+    <p style="margin-top:40px">Cashier: ____________________ &nbsp;&nbsp;&nbsp; Checked by: ____________________</p>`;
+  return { html, title: `${isOpen ? "Shift so far" : "Shift report"} ${when(s.openedAt)}` };
+}
+
 export async function render(el) {
   const snap = await getDocs(query(collection(db, "shifts"), orderBy("openedAt", "desc"), limit(20)));
   const shifts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -28,6 +92,7 @@ export async function render(el) {
   const live = open ? { ...open, ...(await figures(open.openedAt)) } : null;
   if (live) live.expected = round2(num(live.openingCash) + live.cashIn - live.cashRefunds);
   const canAct = canWrite("pos");
+  const byId = Object.fromEntries(shifts.map((x) => [x.id, x]));
 
   el.innerHTML = `
     <div class="shift-page">
@@ -37,6 +102,20 @@ export async function render(el) {
         ${historyTable(shifts)}
       </section>
     </div>`;
+
+  el.querySelectorAll("[data-report]").forEach((b) => b.addEventListener("click", async () => {
+    const shift = byId[b.dataset.report];
+    if (!shift) return;
+    b.disabled = true;
+    try {
+      const r = await shiftReport(shift);
+      printHtml(r.title, r.html);
+    } catch (err) {
+      toast(err.message || "Could not prepare the report", "error");
+    } finally {
+      b.disabled = false;
+    }
+  }));
 
   const form = el.querySelector("#sh-open");
   if (form) onSubmit(form, async (e) => {
@@ -113,13 +192,14 @@ function openCard(s, canAct) {
         <label>Note (required if the count differs)<textarea id="sh-note" rows="2" placeholder="Reason for any difference"></textarea></label>
         <div class="form-actions"><button class="btn primary" type="submit">${icon("check")}<span>Close shift</span></button></div>
       </form>` : `<p class="muted small">Only a cashier or administrator can close the shift.</p>`}
+      <div class="form-actions"><button class="btn ghost" type="button" data-report="${esc(s.id)}">${icon("print")}<span>Print report so far</span></button></div>
     </section>`;
 }
 
 function historyTable(list) {
   if (!list.length) return `<div class="empty-state small">${icon("cart")}<p>No shifts yet.</p></div>`;
   return `<div class="table-wrap"><table>
-    <thead><tr><th>Opened</th><th>By</th><th class="num">Opening</th><th class="num">Expected</th><th class="num">Counted</th><th class="num">Difference</th><th>Closed by</th></tr></thead>
+    <thead><tr><th>Opened</th><th>By</th><th class="num">Opening</th><th class="num">Expected</th><th class="num">Counted</th><th class="num">Difference</th><th>Closed by</th><th></th></tr></thead>
     <tbody>${list.map((s) => `<tr>
       <td data-label="Opened">${esc(when(s.openedAt))}</td>
       <td data-label="By">${esc(s.openedBy || "")}</td>
@@ -128,5 +208,6 @@ function historyTable(list) {
       <td data-label="Counted" class="num">${s.status === "open" ? "" : money(num(s.countedCash))}</td>
       <td data-label="Difference" class="num">${s.status === "open" ? "" : `<span class="badge ${num(s.difference) === 0 ? "ok" : "danger"}">${money(num(s.difference))}</span>`}</td>
       <td data-label="Closed by">${esc(s.closedBy || (s.status === "open" ? "Still open" : ""))}</td>
+      <td data-label="Report"><button class="btn ghost sm" type="button" data-report="${esc(s.id)}">${icon("print")}<span>Report</span></button></td>
     </tr>`).join("")}</tbody></table></div>`;
 }
