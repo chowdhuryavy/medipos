@@ -152,7 +152,8 @@ function openForgotPassword(prefillEmail = "") {
       </div>
       <ol class="steps" aria-label="Progress">
         <li class="step on" data-step="1"><span>1</span> Email</li>
-        <li class="step" data-step="2"><span>2</span> Code &amp; new password</li>
+        <li class="step" data-step="2"><span>2</span> Code</li>
+        <li class="step" data-step="3"><span>3</span> New password</li>
       </ol>
       <form id="fp-form" class="stack" novalidate>
         <div id="fp-step1">
@@ -162,6 +163,8 @@ function openForgotPassword(prefillEmail = "") {
         <div id="fp-step2" hidden class="stack">
           <label class="field"><span class="field-label">6-digit code</span>
             <span class="input-wrap">${icon("key")}<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required /></span></label>
+        </div>
+        <div id="fp-step3" hidden class="stack">
           <div id="fp-pw"></div>
         </div>
         <button class="btn primary block xl" type="submit" id="fp-submit"><span>Send code</span></button>
@@ -174,6 +177,7 @@ function openForgotPassword(prefillEmail = "") {
     const submit = body.querySelector("#fp-submit");
     const help = body.querySelector("#fp-help");
     const resend = body.querySelector("#fp-resend");
+    const step3 = body.querySelector("#fp-step3");
     let pw = null;
     let stage = 1;
     let cooldownTimer = null;
@@ -198,6 +202,8 @@ function openForgotPassword(prefillEmail = "") {
       }, 1000);
     };
 
+    // Three screens in order: email, then the code, then the new password with its confirmation.
+    // The code is checked by the server when the password is reset (the OTP logic itself is unchanged).
     onSubmit(form, async (e) => {
       e.preventDefault();
       try {
@@ -208,14 +214,23 @@ function openForgotPassword(prefillEmail = "") {
           await post("/api/otp/request", { email });
           stage = 2;
           setStep(2);
-          // Once the account is found and the code is sent, only the code and new password are shown.
-          help.textContent = "Enter the 6-digit code we emailed you, then choose a new password.";
+          help.textContent = "Enter the 6-digit code we emailed you.";
           step1.hidden = true;
           step2.hidden = false;
-          if (!pw) pw = passwordFields(body.querySelector("#fp-pw"));
-          busy(false, "Reset password");
+          busy(false, "Continue");
           startCooldown();
           form.code.focus();
+        } else if (stage === 2) {
+          if (!/^\d{6}$/.test(form.code.value.trim())) throw new Error("Enter the 6-digit code.");
+          stage = 3;
+          setStep(3);
+          help.textContent = "Choose a new password and confirm it.";
+          step2.hidden = true;
+          step3.hidden = false;
+          resend.hidden = true;
+          clearInterval(cooldownTimer);
+          if (!pw) pw = passwordFields(body.querySelector("#fp-pw"));
+          busy(false, "Reset password");
         } else {
           if (!/^\d{6}$/.test(form.code.value.trim())) throw new Error("Enter the 6-digit code.");
           if (!pw.valid()) throw new Error("Check the new password rules and make sure both passwords match.");
@@ -226,7 +241,7 @@ function openForgotPassword(prefillEmail = "") {
         }
       } catch (err) {
         toast(err.message, "error");
-        busy(false, stage === 1 ? "Send code" : "Reset password");
+        busy(false, stage === 1 ? "Send code" : stage === 2 ? "Continue" : "Reset password");
       }
     });
 
