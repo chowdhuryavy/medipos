@@ -1375,6 +1375,14 @@ async function viewBranding(body) {
   const brand = bSnap.exists() ? bSnap.data() : {};
   const stored = eSnap.exists() ? eSnap.data() : {};
   const tpl = (k) => ({ ...DEFAULT_TEMPLATES[k], ...(stored[k] || {}) });
+  // Every text field a template uses (not its name or description) is editable here and saved.
+  const tplFields = (k) => Object.keys(DEFAULT_TEMPLATES[k]).filter((x) => x !== "label" && x !== "help");
+  const EMAIL_FIELD_LABELS = {
+    subject: "Subject", eyebrow: "Small heading above the title", heading: "Title", greeting: "Greeting",
+    intro: "Opening text", codeLabel: "Label above the code", body: "Message", expiryNote: "Expiry note",
+    securityNote: "Security note", button: "Button text (leave empty for no button)",
+  };
+  const MULTI_LINE = ["body", "intro", "expiryNote", "securityNote"];
 
   body.innerHTML = `
     <form id="bf" class="settings-form">
@@ -1398,9 +1406,13 @@ async function viewBranding(body) {
           <h3>${esc(DEFAULT_TEMPLATES[k].label)}</h3>
           <p class="muted small">${esc(DEFAULT_TEMPLATES[k].help)} Placeholders: ${EMAIL_PLACEHOLDERS.map((p) => `<code>{{${p}}}</code>`).join(" ")}</p>
           <div class="form-grid">
-            <label class="span-2">Subject<input name="${k}__subject" value="${esc(tpl(k).subject)}" required /></label>
-            <label class="span-2">Message<textarea name="${k}__body" rows="6" required>${esc(tpl(k).body)}</textarea></label>
-            <label class="span-2">Button text (leave empty for no button)<input name="${k}__button" value="${esc(tpl(k).button || "")}" /></label>
+            ${tplFields(k).map((fld) => {
+              const v = esc(tpl(k)[fld] ?? "");
+              const label = EMAIL_FIELD_LABELS[fld] || fld;
+              if (fld === "button") return `<label class="span-2">${esc(label)}<input name="${k}__${fld}" value="${v}" /></label>`;
+              if (MULTI_LINE.includes(fld)) return `<label class="span-2">${esc(label)}<textarea name="${k}__${fld}" rows="${fld === "body" ? 7 : 3}">${v}</textarea></label>`;
+              return `<label class="span-2">${esc(label)}<input name="${k}__${fld}" value="${v}" /></label>`;
+            }).join("")}
           </div>
           <div class="form-actions"><button type="button" class="btn ghost sm" data-default="${k}">Restore default text</button></div>
         </section>`).join("")}
