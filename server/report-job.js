@@ -79,8 +79,8 @@ export async function sendReportFor(schedule, reportDate, today) {
   const keys = schedule.reports?.length ? schedule.reports : REPORTS.map(([k]) => k);
   const sections = toSections(tables, keys);
   const shop = general.shopName || "My Pharmacy";
-  const title = `${shop} · Daily reports`;
-  const subtitle = `Sales day ${reportDate} · Sent ${new Date().toLocaleString("en-GB", { timeZone: schedule.timezone || DEFAULT_TZ })}`;
+  const title = "Daily reports";
+  const subtitle = `Sales day ${reportDate}${data.sales.length === 0 ? " · No sales recorded" : ""} · Sent ${new Date().toLocaleString("en-GB", { timeZone: schedule.timezone || DEFAULT_TZ })}`;
   const cfg = await loadEmailConfig();
   const brand = { shop, color: cfg.brandColor, subtitle };
   const files = [];
@@ -92,22 +92,36 @@ export async function sendReportFor(schedule, reportDate, today) {
     files.push({ filename: `${shop.replace(/\W+/g, "-")}-reports-${reportDate}.xlsx`, content: toXlsx(sections, brand) });
   }
 
-  // Email body: the key figures of each chosen report, the attachments listed below.
+  // Email body: what was sent, the attached file names, then the key figures of each chosen report.
   const pal = brandPalette(cfg.brandColor);
+  const noSales = data.sales.length === 0;
+  const attached = files.length ? `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px">
+      <tr><td style="background:${pal.soft};border:1px solid ${pal.border};border-radius:12px;padding:14px 16px">
+        <p style="margin:0 0 8px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:bold;color:${pal.dark}">Attached files</p>
+        ${files.map((f) => `<p style="margin:6px 0;font-size:14px;color:#0f172a"><strong style="color:${pal.dark}">${f.filename.endsWith(".pdf") ? "PDF" : "Excel"}</strong>&nbsp;&nbsp;${esc(f.filename)}</p>`).join("")}
+      </td></tr>
+    </table>` : "";
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;color:#334155">Here are the reports for <strong>${esc(reportDate)}</strong>. Stock and expiry are as of the time this was sent.</p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#334155">Here are the reports for <strong>${esc(reportDate)}</strong>.${noSales ? " No sales were recorded on this day, so the sales figures are zero." : ""} Stock and expiry are as of the time this was sent.</p>
+    ${attached}
     ${sections.map((s) => `
-      <h3 style="margin:18px 0 6px;font-size:15px;color:${pal.dark}">${esc(s.title)}</h3>
-      <table role="presentation" width="100%" cellpadding="6" cellspacing="0" style="font-size:13px;border-collapse:collapse">
+      <h3 style="margin:20px 0 8px;font-size:15px;color:${pal.dark}">${esc(s.title)}</h3>
+      <table role="presentation" width="100%" cellpadding="8" cellspacing="0" style="font-size:14px;border-collapse:collapse">
         ${s.summary.map(([l, v]) => `<tr><td style="border-bottom:1px solid #e2e8f0;color:#475569">${esc(l)}</td><td align="right" style="border-bottom:1px solid #e2e8f0;font-weight:bold;color:#0f172a">${esc(v)}</td></tr>`).join("")}
-      </table>`).join("")}
-    <p style="margin:18px 0 0;font-size:13px;color:#64748b">Attached: ${files.map((f) => esc(f.filename)).join(", ") || "none"}</p>`;
+      </table>`).join("")}`;
   const html = shell({
-    cfg, pal, subject: `${shop} reports ${reportDate}`, preheader: `Reports for ${reportDate}`,
+    cfg, pal, subject: `${shop} reports for ${reportDate}`, preheader: `Reports for ${reportDate} · ${files.length} attached`,
     icon: "&#128202;", eyebrow: esc(cfg.shopName || shop), heading: `Reports for ${reportDate}`,
     bodyHtml, footerText: cfg.emailFooter,
   });
-  const text = sections.map((s) => `${s.title}\n${s.summary.map(([l, v]) => `${l}: ${v}`).join("\n")}`).join("\n\n");
+  // Plain-text version: the same attachment names and figures, so both versions say the same thing.
+  const text = [
+    `${shop} reports for ${reportDate}`,
+    noSales ? "No sales were recorded on this day." : "",
+    files.length ? `Attached files:\n${files.map((f) => `- ${f.filename}`).join("\n")}` : "",
+    ...sections.map((s) => `${s.title}\n${s.summary.map(([l, v]) => `${l}: ${v}`).join("\n")}`),
+  ].filter(Boolean).join("\n\n");
   await sendMail({
     to: schedule.recipients, subject: `${shop} reports for ${reportDate}`, text, html, attachments: files,
   });
