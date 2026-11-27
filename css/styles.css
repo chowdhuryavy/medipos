@@ -1211,3 +1211,19 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .modal-backdrop.modal-center .form-actions .btn { min-height: 50px; border-radius: 16px; font-weight: 700; justify-content: center; width: 100%; }
 .modal-backdrop.modal-center .form-actions .btn.primary { box-shadow: 0 12px 24px -10px var(--tone); }
 @keyframes alertPop { from { opacity: 0; transform: translateY(14px) scale(.94); } to { opacity: 1; transform: none; } }
+
+/* Role access: one card per role, permissions open in a modal */
+.role-list { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); margin: 14px 0; }
+.role-card { border: 1px solid var(--border); border-radius: 16px; padding: 16px; display: grid; gap: 10px; background: var(--surface); }
+.role-card.is-locked { background: var(--surface-2); }
+.role-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.role-card-head strong { display: block; font-size: 16px; }
+.role-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.role-stats strong { color: var(--text); }
+.role-card-actions { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.perm-h { margin: 14px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.perm-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.perm-box { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; cursor: pointer; font-weight: 600; }
+.perm-box input { width: 20px; height: 20px; accent-color: var(--brand); flex: none; }
+.perm-box input:disabled { cursor: not-allowed; }
+.role-editor .form-actions { justify-content: flex-end; }

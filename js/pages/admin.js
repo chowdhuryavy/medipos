@@ -709,143 +709,156 @@ const PAGE_KEYS = Object.keys(PAGE_NAMES);
 const slugRole = (name) => String(name).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
 
 function viewRoles(body) {
-  // Working copy: edits stay here until "Save roles" is pressed.
+  // Working copy of every role. Each role is saved from its own permissions window.
   const working = structuredClone(roles);
-  const removed = new Set();
+  const drafts = new Set(); // new roles that are not saved yet
 
   const roleHost = document.createElement("div");
   const staffHost = document.createElement("div");
   body.replaceChildren(roleHost, staffHost);
   renderStaffCard(staffHost, () => viewRoles(body)).catch((err) => toast(err.message, "error"));
 
+  const permBox = (name, label, checked, disabled) => `
+    <label class="perm-box">
+      <input type="checkbox" name="${name}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />
+      <span>${esc(label)}</span>
+    </label>`;
+
   const draw = () => {
-    const keys = Object.keys(working);
     roleHost.innerHTML = `
       <section class="card">
         <div class="toolbar">
           <div>
-            <h3>Roles and permissions</h3>
-            <p class="muted small">Create a role, tick what it can open and change, and save. Staff get the role's access the next time they sign in. The database enforces it, not just the menu.</p>
+            <h3>Roles</h3>
+            <p class="muted small">Open a role to tick the screens and data areas it can use. Staff get the change the next time they sign in. The database enforces it, not just the menu.</p>
           </div>
           <div class="grow"></div>
-          <button class="btn ghost" type="button" id="role-new">${icon("plus")}<span>New role</span></button>
+          <button class="btn primary" type="button" id="role-new">${icon("plus")}<span>New role</span></button>
         </div>
-        <form id="rf">
-          <div class="table-wrap role-matrix-wrap"><table class="matrix role-matrix">
-            <thead>
-              <tr>
-                <th rowspan="2">Role</th>
-                <th colspan="${PAGE_KEYS.length}" class="grp">Can open these pages</th>
-                <th colspan="${WRITE_AREAS.length}" class="grp">Can change data in these areas</th>
-                <th rowspan="2"></th>
-              </tr>
-              <tr>
-                ${PAGE_KEYS.map((p) => `<th class="rot" title="${esc(PAGE_NAMES[p])}"><span>${esc(PAGE_NAMES[p])}</span></th>`).join("")}
-                ${WRITE_AREAS.map((a) => `<th class="rot" title="${esc(WRITE_LABEL[a])}"><span>${esc(WRITE_LABEL[a])}</span></th>`).join("")}
-              </tr>
-            </thead>
-            <tbody>
-              ${keys.map((k) => {
-                const isAdmin = k === "admin";
-                return `
-                <tr data-role="${esc(k)}">
-                  <td class="role-name">
-                    <input name="${esc(k)}__label" value="${esc(working[k].label)}" aria-label="Name of role ${esc(k)}" ${isAdmin ? "readonly" : ""} />
-                    <small class="muted mono">${esc(k)}</small>
-                  </td>
-                  ${PAGE_KEYS.map((p) => `<td class="c"><input type="checkbox" name="${esc(k)}__page__${p}" ${(working[k].pages || []).includes(p) || isAdmin ? "checked" : ""} ${isAdmin ? "disabled" : ""} aria-label="${esc(working[k].label)} can open ${esc(PAGE_NAMES[p])}" /></td>`).join("")}
-                  ${WRITE_AREAS.map((a) => `<td class="c"><input type="checkbox" name="${esc(k)}__write__${a}" ${(working[k].write || []).includes(a) || isAdmin ? "checked" : ""} ${isAdmin ? "disabled" : ""} aria-label="${esc(working[k].label)} can change ${esc(WRITE_LABEL[a])}" /></td>`).join("")}
-                  <td class="c">${isAdmin ? `<span class="badge">locked</span>` : `<button class="icon-btn sm hover-danger" type="button" data-del-role="${esc(k)}" aria-label="Delete role ${esc(k)}">${icon("trash")}</button>`}</td>
-                </tr>`;
-              }).join("")}
-            </tbody>
-          </table></div>
-          <p class="muted small">Administrator always has every page and every change area, so it cannot be locked out. A role that still has staff assigned cannot be deleted.</p>
-          <div class="sticky-actions">
-            <button class="btn primary" type="submit">${icon("check")}<span>Save roles</span></button>
-          </div>
-        </form>
+        <div class="role-list">
+          ${Object.keys(working).map((k) => {
+            const locked = k === "admin";
+            const pages = locked ? PAGE_KEYS.length : (working[k].pages || []).length;
+            const areas = locked ? WRITE_AREAS.length : (working[k].write || []).length;
+            return `
+            <article class="role-card ${locked ? "is-locked" : ""}">
+              <div class="role-card-head">
+                <div><strong>${esc(working[k].label)}</strong><small class="muted mono">${esc(k)}</small></div>
+                ${locked ? `<span class="badge">Locked</span>` : drafts.has(k) ? `<span class="badge warn">Not saved</span>` : ""}
+              </div>
+              <div class="role-stats">
+                <span><strong>${pages}</strong> of ${PAGE_KEYS.length} screens</span>
+                <span><strong>${areas}</strong> of ${WRITE_AREAS.length} areas</span>
+              </div>
+              <div class="role-card-actions">
+                <button class="btn primary sm" type="button" data-edit-role="${esc(k)}">${icon("edit")}<span>${locked ? "View" : "Permissions"}</span></button>
+                ${locked ? "" : `<button class="icon-btn sm hover-danger" type="button" data-del-role="${esc(k)}" aria-label="Delete role ${esc(working[k].label)}" title="Delete role">${icon("trash")}</button>`}
+              </div>
+            </article>`;
+          }).join("")}
+        </div>
+        <p class="muted small">Administrator always has every screen and every change area, so it cannot be locked out. A role that still has staff assigned cannot be deleted.</p>
       </section>`;
     bind();
   };
 
-  const bind = () => {
-    body.querySelector("#role-new").addEventListener("click", () => openRoleName());
-    body.querySelectorAll("[data-del-role]").forEach((b) => b.addEventListener("click", () => deleteRole(b.dataset.delRole, b)));
-    body.querySelector("#rf").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const btn = e.submitter || body.querySelector("#rf button[type=submit]");
-      withBusy(btn, () => saveRoles()).catch((err) => toast(err.message, "error"));
-    });
-  };
+  function bind() {
+    roleHost.querySelector("#role-new").addEventListener("click", openRoleName);
+    roleHost.querySelectorAll("[data-edit-role]").forEach((b) => b.addEventListener("click", () => openRoleEditor(b.dataset.editRole)));
+    roleHost.querySelectorAll("[data-del-role]").forEach((b) => b.addEventListener("click", () => deleteRole(b.dataset.delRole, b)));
+  }
 
-  // Reads what is ticked on screen into the working copy before any change.
-  const readScreen = () => {
-    const f = new FormData(body.querySelector("#rf"));
+  function openRoleName() {
+    openModal("New role", `
+      <form id="nr" class="stack">
+        <label class="field"><span class="field-label">Role name</span>
+          <span class="input-wrap"><input name="name" maxlength="40" placeholder="e.g. Senior cashier" required /></span></label>
+        <p class="muted small">Next you choose what this role can open and change.</p>
+        <div class="form-actions"><button class="btn ghost" type="button" data-cancel>Cancel</button><button class="btn primary" type="submit"><span>Continue</span></button></div>
+      </form>`, (m, close) => {
+      m.querySelector("[data-cancel]").addEventListener("click", close);
+      onSubmit(m.querySelector("#nr"), async (e) => {
+        const name = String(new FormData(e.target).get("name") || "").trim();
+        const key = slugRole(name);
+        if (!key) throw new Error("Enter a name with letters or numbers.");
+        if (key === "admin" || key in working) throw new Error("A role with this name already exists.");
+        working[key] = { label: name, pages: ["dashboard"], write: [] };
+        drafts.add(key);
+        close();
+        draw();
+        openRoleEditor(key);
+      });
+    });
+  }
+
+  // One role's permissions in a modal: tick screens and data areas, then Save role.
+  function openRoleEditor(key) {
+    const r = working[key];
+    const locked = key === "admin";
+    openModal(`${locked ? "View" : "Permissions for"} ${r.label}`, `
+      <form id="re" class="stack role-editor">
+        ${locked ? "" : `<label class="field"><span class="field-label">Role name</span>
+          <span class="input-wrap"><input name="label" maxlength="40" value="${esc(r.label)}" required /></span></label>`}
+        <h4 class="perm-h">Screens they can open</h4>
+        <div class="perm-grid">
+          ${PAGE_KEYS.map((p) => permBox(`page__${p}`, PAGE_NAMES[p], locked || (r.pages || []).includes(p), locked)).join("")}
+        </div>
+        <h4 class="perm-h">Data they can change</h4>
+        <div class="perm-grid">
+          ${WRITE_AREAS.map((w) => permBox(`write__${w}`, WRITE_LABEL[w], locked || (r.write || []).includes(w), locked)).join("")}
+        </div>
+        <p class="muted small">${locked ? "Administrator always has every screen and every change area." : "Everyone with this role gets exactly the ticked screens and areas."}</p>
+        <div class="form-actions">
+          <button class="btn ghost" type="button" data-cancel>${locked ? "Close" : "Cancel"}</button>
+          ${locked ? "" : `<button class="btn primary" type="submit">${icon("check")}<span>Save role</span></button>`}
+        </div>
+      </form>`, (m, close) => {
+      m.querySelector("[data-cancel]").addEventListener("click", () => {
+        if (drafts.has(key)) { delete working[key]; drafts.delete(key); draw(); }
+        close();
+      });
+      if (locked) return;
+      onSubmit(m.querySelector("#re"), async (e) => {
+        const f = new FormData(e.target);
+        working[key] = {
+          label: String(f.get("label") || "").trim() || key,
+          pages: PAGE_KEYS.filter((p) => f.get(`page__${p}`) === "on"),
+          write: WRITE_AREAS.filter((w) => f.get(`write__${w}`) === "on"),
+        };
+        drafts.delete(key);
+        close();
+        await persistRoles();
+      });
+    });
+  }
+
+  // Saves every saved role (drafts are left out) and reloads so the new access applies.
+  async function persistRoles() {
+    const out = {};
     for (const k of Object.keys(working)) {
-      if (k === "admin") continue;
-      working[k] = {
-        label: String(f.get(`${k}__label`) || working[k].label).trim() || k,
-        pages: PAGE_KEYS.filter((p) => f.get(`${k}__page__${p}`) === "on"),
-        write: WRITE_AREAS.filter((a) => f.get(`${k}__write__${a}`) === "on"),
-      };
+      if (drafts.has(k)) continue;
+      const r = working[k];
+      if (k === "admin") { out.admin = { label: r.label || "Administrator", pages: [...PAGE_KEYS], write: [...WRITE_AREAS] }; continue; }
+      out[k] = { label: r.label, pages: r.pages, write: r.write };
     }
-  };
-
-  const openRoleName = () => openModal("New role", `
-    <form id="nr" class="stack">
-      <label class="field"><span class="field-label">Role name</span>
-        <span class="input-wrap"><input name="name" maxlength="40" placeholder="e.g. Senior cashier" required /></span></label>
-      <p class="muted small">You will set its permissions in the table after it is created.</p>
-      <div class="form-actions"><button class="btn ghost" type="button" data-cancel>Cancel</button><button class="btn primary" type="submit"><span>Create role</span></button></div>
-    </form>`, (m, close) => {
-    m.querySelector("[data-cancel]").addEventListener("click", close);
-    onSubmit(m.querySelector("#nr"), async (e) => {
-      const name = String(new FormData(e.target).get("name") || "").trim();
-      const key = slugRole(name);
-      if (!key) throw new Error("Enter a name with letters or numbers.");
-      if (key === "admin" || key in working) throw new Error("A role with this name already exists.");
-      readScreen();
-      working[key] = { label: name, pages: ["dashboard"], write: [] };
-      removed.delete(key);
-      close();
-      draw();
-      toast(`Role "${name}" added. Set what it can do, then Save roles.`, "info");
-    });
-  });
+    if (!out.admin) throw new Error("The administrator role is required.");
+    await setDoc(doc(db, "settings", "roles"), out);
+    await audit("roles.update", { roles: Object.keys(out) });
+    toast("Saved. Applying the new access…", "success");
+    setTimeout(() => location.reload(), 900);
+  }
 
   const deleteRole = async (key, btn) => {
     if (key === "admin") return;
     await withBusy(btn, async () => {
       const snap = await getDocs(query(collection(db, "users"), where("role", "==", key)));
-      const count = snap.size;
-      if (count > 0) return alertBox({ title: "Role is in use", tone: "warn", message: `${count} staff member${count === 1 ? " uses" : "s use"} this role. Move them to another role first.` });
-      if (!(await confirmBox(`Delete the role "${working[key].label}"? Its permissions are removed when you save.`))) return;
-      readScreen();
+      if (snap.size > 0) return alertBox({ title: "Role is in use", tone: "warn", message: `${snap.size} staff member${snap.size === 1 ? " uses" : "s use"} this role. Move them to another role first.` });
+      if (!(await confirmBox(`Delete the role "${working[key].label}"? Its permissions are removed.`))) return;
       delete working[key];
-      removed.add(key);
-      draw();
+      if (drafts.has(key)) { drafts.delete(key); return draw(); }
+      await persistRoles();
     });
   };
-
-  async function saveRoles() {
-    readScreen();
-    const out = {};
-    for (const k of Object.keys(working)) {
-      const r = working[k];
-      if (k === "admin") {
-        out.admin = { label: r.label || "Administrator", pages: [...PAGE_KEYS], write: [...WRITE_AREAS] };
-        continue;
-      }
-      if (!r.label) throw new Error("Every role needs a name.");
-      out[k] = { label: r.label, pages: r.pages, write: r.write };
-    }
-    if (!out.admin) throw new Error("The administrator role is required.");
-    await setDoc(doc(db, "settings", "roles"), out);
-    await audit("roles.update", { roles: Object.keys(out), removed: [...removed] });
-    toast("Roles saved. Reloading to apply them.", "success");
-    setTimeout(() => location.reload(), 900);
-  }
 
   draw();
 }
