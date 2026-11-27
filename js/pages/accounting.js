@@ -55,6 +55,7 @@ async function loadAccounts() {
 const monthKey = (d) => d.slice(0, 7);
 
 async function viewOverview(body, go) {
+  body.innerHTML = `<div class="skeleton"></div><div class="skeleton"></div>`;
   const [accounts, jSnap, floatSnap] = await Promise.all([loadAccounts(), getDocs(collection(db, "journal")), getDocs(collection(db, "floats")).catch(() => ({ docs: [] }))]);
   const entries = jSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const expenseAccounts = accounts.filter((a) => a.type === "expense" && isPostable(a));
