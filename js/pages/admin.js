@@ -235,7 +235,7 @@ const FIELDS = [
 // Lists recent releases. "Go back" asks for confirmation, then makes that release live.
 function openVersionsModal() {
   openModal("App versions", `<div class="vs-list" id="vs-list"><p class="muted">Loading recent releases…</p></div>`, (body) => {
-    post("/api/admin/versions", {}, { secure: true }).then(({ deployments }) => {
+    post("/api/admin/app", { action: "versions" }, { secure: true }).then(({ deployments }) => {
       body.querySelector("#vs-list").innerHTML = deployments.length ? deployments.map((d, i) => {
         const live = d.version === VERSION;
         return `
@@ -256,7 +256,7 @@ function openVersionsModal() {
       const ok = await confirmBox(`Go back to ${b.dataset.ver}? Everyone gets it the next time they reload. Your data and Firestore rules stay as they are.`, { title: "Go back to an earlier version", tone: "warn", confirmText: "Go back" });
       if (!ok) return;
       try {
-        await post("/api/admin/rollback", { deploymentId: b.dataset.go }, { secure: true });
+        await post("/api/admin/app", { action: "rollback", deploymentId: b.dataset.go }, { secure: true });
         toast("Done. A banner will ask everyone to reload.", "success");
         setTimeout(checkForUpdate, 4000);
       } catch (err) {
@@ -1013,7 +1013,7 @@ async function viewIntegrations(body) {
   });
   onAction(body.querySelector("#ef-test"), async () => {
     try {
-      await post("/api/admin/test-email", {}, { secure: true });
+      await post("/api/admin/mail", { action: "test" }, { secure: true });
       toast("Test email sent. Check your inbox and spam folder.", "success");
     } catch (err) {
       toast(err.message, "error");
@@ -1371,7 +1371,7 @@ async function viewScheduledReports(body) {
       const i = Number(b.closest(".sched-card").dataset.i);
       try {
         await save();
-        const out = await post("/api/admin/report-send", { scheduleId: items[i].id }, { secure: true });
+        const out = await post("/api/admin/mail", { action: "report", scheduleId: items[i].id }, { secure: true });
         toast(`Sent the reports for ${out.reportDate} to ${out.to.join ? out.to.join(", ") : out.to}`, "success");
       } catch (err) {
         toast(err.message, "error");
