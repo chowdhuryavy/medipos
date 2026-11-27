@@ -116,6 +116,11 @@ const TYPE_LABELS = {
   expense: "Expense", float: "Float top-up", stock: "Stock movement", manual: "Manual entry", reversal: "Reversal", legacy: "Legacy entry",
 };
 
+/** True when a voucher is dated before today: printing it again is a reprint copy. */
+export function isPastDay(date, today = todayISO()) {
+  return !!date && String(date) < today;
+}
+
 export function voucherHtml(v, { shop, address = "", phone = "", tax = "", logo = "", by = "", accountName = (c) => c, color = "#0f766e" }) {
   const lines = v.lines || [];
   const debit = lines.reduce((t, l) => t + (Number(l.debit) || 0), 0);
@@ -147,6 +152,7 @@ export function voucherHtml(v, { shop, address = "", phone = "", tax = "", logo 
       <div><dt>Date</dt><dd>${esc(v.date || "—")}</dd></div>
       <div><dt>Reference</dt><dd>${esc(v.ref || "—")}</dd></div>
       <div><dt>Entry type</dt><dd>${esc(typeLabel)}</dd></div>
+      <div><dt>Posted by</dt><dd>${esc(v.by || "—")}</dd></div>
       <div><dt>Status</dt><dd>${status}</dd></div>
     </dl>
     <div class="jv-narr"><span>Narration</span>${esc(v.memo || "—")}${statusNote ? `<em>${statusNote}</em>` : ""}</div>
@@ -158,7 +164,7 @@ export function voucherHtml(v, { shop, address = "", phone = "", tax = "", logo 
     </table>
     <div class="jv-check ${balanced ? "ok" : "bad"}">${balanced ? "Balanced: total debits equal total credits" : "Warning: debits and credits do not match"}</div>
     <div class="jv-sign">
-      <div><b>Prepared by</b><span>${esc(by || v.by || "")}</span></div>
+      <div><b>Prepared by</b><span></span></div>
       <div><b>Checked by</b><span></span></div>
       <div><b>Approved by</b><span></span></div>
     </div>
@@ -174,7 +180,7 @@ export function voucherHtml(v, { shop, address = "", phone = "", tax = "", logo 
     .jv-title{text-align:right}
     .jv-kind{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--jv);font-weight:700}
     .jv-no{font-family:"Courier New",monospace;font-size:20px;font-weight:700;color:#111827;margin-top:4px}
-    .jv-strip{display:grid;grid-template-columns:repeat(4,1fr);margin:14px 0;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden}
+    .jv-strip{display:grid;grid-template-columns:repeat(5,1fr);margin:14px 0;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden}
     .jv-strip div{padding:8px 10px;border-right:1px solid #e5e7eb;background:#f9fafb}
     .jv-strip div:last-child{border-right:0}
     .jv-strip dt{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#6b7280}

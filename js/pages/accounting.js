@@ -1,5 +1,6 @@
 import { isPostable, ACCOUNT_STATUSES, statusLabel } from "../core.js";
-import { reserveJv, writeVoucher, reverseVoucher, numberExistingVouchers, voucherHtml, postWithVoucher } from "../journal.js";
+import { reserveJv, writeVoucher, reverseVoucher, numberExistingVouchers, voucherHtml, postWithVoucher, isPastDay } from "../journal.js";
+import { billInputHtml, readBillFrom, billRecord, viewBills } from "../bills.js";
 import { branding } from "../branding.js";
 import { manageExpenseCategories, expenseCategories } from "../expense-categories.js";
 import { onSubmit, onAction, downloadCSV } from "../core.js";
@@ -296,6 +297,7 @@ async function viewJournal(body) {
               <td data-label="Status">${statusBadge(e)}</td>
               <td class="actions">
                 <button class="icon-btn sm" data-view="${esc(e.id)}" aria-label="View ${esc(e.jvNo || "entry")}">${icon("search")}</button>
+                ${e.jvNo ? `<button class="btn ghost sm" data-tab="${esc(e.jvNo)}" type="button">Open</button>` : ""}
                 ${canEdit && e.jvNo && !e.reverses && e.status !== "reversed"
                   ? `<button class="btn ghost sm" data-reverse="${esc(e.id)}">Reverse</button>` : ""}
               </td>
@@ -308,6 +310,8 @@ async function viewJournal(body) {
   };
 
   body.querySelector("#j-table").addEventListener("click", (e) => {
+    const tab = e.target.closest("[data-tab]");
+    if (tab) return window.open(`/voucher?jv=${encodeURIComponent(tab.dataset.tab)}`, "_blank");
     const view = e.target.closest("[data-view]");
     if (view) return openVoucher(byId.get(view.dataset.view), name, () => load());
     const rev = e.target.closest("[data-reverse]");
@@ -636,7 +640,7 @@ async function viewExpenses(body) {
     loadAccounts(),
   ]);
   const expenseAccounts = accounts.filter((a) => a.type === "expense" && isPostable(a));
-  const rows = snap.docs.map((d) => d.data());
+  const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   body.innerHTML = `
     <section class="card">
       <div class="toolbar">
@@ -646,7 +650,7 @@ async function viewExpenses(body) {
         <button class="btn primary" id="ex-new">${icon("plus")}<span>Record expense</span></button>
       </div>
       <div class="table-wrap"><table class="stack-mobile">
-        <thead><tr><th>Date</th><th>Category</th><th>Payee</th><th>Note</th><th>Paid from</th><th class="r">Amount</th></tr></thead>
+        <thead><tr><th>Date</th><th>Category</th><th>Payee</th><th>Note</th><th>Paid from</th><th class="r">Amount</th><th>Bill</th></tr></thead>
         <tbody>
           ${rows.map((x) => `<tr>
             <td data-label="Date">${esc(x.date)}</td>
@@ -654,13 +658,15 @@ async function viewExpenses(body) {
             <td data-label="Payee">${esc(x.payee || "—")}</td>
             <td data-label="Note">${esc(x.note || "")}</td>
             <td data-label="Paid from">${esc(x.paidFromName)}</td>
-            <td data-label="Amount" class="r">${money(x.amount)}</td></tr>`).join("")
-            || `<tr><td colspan="6" class="muted center">No expenses recorded</td></tr>`}
+            <td data-label="Amount" class="r">${money(x.amount)}</td>
+            <td data-label="Bill"><button class="btn ghost" type="button" data-bills="${esc(x.id)}">Bills</button></td></tr>`).join("")
+            || `<tr><td colspan="7" class="muted center">No expenses recorded</td></tr>`}
         </tbody>
       </table></div>
     </section>`;
   body.querySelector("#ex-new").addEventListener("click", () => openExpenseForm(expenseAccounts, accounts, () => viewExpenses(body)));
   body.querySelector("#ex-cats").addEventListener("click", () => manageExpenseCategories(() => viewExpenses(body)));
+  body.querySelectorAll("[data-bills]").forEach((b) => b.addEventListener("click", () => viewBills(doc(db, "expenses", b.dataset.bills), "expense")));
 }
 
 function openExpenseForm(expenseAccounts, accounts, reload) {
@@ -677,6 +683,7 @@ function openExpenseForm(expenseAccounts, accounts, reload) {
         <select name="method">${payMethods.map((m) => `<option value="${esc(m.account)}">${esc(m.label)}</option>`).join("")}</select>
       </label>
       <label class="span-2">Note<input name="note" /></label>
+      ${billInputHtml()}
       <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">Save expense</button></div>
     </form>`, (body, close) => {
     body.querySelector("[data-cancel]").addEventListener("click", close);
@@ -692,7 +699,9 @@ function openExpenseForm(expenseAccounts, accounts, reload) {
       if (!(amount > 0)) return toast("Enter an amount above 0", "error");
       try {
         const expRef = doc(collection(db, "expenses"));
-        const jvNo = await postWithVoucher(() => runTransaction(db, async (tx) => {
+        const jvNo = await postWithVoucher(async () => {
+          const bill = await readBillFrom(f.get("bill"));
+          return runTransaction(db, async (tx) => {
           const jvNo = await reserveJv(tx);
           tx.set(expRef, {
             date: String(f.get("date")), amount, account, accountName: accName, category,
@@ -705,8 +714,10 @@ function openExpenseForm(expenseAccounts, accounts, reload) {
             ref: `EXP-${expRef.id.slice(0, 6)}`,
             lines: [{ account, debit: amount }, { account: method, credit: amount }],
           }), jvNo, "expense");
+          if (bill) tx.set(doc(collection(expRef, "bills")), billRecord(bill));
           return jvNo;
-        }));
+          });
+        });
         await audit("expense.create", { amount, account });
         toast(`Expense recorded · ${jvNo}`, "success");
         close();

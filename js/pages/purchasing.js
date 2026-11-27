@@ -1,4 +1,5 @@
 import { reserveJv, writeVoucher, postWithVoucher } from "../journal.js";
+import { billInputHtml, readBillFrom, billRecord } from "../bills.js";
 import { addDays, billDue, billRemaining, billStatus, dayDiff, allOpenBills, openPaySupplier } from "../payables.js";
 import { onSubmit, onAction, canWrite } from "../core.js";
 import { unitsOf, unitByKey, toPieces, unitOptions } from "../packs.js";
@@ -42,6 +43,7 @@ export async function render(el) {
           </select>
         </label>
         <label>Due date (credit)<input name="dueDate" type="date" /></label>
+        ${billInputHtml()}
         <small class="muted span-2" id="pur-due-hint"></small>
       </form>
 
@@ -179,7 +181,7 @@ export async function render(el) {
     btn.classList.add("loading");
     try {
       const res = await postWithVoucher(() => postPurchase({
-        supplier, invoiceNo: String(form.get("invoiceNo") || ""), date, payment, dueDate: String(form.get("dueDate") || ""), lines: valid,
+        supplier, invoiceNo: String(form.get("invoiceNo") || ""), date, payment, dueDate: String(form.get("dueDate") || ""), lines: valid, billFile: form.get("bill"),
       }), (r) => r.jvNo);
       await audit("purchase", { purNo: res.purNo, total: res.total });
       toast(`Purchase ${res.purNo} posted · ${res.jvNo}`, "success");
@@ -201,7 +203,7 @@ async function loadHistory(el) {
   const snap = await getDocs(query(collection(db, "purchases"), orderBy("createdAt", "desc"), limit(50)));
   host.innerHTML = `
     <div class="table-wrap"><table class="stack-mobile">
-      <thead><tr><th>No.</th><th>Supplier</th><th>Supplier invoice</th><th>Payment</th><th class="r">Total</th><th>Due</th><th>Status</th><th>Posted</th></tr></thead>
+      <thead><tr><th>No.</th><th>Supplier</th><th>Supplier invoice</th><th>Payment</th><th class="r">Total</th><th>Due</th><th>Status</th><th>Posted</th><th>Bill</th></tr></thead>
       <tbody>
         ${snap.docs.map((d) => { const p = d.data(); return `<tr>
           <td data-label="No.">${esc(p.purNo)}</td>
@@ -211,14 +213,17 @@ async function loadHistory(el) {
           <td data-label="Total" class="r">${money(p.total)}</td>
           <td data-label="Due">${p.payment === "credit" ? esc(billDue(p)) : "—"}</td>
           <td data-label="Status"><span class="badge">${esc(billStatus(p))}</span></td>
-          <td data-label="Posted">${fmtDateTime(p.createdAt)}</td></tr>`; }).join("")
-          || `<tr><td colspan="8" class="muted center">No purchases yet</td></tr>`}
+          <td data-label="Posted">${fmtDateTime(p.createdAt)}</td>
+          <td data-label="Bill"><button class="btn ghost" type="button" data-bills="${esc(d.id)}">Bills</button></td></tr>`; }).join("")
+          || `<tr><td colspan="9" class="muted center">No purchases yet</td></tr>`}
       </tbody>
     </table></div>`;
+  host.querySelectorAll("[data-bills]").forEach((b) => b.addEventListener("click", () => viewBills(doc(db, "purchases", b.dataset.bills), "purchase")));
 }
 
 // One transaction: batches created, weighted-average cost updated, journal posted, supplier balance updated.
-async function postPurchase({ supplier, invoiceNo, date, payment, dueDate, lines }) {
+async function postPurchase({ supplier, invoiceNo, date, payment, dueDate, lines, billFile }) {
+  const bill = await readBillFrom(billFile);
   const counterRef = doc(db, "counters", "main");
   const purRef = doc(collection(db, "purchases"));
   const supplierRef = doc(db, "suppliers", supplier.id);
@@ -292,6 +297,7 @@ async function postPurchase({ supplier, invoiceNo, date, payment, dueDate, lines
       paid: payment === "credit" ? 0 : total,
       status: payment === "credit" ? "open" : "paid",
     });
+    if (bill) tx.set(doc(collection(purRef, "bills")), billRecord(bill));
     return { purNo, total, jvNo };
   });
 }

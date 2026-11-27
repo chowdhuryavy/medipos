@@ -17,3 +17,5 @@ body { background: var(--bg-muted, #f3f4f6); }
   .vch-bar { display: none; }
   .vch-sheet { max-width: none; margin: 0; padding: 0; border-radius: 0; box-shadow: none; }
 }
+.vch-reprint { margin: 0 0 12px; padding: 8px 12px; border: 1px dashed #b45309; border-radius: 6px; background: #fffbeb; color: #92400e; font-size: 12px; font-weight: 700; }
+@media print { .vch-reprint { border-color: #92400e; } }

@@ -2,7 +2,7 @@
 // It uses the same Firebase sign-in as the app, reads the voucher with the same rules, and offers
 // Print, Save PDF and Excel. It changes nothing in the books.
 import { auth, db, onAuthStateChanged, doc, getDoc, getDocs, collection, query, where, limit } from "./firebase.js";
-import { voucherHtml } from "./journal.js";
+import { voucherHtml, isPastDay } from "./journal.js";
 import { toPdf, toXlsx, rasterLogo } from "./export-files.js";
 
 const $ = (id) => document.getElementById(id);
@@ -72,6 +72,10 @@ function render() {
     by: v.by || "",
     accountName,
   });
+  if (isPastDay(v.date)) {
+    const printed = new Date().toISOString().slice(0, 16).replace("T", " ");
+    sheet.insertAdjacentHTML("afterbegin", `<div class="vch-reprint">Reprint copy of a voucher dated ${esc(v.date)} · printed ${esc(printed)} · this copy cannot be edited</div>`);
+  }
   bar.hidden = false;
   document.title = `${v.jvNo} · MediPOS`;
 }
