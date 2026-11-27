@@ -13,6 +13,9 @@
  *  7. For bills: Project Settings → Script properties → add BILLS_FOLDER_ID = <ID of a private Google Drive folder>.
  *     Bills are saved there, and a "Bills" tab in the sheet gets a row with the Drive link for each one.
  *
+ * Updates: Updater.gs keeps this project in step with GitHub (folder apps-script/). Once it is set up,
+ * a push to GitHub is published within about 5 minutes. Do not paste Code.gs by hand after that.
+ *
  * Each "Send to Google Sheets" from MediPOS replaces the Sales, Products, Stock and Expiry tabs.
  * Run setupMediPOS again at any time; it keeps the same secret and sheet.
  */
