@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS = {
   allowPriceChange: true,
   // App font: a key of APP_FONTS below. Only fonts already on the device are used, so nothing is downloaded.
   appFont: "system",
+  menuStyle: "classic",
   // Two sale-screen buttons. They show only when both are on; each shows the products of its categories.
   posTab1Active: false, posTab1Label: "Medicine", posTab1Categories: "",
   posTab2Active: false, posTab2Label: "Others", posTab2Categories: "",

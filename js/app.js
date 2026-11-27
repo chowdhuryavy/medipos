@@ -351,6 +351,9 @@ function openChangePassword() {
 
 /* ───────── shell (responsive: sidebar on desktop, bottom bar on phones) ───────── */
 
+// The phone menu button styles an admin can choose (Administration > Button style).
+const MENU_STYLE_KEYS = ["classic", "orbit", "pulse", "flip", "neon"];
+
 function navItems() {
   return effectivePages().map((p) => ({ key: p, label: PAGES[p], icon: PAGE_ICON[p] }));
 }
@@ -372,6 +375,7 @@ function navGroups(items) {
 
 function buildShell() {
   setState("app");
+  const menuStyle = MENU_STYLE_KEYS.includes(settings.menuStyle) ? settings.menuStyle : "classic";
   const items = navItems();
   const tabs = items.length > MOBILE_MAX_TABS + 1 ? items.slice(0, MOBILE_MAX_TABS) : items;
   const more = items.length > MOBILE_MAX_TABS + 1;
@@ -401,7 +405,7 @@ function buildShell() {
       </aside>
       <div class="main">
         <header class="topbar">
-          <button class="menu-btn" id="menu-btn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
+          <button class="menu-btn menu-style-${menuStyle}" id="menu-btn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
             <span class="menu-grid" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
           </button>
           ${branding.logoUrl ? `<img class="topbar-logo" src="${branding.logoUrl}" alt="${esc(settings.shopName || "")} logo" />` : ""}

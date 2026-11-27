@@ -34,6 +34,7 @@ const TABS = [
   ["reports", "Scheduled reports", "reports"],
   ["backup", "Daily backup", "download"],
   ["integrations", "Integrations", "send"],
+  ["buttons", "Button style", "menu"],
   ["audit", "Activity log", "search"],
 ];
 const PAGE_NAMES = {
@@ -48,7 +49,7 @@ export async function render(el) {
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
-  const views = { users: viewUsers, settings: viewSettings, versions: viewVersions, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit };
+  const views = { users: viewUsers, settings: viewSettings, versions: viewVersions, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit, buttons: viewButtonStyle };
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
@@ -826,6 +827,47 @@ async function viewLists(body) {
     }
     await saveGeneral({ categories, units, writeOffReasons, paymentMethods, walletProviders, rechargeOperators, serviceFees, expenseCategories: expenseCategoriesOut, expiryDayOptions }, "Lists saved. Reloading to apply them.");
   });
+}
+
+/* ───────── Button style: how the phone menu button looks ───────── */
+
+const MENU_STYLES = [
+  { key: "classic", label: "Classic", note: "Teal grid that turns a quarter when touched and opens into an X." },
+  { key: "orbit", label: "Orbit", note: "A dashed ring turns slowly around the grid." },
+  { key: "pulse", label: "Pulse", note: "A soft halo breathes out from the grid." },
+  { key: "flip", label: "Flip", note: "Each square turns over, one after another, when opened." },
+  { key: "neon", label: "Neon", note: "A teal glow lights up the grid when touched." },
+];
+
+async function viewButtonStyle(body) {
+  const current = MENU_STYLES.some((s) => s.key === settings.menuStyle) ? settings.menuStyle : "classic";
+  let chosen = current;
+  const card = (s) => `
+    <button type="button" class="style-card ${s.key === chosen ? "is-selected" : ""}" data-style="${s.key}">
+      <span class="style-preview"><span class="menu-btn menu-style-${s.key}"><span class="menu-grid"><i></i><i></i><i></i><i></i></span></span></span>
+      <strong>${esc(s.label)}</strong>
+      <small class="muted">${esc(s.note)}</small>
+      ${s.key === current ? `<span class="badge ok">In use</span>` : ""}
+    </button>`;
+  body.innerHTML = `
+    <section class="card">
+      <div class="toolbar">
+        <div>
+          <h3>Menu button style</h3>
+          <p class="muted small">How the menu button looks on phones. Tap a style to see it open. Save to use it for everyone; the app reloads.</p>
+        </div>
+        <div class="grow"></div>
+        <button class="btn primary" type="button" id="bs-save" ${chosen === current ? "disabled" : ""}>${icon("check")}<span>Save style</span></button>
+      </div>
+      <div class="style-grid">${MENU_STYLES.map(card).join("")}</div>
+    </section>`;
+  body.querySelectorAll(".style-card").forEach((c) => c.addEventListener("click", () => {
+    chosen = c.dataset.style;
+    body.querySelectorAll(".style-card").forEach((x) => x.classList.toggle("is-selected", x === c));
+    c.querySelector(".menu-btn").classList.toggle("is-open");
+    body.querySelector("#bs-save").disabled = chosen === current;
+  }));
+  body.querySelector("#bs-save").addEventListener("click", (e) => withBusy(e.currentTarget, () => saveGeneral({ menuStyle: chosen }, "Button style saved.")));
 }
 
 /* ───────── Role access ───────── */
