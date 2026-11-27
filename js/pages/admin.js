@@ -887,9 +887,9 @@ const AREA_ACTS = ["add", "edit", "delete"];
 const slugRole = (name) => String(name).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
 
 function viewRoles(body) {
-  // Working copy of every role. Each role is saved from its own permissions window.
+  // Each role is one saved entry: a name and an exact grid of screens and actions. Administrator is always full.
   const working = structuredClone(roles);
-  const drafts = new Set(); // new roles that are not saved yet
+  const staffCount = {}; // role key -> number of staff who use it
 
   const roleHost = document.createElement("div");
   const staffHost = document.createElement("div");
@@ -909,120 +909,116 @@ function viewRoles(body) {
         </tr>`).join("")}</tbody>
     </table></div>`;
 
+  // How many screens allow each action, for the summary column.
+  const actionTotals = (acts) => ACTIONS
+    .map((a) => ({ a, n: PAGE_KEYS.filter((p) => (acts[p] || []).includes(a)).length }))
+    .filter((t) => t.n > 0)
+    .map((t) => `${ROLE_ACT_LABEL[t.a]} ${t.n}`)
+    .join(" · ");
+
   const draw = () => {
+    const rows = Object.keys(working).map((k) => {
+      const locked = k === "admin";
+      const r = working[k];
+      const acts = locked ? actionsFromLists(PAGE_KEYS, WRITE_AREAS) : (r.actions || actionsFromLists(r.pages || [], r.write || []));
+      const staff = staffCount[k] || 0;
+      return `
+        <tr>
+          <td><strong>${esc(r.label)}</strong><small class="muted mono">${esc(k)}</small></td>
+          <td class="c">${staff}</td>
+          <td class="c">${Object.keys(acts).length} of ${PAGE_KEYS.length}</td>
+          <td class="small muted">${esc(actionTotals(acts) || "None")}</td>
+          <td class="c">
+            <button class="btn ghost sm" type="button" data-edit-role="${esc(k)}">${icon("edit")}<span>${locked ? "View" : "Edit"}</span></button>
+            ${locked ? "" : `<button class="icon-btn sm hover-danger" type="button" data-del-role="${esc(k)}" aria-label="Delete role ${esc(r.label)}" title="${staff ? "Move staff to another role first" : "Delete role"}">${icon("trash")}</button>`}
+          </td>
+        </tr>`;
+    }).join("");
+
     roleHost.innerHTML = `
       <section class="card">
         <div class="toolbar">
           <div>
             <h3>Roles</h3>
-            <p class="muted small">Open a role to tick the screens and data areas it can use. Staff get the change the next time they sign in. The database enforces it, not just the menu.</p>
+            <p class="muted small">A role sets what its staff can open and do. Many staff can share one role. Changes apply at each person's next sign-in, and the database enforces them.</p>
           </div>
           <div class="grow"></div>
           <button class="btn primary" type="button" id="role-new">${icon("plus")}<span>New role</span></button>
         </div>
-        <div class="role-list">
-          ${Object.keys(working).map((k) => {
-            const locked = k === "admin";
-            const pages = locked ? PAGE_KEYS.length : (working[k].pages || []).length;
-            const areas = locked ? WRITE_AREAS.length : (working[k].write || []).length;
-            return `
-            <article class="role-card ${locked ? "is-locked" : ""}">
-              <div class="role-card-head">
-                <div><strong>${esc(working[k].label)}</strong><small class="muted mono">${esc(k)}</small></div>
-                ${locked ? `<span class="badge">Locked</span>` : drafts.has(k) ? `<span class="badge warn">Not saved</span>` : ""}
-              </div>
-              <div class="role-stats">
-                <span><strong>${pages}</strong> of ${PAGE_KEYS.length} screens</span>
-                <span><strong>${areas}</strong> of ${WRITE_AREAS.length} areas</span>
-              </div>
-              <div class="role-card-actions">
-                <button class="btn primary sm" type="button" data-edit-role="${esc(k)}">${icon("edit")}<span>${locked ? "View" : "Permissions"}</span></button>
-                ${locked ? "" : `<button class="icon-btn sm hover-danger" type="button" data-del-role="${esc(k)}" aria-label="Delete role ${esc(working[k].label)}" title="Delete role">${icon("trash")}</button>`}
-              </div>
-            </article>`;
-          }).join("")}
+        <div class="table-wrap">
+          <table class="mx-table role-table">
+            <thead><tr><th>Role</th><th class="c">Staff</th><th class="c">Screens</th><th>Can</th><th class="c" aria-label="Actions"></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
         </div>
-        <p class="muted small">Administrator always has every screen and every change area, so it cannot be locked out. A role that still has staff assigned cannot be deleted.</p>
+        <p class="muted small">Administrator always has every screen and every action, so it cannot be locked out. A role that still has staff cannot be deleted.</p>
       </section>`;
     bind();
   };
 
   function bind() {
-    roleHost.querySelector("#role-new").addEventListener("click", openRoleName);
-    roleHost.querySelectorAll("[data-edit-role]").forEach((b) => b.addEventListener("click", () => openRoleEditor(b.dataset.editRole)));
+    roleHost.querySelector("#role-new").addEventListener("click", () => openRoleForm(null));
+    roleHost.querySelectorAll("[data-edit-role]").forEach((b) => b.addEventListener("click", () => openRoleForm(b.dataset.editRole)));
     roleHost.querySelectorAll("[data-del-role]").forEach((b) => b.addEventListener("click", () => deleteRole(b.dataset.delRole, b)));
   }
 
-  function openRoleName() {
-    openModal("New role", `
-      <form id="nr" class="stack">
-        <label class="field"><span class="field-label">Role name</span>
-          <span class="input-wrap"><input name="name" maxlength="40" placeholder="e.g. Senior cashier" required /></span></label>
-        <p class="muted small">Next you choose what this role can open and change.</p>
-        <div class="form-actions"><button class="btn ghost" type="button" data-cancel>Cancel</button><button class="btn primary" type="submit"><span>Continue</span></button></div>
-      </form>`, (m, close) => {
-      m.querySelector("[data-cancel]").addEventListener("click", close);
-      onSubmit(m.querySelector("#nr"), async (e) => {
-        const name = String(new FormData(e.target).get("name") || "").trim();
-        const key = slugRole(name);
-        if (!key) throw new Error("Enter a name with letters or numbers.");
-        if (key === "admin" || key in working) throw new Error("A role with this name already exists.");
-        working[key] = { label: name, pages: ["dashboard"], write: [], actions: { dashboard: ["view", "print"] } };
-        drafts.add(key);
-        close();
-        draw();
-        openRoleEditor(key);
-      });
-    });
-  }
-
-  // One role's permissions in a modal: for each screen, tick what the role may do, then Save role.
-  function openRoleEditor(key) {
-    const r = working[key];
+  // One form for both creating and editing: the name and the permissions are saved together.
+  // key is null for a new role.
+  function openRoleForm(key) {
+    const isNew = key === null;
     const locked = key === "admin";
-    openModal(`${locked ? "View" : "Permissions for"} ${r.label}`, `
+    const r = isNew ? { label: "", actions: { dashboard: ["view", "print"] } } : working[key];
+    const staff = isNew ? 0 : (staffCount[key] || 0);
+    const title = locked ? `View ${r.label}` : isNew ? "New role" : `Edit ${r.label}`;
+
+    openModal(title, `
       <form id="re" class="stack role-editor">
-        ${locked ? "" : `<label class="field"><span class="field-label">Role name</span>
-          <span class="input-wrap"><input name="label" maxlength="40" value="${esc(r.label)}" required /></span></label>`}
+        <label class="field"><span class="field-label">Role name</span>
+          <span class="input-wrap"><input name="label" maxlength="40" value="${esc(r.label)}" placeholder="e.g. Senior cashier" ${locked ? "disabled" : "required"} /></span></label>
         ${actionGrid(r.actions || {}, locked)}
-        <p class="muted small">${locked ? "Administrator always has every screen and every action." : "Everyone with this role gets exactly the ticked actions. Acting on a screen needs View. A person can still be given more or less on their own page."}</p>
+        <p class="muted small">${locked
+          ? "Administrator always has every screen and every action."
+          : `Acting on a screen needs View. Everyone with this role gets exactly these actions. A person can still be given more or less on their own page.${!isNew && staff ? ` ${staff} staff use this role now.` : ""}`}</p>
         <div class="form-actions">
           <button class="btn ghost" type="button" data-cancel>${locked ? "Close" : "Cancel"}</button>
-          ${locked ? "" : `<button class="btn primary" type="submit">${icon("check")}<span>Save role</span></button>`}
+          ${locked ? "" : `<button class="btn primary" type="submit">${icon("check")}<span>${isNew ? "Create role" : "Save role"}</span></button>`}
         </div>
       </form>`, (m, close) => {
-      m.querySelector("[data-cancel]").addEventListener("click", () => {
-        if (drafts.has(key)) { delete working[key]; drafts.delete(key); draw(); }
-        close();
-      });
+      m.querySelector("[data-cancel]").addEventListener("click", close);
       if (locked) return;
       onSubmit(m.querySelector("#re"), async (e) => {
         const f = new FormData(e.target);
+        const label = String(f.get("label") || "").trim();
+        if (!label) throw new Error("Enter a role name.");
+
         const actions = {};
         for (const p of PAGE_KEYS) {
           const acts = ACTIONS.filter((a) => (a === "view" || a === "print" || AREA_OF_PAGE[p]) && f.get(`act__${p}__${a}`) === "on");
           if (acts.length && !acts.includes("view")) acts.unshift("view");
           if (acts.includes("view")) actions[p] = acts;
         }
-        if (!Object.keys(actions).length) throw new Error("Give the role at least one screen.");
-        working[key] = {
-          label: String(f.get("label") || "").trim() || key,
+        if (!Object.keys(actions).length) throw new Error("Tick View on at least one screen.");
+
+        const roleKey = isNew ? slugRole(label) : key;
+        if (!roleKey) throw new Error("Enter a name with letters or numbers.");
+        if (roleKey === "admin" || (isNew && roleKey in working)) throw new Error("A role with this name already exists.");
+
+        working[roleKey] = {
+          label,
           pages: Object.keys(actions),
           write: [...new Set(Object.keys(AREA_OF_PAGE).filter((p) => (actions[p] || []).some((a) => AREA_ACTS.includes(a))).map((p) => AREA_OF_PAGE[p]))],
           actions,
         };
-        drafts.delete(key);
         close();
         await persistRoles();
       });
-    });
+    }, { dialog: true });
   }
 
-  // Saves every saved role (drafts are left out) and reloads so the new access applies.
+  // Saves every role in one write, then reloads so the new access applies.
   async function persistRoles() {
     const out = {};
     for (const k of Object.keys(working)) {
-      if (drafts.has(k)) continue;
       const r = working[k];
       if (k === "admin") { out.admin = { label: r.label || "Administrator", pages: [...PAGE_KEYS], write: [...WRITE_AREAS], actions: actionsFromLists(PAGE_KEYS, WRITE_AREAS) }; continue; }
       out[k] = { label: r.label, pages: r.pages, write: r.write, actions: r.actions || actionsFromLists(r.pages, r.write) };
@@ -1041,12 +1037,18 @@ function viewRoles(body) {
       if (snap.size > 0) return alertBox({ title: "Role is in use", tone: "warn", message: `${snap.size} staff member${snap.size === 1 ? " uses" : "s use"} this role. Move them to another role first.` });
       if (!(await confirmBox(`Delete the role "${working[key].label}"? Its permissions are removed.`))) return;
       delete working[key];
-      if (drafts.has(key)) { drafts.delete(key); return draw(); }
       await persistRoles();
     });
   };
 
+  // Count staff per role so the table shows how many people share each role.
+  const loadStaffCounts = async () => {
+    const snap = await getDocs(collection(db, "users"));
+    snap.forEach((d) => { const role = d.data().role; if (role) staffCount[role] = (staffCount[role] || 0) + 1; });
+  };
+
   draw();
+  loadStaffCounts().then(draw).catch((err) => toast(err.message, "error"));
 }
 
 /* ───────── Google Sheets ───────── */
