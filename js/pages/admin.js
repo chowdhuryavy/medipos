@@ -28,6 +28,7 @@ const TABS = [
   ["users", "Staff", "userPlus"],
   ["settings", "Shop & rules", "building"],
   ["versions", "App version", "sync"],
+  ["health", "App health", "shield"],
   ["lists", "Lists & payments", "accounting"],
   ["roles", "Role access", "shield"],
   ["branding", "Branding & email", "image"],
@@ -49,7 +50,7 @@ export async function render(el) {
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
-  const views = { users: viewUsers, settings: viewSettings, versions: viewVersions, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit, buttons: viewButtonStyle };
+  const views = { users: viewUsers, settings: viewSettings, versions: viewVersions, health: viewHealth, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit, buttons: viewButtonStyle };
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
@@ -1900,4 +1901,115 @@ async function viewBranding(body) {
       toast(err.message, "error");
     }
   });
+}
+
+/* ───────── App health: one button runs every check and says what needs attention ───────── */
+
+async function viewHealth(body) {
+  body.innerHTML = `
+    <section class="card">
+      <header class="card-head"><h3>${icon("shield")} App health</h3>
+        <button class="btn primary" id="hc-run" type="button">${icon("check")}<span>Run check</span></button></header>
+      <p class="muted small">Checks the database, sign-in setup, stock, expiry, the books, the shift and the app version. Nothing is changed. The books check reads every voucher, so it can take a moment.</p>
+      <div id="hc-out"></div>
+    </section>`;
+  const out = body.querySelector("#hc-out");
+  const run = async () => {
+    const btn = body.querySelector("#hc-run");
+    btn.disabled = true;
+    out.innerHTML = `<div class="skeleton"></div>`;
+    const results = [];
+    const today = new Date().toLocaleDateString("en-CA");
+    const in30 = new Date(Date.now() + 30 * 864e5).toLocaleDateString("en-CA");
+    const check = async (name, fn) => {
+      try { results.push({ name, ...(await fn()) }); }
+      catch (err) { results.push({ name, status: "fail", detail: err.message || "Could not run this check" }); }
+    };
+
+    await check("Database connection", async () => {
+      const t = performance.now();
+      await getDoc(doc(db, "settings", "general"));
+      const ms = Math.round(performance.now() - t);
+      return ms < 2000 ? { status: "ok", detail: `Responded in ${ms} ms` } : { status: "warn", detail: `Slow: ${ms} ms` };
+    });
+    await check("Sign-in roles", async () => {
+      const snap = await getDoc(doc(db, "settings", "roles"));
+      if (!snap.exists()) return { status: "warn", detail: "Roles are not saved yet. Built-in defaults are in use." };
+      const adminPages = snap.data().admin?.pages || [];
+      return adminPages.includes("admin")
+        ? { status: "ok", detail: `${Object.keys(snap.data()).length} roles saved` }
+        : { status: "fail", detail: "The admin role has lost Administration" };
+    });
+    await check("Administrator accounts", async () => {
+      const snap = await getDocs(query(collection(db, "users"), where("role", "==", "admin"), where("active", "==", true)));
+      if (snap.size === 0) return { status: "fail", detail: "No active administrator" };
+      return snap.size === 1
+        ? { status: "warn", detail: "One active administrator. Add a second one as a backup." }
+        : { status: "ok", detail: `${snap.size} active administrators` };
+    });
+    await check("Shop settings", async () => {
+      const snap = await getDoc(doc(db, "settings", "general"));
+      return snap.exists() ? { status: "ok", detail: "Saved" } : { status: "warn", detail: "Shop settings have never been saved" };
+    });
+    await check("Google Sheets link", async () => {
+      const snap = await getDoc(doc(db, "settings", "integrations"));
+      return snap.exists()
+        ? { status: "ok", detail: "Saved. The secret itself is never shown here." }
+        : { status: "warn", detail: "Not set up" };
+    });
+    await check("App version", async () => {
+      const res = await fetch(`/js/version.js?check=${Date.now()}`, { cache: "no-store" });
+      const m = (await res.text()).match(/\d+\.\d+\.\d+/);
+      if (!m) return { status: "warn", detail: "Could not read the live version" };
+      return m[0] === VERSION
+        ? { status: "ok", detail: `Version ${VERSION} is live` }
+        : { status: "warn", detail: `This screen runs ${VERSION}; the server has ${m[0]}. Reload to update.` };
+    });
+    await check("Stock", async () => {
+      const snap = await getDocs(collection(db, "products"));
+      const active = snap.docs.map((d) => d.data()).filter((p) => p.active !== false && !p.stub);
+      const stock = (p) => Number(p.stock) || 0;
+      const out = active.filter((p) => stock(p) <= 0).length;
+      const low = active.filter((p) => stock(p) > 0 && stock(p) <= (Number(p.reorderLevel) || 0)).length;
+      return { status: out || low ? "warn" : "ok", detail: `${active.length} products · ${out} out of stock · ${low} low` };
+    });
+    await check("Expiry", async () => {
+      const snap = await getDocs(collection(db, "batches"));
+      const live = snap.docs.map((d) => d.data()).filter((b) => (Number(b.remaining) || 0) > 0);
+      const expired = live.filter((b) => b.expiry < today).length;
+      const soon = live.filter((b) => b.expiry >= today && b.expiry <= in30).length;
+      return { status: expired ? "fail" : soon ? "warn" : "ok", detail: `${expired} expired batch${expired === 1 ? "" : "es"} · ${soon} expiring within 30 days` };
+    });
+    await check("Books balance", async () => {
+      const snap = await getDocs(collection(db, "journal"));
+      let debit = 0, credit = 0;
+      snap.docs.forEach((x) => (x.data().lines || []).forEach((l) => { debit += Number(l.debit) || 0; credit += Number(l.credit) || 0; }));
+      const diff = Math.round((debit - credit) * 100) / 100;
+      return Math.abs(diff) < 0.01
+        ? { status: "ok", detail: `${snap.size} vouchers · debits equal credits` }
+        : { status: "fail", detail: `Debits and credits differ by ${money(Math.abs(diff))}` };
+    });
+    await check("Cash shift", async () => {
+      const snap = await getDocs(query(collection(db, "shifts"), orderBy("openedAt", "desc"), limit(1)));
+      const last = snap.docs[0]?.data();
+      if (!last) return { status: "warn", detail: "No cash shift has been opened yet" };
+      return last.status === "open"
+        ? { status: "ok", detail: `Open, opened by ${last.openedBy || "staff"}` }
+        : { status: "ok", detail: "No shift is open right now" };
+    });
+
+    const count = (st) => results.filter((r) => r.status === st).length;
+    out.innerHTML = `
+      <div class="hc-summary">
+        <span class="badge ok">${count("ok")} ok</span>
+        <span class="badge warn">${count("warn")} to check</span>
+        <span class="badge danger">${count("fail")} failing</span>
+        <span class="muted small">Checked ${esc(new Date().toLocaleTimeString())}</span>
+      </div>
+      <ul class="hc-list">
+        ${results.map((r) => `<li class="hc-row ${esc(r.status)}"><span class="hc-dot" aria-hidden="true"></span><strong>${esc(r.name)}</strong><span class="muted small">${esc(r.detail)}</span></li>`).join("")}
+      </ul>`;
+    btn.disabled = false;
+  };
+  body.querySelector("#hc-run").addEventListener("click", run);
 }

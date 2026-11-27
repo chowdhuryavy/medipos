@@ -1562,3 +1562,10 @@ html[data-lang="bn"] body { line-height: 1.6; }
   }
   .chip.active, .chip[aria-pressed="true"] { background: linear-gradient(120deg, var(--brand), var(--brand-2)); color: #fff; border-color: transparent; }
 }
+.hc-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 12px; }
+.hc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.hc-row { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 2px 12px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); }
+.hc-row .hc-dot { grid-row: span 2; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: var(--muted); }
+.hc-row.ok .hc-dot { background: var(--ok); }
+.hc-row.warn .hc-dot { background: var(--warn); }
+.hc-row.fail .hc-dot { background: var(--danger); }
