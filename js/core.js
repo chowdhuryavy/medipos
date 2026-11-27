@@ -150,6 +150,15 @@ function roleFromSaved(s, key) {
   return { label, pages, write, actions: actionsFromLists(pages, write) };
 }
 
+/** Waits for a network call, but gives up after `ms`, so a weak or offline connection cannot leave a screen stuck. */
+export function withTimeout(promise, ms = 15000) {
+  let timer;
+  const late = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error("The connection is slow or offline. Check your internet and try again."), { timeout: true })), ms);
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
+
 /** Loads shop settings and role permissions from Firestore, merged over the defaults. */
 export async function loadSettings() {
   const g = await getDoc(doc(db, "settings", "general"));

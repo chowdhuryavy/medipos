@@ -8,7 +8,7 @@ import { showSplash, showRouteLoader, hideRouteLoader } from "./splash.js";
 import { startUpdateWatch } from "./updates.js";
 import { firebaseConfig, APP_NAME, APP_VERSION } from "./config.js";
 import { startIdleLogout, stopIdleLogout } from "./idle.js";
-import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast, confirmBox, alertBox } from "./core.js";
+import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast, confirmBox, alertBox, withTimeout } from "./core.js";
 import { startNotifications, toggleNotifications, runStockChecks } from "./notifications.js";
 import "./scanner.js";
 
@@ -550,7 +550,7 @@ async function route() {
     const mod = await import(`./pages/${page}.js`);
     if (token !== routeToken) return;
     el.innerHTML = "";
-    await mod.render(el);
+    await withTimeout(mod.render(el), 25000);
     el.classList.remove("enter");
     void el.offsetWidth; // restart the enter animation
     el.classList.add("enter");
@@ -559,8 +559,10 @@ async function route() {
     if (token === routeToken) {
       const denied = /permission|insufficient/i.test(err.message || "");
       el.innerHTML = `
-        <div class="empty-state card">${icon("alert")}<h3>${denied ? "Not allowed by the database" : "Something went wrong"}</h3>
-        <p class="muted">${esc(err.message)}</p></div>`;
+        <div class="empty-state card">${icon("alert")}<h3>${err.timeout ? "Connection is slow" : denied ? "Not allowed by the database" : "Something went wrong"}</h3>
+        <p class="muted">${esc(err.message)}</p>
+        <button class="btn primary sm" type="button" id="route-retry">${icon("sync")}<span>Try again</span></button></div>`;
+      el.querySelector("#route-retry")?.addEventListener("click", () => route());
     }
   } finally {
     await hideRouteLoader(loader);
@@ -707,7 +709,7 @@ async function handleAuthChange(user) {
   }
   try {
     // Read the staff profile first: settings are only readable by active staff.
-    const snap = await getDoc(doc(db, "users", user.uid));
+    const snap = await withTimeout(getDoc(doc(db, "users", user.uid)));
     const p = snap.exists() ? snap.data() : null;
     if (!p) {
       pendingMessage = `No staff profile found for this login. Create users/${user.uid} in Firestore (see README).`;
@@ -715,7 +717,10 @@ async function handleAuthChange(user) {
       return;
     }
     // Load the saved role list first, so roles the admin created (not only the built-in ones) are recognised.
-    await loadSettings().catch(() => { /* an inactive profile cannot read settings; the check below still applies */ });
+    await withTimeout(loadSettings()).catch((err) => {
+      if (err.timeout) throw err; // a slow connection is not a permissions problem
+      /* an inactive profile cannot read settings; the check below still applies */
+    });
     if (p.active !== true || !roles[p.role]) {
       pendingMessage = `Profile is inactive or has an unknown role ("${p.role ?? "none"}"). Check active = true and role = admin in Firestore.`;
       await signOut(auth);
@@ -726,9 +731,9 @@ async function handleAuthChange(user) {
       showForcePasswordChange(user);
       return;
     }
-    if (p.requireOtp === true && !(await codePassed(user))) return showSignInCode(user);
+    if (p.requireOtp === true && !(await withTimeout(codePassed(user)))) return showSignInCode(user);
     showSplash(root, "Loading your workspace…");
-    const rolesExist = await loadSettings();
+    const rolesExist = await withTimeout(loadSettings());
     if (session.role === "admin") await syncPublicBranding();
     // First sign-in after setup: create the role matrix from the defaults so it can be edited.
     if (!rolesExist && p.role === "admin") {
@@ -745,6 +750,8 @@ async function handleAuthChange(user) {
     else route();
   } catch (err) {
     console.error(err);
+    // A slow connection shows a retry screen and keeps the session, so the person is not signed out by mistake.
+    if (err.timeout) return showStartupError(err);
     pendingMessage = `Could not load your profile: ${err.message}`;
     await signOut(auth);
   }

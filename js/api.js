@@ -10,8 +10,9 @@ export async function post(path, body = {}, { secure = false } = {}) {
   }
   let res;
   try {
-    res = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
-  } catch {
+    res = await fetch(path, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout?.(25000) });
+  } catch (err) {
+    if (err?.name === "TimeoutError") throw new Error("The server is taking too long. Check your internet and try again.");
     throw new Error("No connection. Check your internet and try again.");
   }
   let data = {};
