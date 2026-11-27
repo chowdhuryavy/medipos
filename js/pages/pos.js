@@ -5,7 +5,7 @@ import { onAction, onSubmit, isPostable } from "../core.js";
 import { printReceipt } from "../print.js";
 import {
   session, settings, paymentMethod, money, esc, icon, toast, openModal, alertBox, todayISO, calcTotals,
-  buildJournal, allocateFEFO, audit, round2, ACCOUNTS,
+  buildJournal, allocateFEFO, audit, round2, ACCOUNTS, can,
 } from "../core.js";
 import { unitsOf, unitByKey, toPieces, unitOptions, baseName } from "../packs.js";
 import { notifyOnce, rolesWith } from "../notifications.js";
@@ -155,11 +155,11 @@ export async function render(el) {
       const low = !out && stock <= (Number(p.reorderLevel) || 0);
       return `<button class="product-card ${out ? "is-out" : ""}" data-add="${esc(p.id)}" style="--i:${Math.min(i, 20)}" ${out ? "disabled" : ""}>
         <span class="pc-name">${esc(p.name)}</span>
-        <span class="pc-sub">${esc(p.sku || p.category || "")}</span>
+        <span class="pc-sub">${esc([p.category || "General", p.subGroup].filter(Boolean).join(" › "))}</span>
         <span class="pc-foot"><strong>${money(p.salePrice)}</strong><span class="badge ${out ? "danger" : low ? "warn" : "ok"}">${out ? "Out" : `${stock} ${esc(baseName(p))}`}</span></span>
         ${nearest[p.id] ? `<span class="pc-exp">Exp ${esc(nearest[p.id])}</span>` : ""}
       </button>`;
-    }).join("") || `<div class="empty-state small">${icon("search")}<p>No products match your search.</p></div>`;
+    }).join("") || `<div class="empty-state small">${icon("search")}<p>No products match your search.</p>${can("inventory") ? `<a class="btn primary sm" href="#/inventory">${icon("plus")}<span>Add a new product</span></a>` : ""}</div>`;
   }
 
   const serviceBillLine = (l) => {
