@@ -35,9 +35,13 @@ export async function loadEmailConfig() {
   };
 }
 
+// The button in the new staff account email opens the shop's own web address.
+const WELCOME_BUTTON_URL = "https://pharmacy.perfection.my/";
+
 /** Builds the subject, HTML and plain-text version of one email. Values are escaped in the HTML. */
 export function renderEmail(key, cfg, values) {
   const t = cfg.templates[key];
+  const buttonUrl = key === "welcome" ? WELCOME_BUTTON_URL : APP_URL;
   const pal = brandPalette(cfg.brandColor);
   const vars = { appName: cfg.appName, shopName: cfg.shopName, loginUrl: APP_URL, minutes: cfg.otpExpiryMinutes, ...values };
   const subject = fill(t.subject, vars);
@@ -58,7 +62,7 @@ export function renderEmail(key, cfg, values) {
     .join("");
 
   const btn = button
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 6px"><tr><td bgcolor="${pal.base}" style="background:${pal.base};border-radius:12px"><a href="${esc(APP_URL)}" style="display:inline-block;padding:13px 26px;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:15px">${esc(button)}</a></td></tr></table>`
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 6px"><tr><td bgcolor="${pal.base}" style="background:${pal.base};border-radius:12px"><a href="${esc(buttonUrl)}" style="display:inline-block;padding:13px 26px;color:#ffffff;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:15px">${esc(button)}</a></td></tr></table>`
     : "";
 
   const footerText = esc(fill(cfg.emailFooter, vars)).replace(/\n/g, "<br/>");
