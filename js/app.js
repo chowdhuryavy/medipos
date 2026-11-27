@@ -583,9 +583,8 @@ function showSignInCode(user) {
 async function handleAuthChange(user) {
   if (!isConfigured()) return showSetup();
   if (!user) { stopIdleLogout(); sessionStorage.removeItem(OTP_KEY); }
-  showSplash(root, "Checking your session…");
+  // Wait for the saved loading style and shop name before the first loader is drawn, so only the one chosen in Branding is ever shown.
   await brandingReady;
-  // Draw the loader again now that the saved shop name and logo are known.
   showSplash(root, "Checking your session…");
   if (!user) {
     showLogin(pendingMessage);
