@@ -546,12 +546,13 @@ function showSignInCode(user) {
   root.innerHTML = `
     <section class="login-screen">
       <div class="login-art" aria-hidden="true"><span class="orb o1"></span><span class="orb o2"></span><span class="orb o3"></span></div>
-      <div class="login-card">
+      <div class="login-card code-card">
         ${logoHtml(icon("shield"))}
+        <div class="code-badge" aria-hidden="true">${icon("shield")}</div>
         <h1>Confirm it is you</h1>
-        <p class="muted small" id="code-help">Sending a 6-digit code to your email…</p>
+        <p class="muted small code-help" id="code-help">Sending a 6-digit code to your email…</p>
         <form id="code-form" autocomplete="one-time-code">
-          <input id="code-input" inputmode="numeric" maxlength="6" placeholder="••••••" aria-label="6-digit code" required />
+          <input id="code-input" class="code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" aria-label="6-digit code" required />
           <button class="btn primary block xl" type="submit" id="code-btn">${icon("check")}<span>Continue</span></button>
         </form>
         <p class="error-text" id="code-msg" role="status"></p>

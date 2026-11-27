@@ -1310,3 +1310,24 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .al-row[hidden], .al-group[hidden] { display: none; }
 .al-main { display: grid; gap: 3px; min-width: 0; }
 .al-details { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* Sign-in code card: a clearer layout, a large centred code field, and a tidy resend row. */
+.code-card { gap: 18px; padding: 30px 26px 24px; }
+.code-card h1 { font-size: 24px; margin: 0; letter-spacing: -0.2px; }
+.code-badge { width: 60px; height: 60px; margin: 0 auto -6px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(15, 118, 110, .12); color: var(--brand); }
+.code-badge .ico { width: 28px; height: 28px; }
+.code-help { max-width: 300px; margin: 0 auto !important; line-height: 1.55; color: var(--muted, #64748b); }
+.code-card form { display: grid; gap: 14px; }
+.code-input { text-align: center; font-size: 30px; font-weight: 700; letter-spacing: .45em; padding: 14px 12px 14px 20px;
+  font-variant-numeric: tabular-nums; border-radius: 16px; border: 2px solid var(--border, #d1d5db); transition: border-color .2s, box-shadow .2s; }
+.code-input::placeholder { letter-spacing: .3em; opacity: .5; }
+.code-input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px rgba(15, 118, 110, .15); }
+.code-card .btn.xl { min-height: 52px; font-size: 17px; border-radius: 16px; }
+.code-card .code-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 2px; }
+.code-card .code-row .link-btn { justify-self: auto; font-size: 14px; margin: 0; padding: 8px 4px; }
+.code-card .error-text { min-height: 18px; margin: 0; text-align: center; }
+@media (max-width: 380px) {
+  .code-input { font-size: 26px; letter-spacing: .35em; }
+  .code-card .code-row { flex-direction: column; gap: 4px; }
+}
