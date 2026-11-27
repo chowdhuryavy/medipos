@@ -614,7 +614,12 @@ function showSignInCode(user) {
 
 async function handleAuthChange(user) {
   if (!isConfigured()) return showSetup();
-  if (!user) { stopIdleLogout(); sessionStorage.removeItem(OTP_KEY); }
+  if (!user) {
+    stopIdleLogout();
+    sessionStorage.removeItem(OTP_KEY);
+    // Logging out clears the page address, so the next sign-in starts at the dashboard.
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+  }
   // Wait for the saved loading style and shop name before the first loader is drawn, so only the one chosen in Branding is ever shown.
   await brandingReady;
   showSplash(root, "Checking your session…");
@@ -654,7 +659,10 @@ async function handleAuthChange(user) {
     Object.assign(session, { uid: user.uid, name: p.name || user.email, email: user.email, role: p.role, access: p.access || null });
     buildShell();
     startIdleLogout((message) => { pendingMessage = message; });
-    route();
+    // Every sign-in opens the dashboard, not the page the address bar still had from before.
+    const home = can("dashboard") ? "dashboard" : effectivePages()[0];
+    if (location.hash !== `#/${home}`) location.hash = `#/${home}`;
+    else route();
   } catch (err) {
     console.error(err);
     pendingMessage = `Could not load your profile: ${err.message}`;
