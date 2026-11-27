@@ -85,11 +85,24 @@ export async function sendReportFor(schedule, reportDate, today) {
   const brand = { shop, color: cfg.brandColor, subtitle };
   const files = [];
   const formats = schedule.formats?.length ? schedule.formats : ["pdf"];
-  if (formats.includes("pdf")) {
-    files.push({ filename: `${shop.replace(/\W+/g, "-")}-reports-${reportDate}.pdf`, content: toPdf({ title, subtitle, footer: shop, sections, brand }) });
-  }
-  if (formats.includes("xlsx")) {
-    files.push({ filename: `${shop.replace(/\W+/g, "-")}-reports-${reportDate}.xlsx`, content: toXlsx(sections, brand) });
+  const sentAt = new Date().toLocaleString("en-GB", { timeZone: schedule.timezone || DEFAULT_TZ });
+  const slug = (t) => String(t).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const shopSlug = shop.replace(/\W+/g, "-");
+  const noSalesNote = data.sales.length === 0 ? " · No sales recorded" : "";
+  // One file per chosen report, so two reports give two attachments for each format.
+  // The files show the tables only: the KPI cards are for the screen, not the printed report.
+  for (const sec of sections) {
+    const one = [{ ...sec, summary: [] }];
+    const base = `${shopSlug}-${slug(sec.title)}-${reportDate}`;
+    if (formats.includes("pdf")) {
+      files.push({
+        filename: `${base}.pdf`,
+        content: toPdf({ title: sec.title, subtitle: `Sales day ${reportDate}${noSalesNote} · Sent ${sentAt}`, footer: shop, sections: one, brand }),
+      });
+    }
+    if (formats.includes("xlsx")) {
+      files.push({ filename: `${base}.xlsx`, content: toXlsx(one, brand) });
+    }
   }
 
   // Email body: what was sent, the attached file names, then the key figures of each chosen report.
