@@ -445,6 +445,7 @@ function buildShell() {
 
 /* ───────── router ───────── */
 
+let firstRoute = true;
 async function route() {
   const allowed = effectivePages();
   const key = location.hash.replace(/^#\/?/, "") || allowed[0];
@@ -464,7 +465,9 @@ async function route() {
     return;
   }
 
-  const loader = showRouteLoader(`Opening ${PAGE_TITLE[page]}…`);
+  // The first page after sign-in is already covered by the start-up loader, so it does not get a second one.
+  const loader = firstRoute ? null : showRouteLoader(`Opening ${PAGE_TITLE[page]}…`);
+  firstRoute = false;
   el.innerHTML = `<div class="skeleton-grid"><div class="skeleton"></div><div class="skeleton"></div></div>`;
   try {
     const mod = await import(`./pages/${page}.js`);

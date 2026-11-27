@@ -45,6 +45,13 @@ export function splashHtml(message, style) {
 /** Full-screen loader used at start-up. */
 export function showSplash(root, message) {
   document.body.dataset.state = "boot";
+  const existing = root.querySelector(".splash");
+  // Same style already on screen: only the message changes, so the animation does not restart.
+  if (existing && existing.classList.contains(`style-${normalizeStyle(branding.loadingStyle)}`)) {
+    const msg = existing.querySelector(".splash-msg");
+    if (msg && message) msg.textContent = message;
+    return;
+  }
   root.innerHTML = splashHtml(message);
 }
 
