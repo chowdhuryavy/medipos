@@ -1,7 +1,7 @@
 // Order list: what to buy next. Low-stock medicines can be added with one tap, and new medicines
 // that are not in the system yet can be written in and saved. Everything is saved on the product.
 import { db, collection, addDoc, updateDoc, doc, serverTimestamp } from "../firebase.js";
-import { esc, icon, toast, settings, audit, openModal } from "../core.js";
+import { esc, icon, toast, settings, audit, openModal, withBusy } from "../core.js";
 import { baseName } from "../packs.js";
 import { productDatalist, findProduct, displayName } from "../picker.js";
 import { printHtml } from "../print.js";
@@ -77,7 +77,7 @@ export function bindOrderCard(el, products, reload) {
     if (b.hasAttribute("data-oopen")) return openAddModal(products, reload);
     if (b.dataset.oadd) {
       const p = products.find((x) => x.id === b.dataset.oadd);
-      return save(p.id, { orderMarked: true, orderQty: suggestQty(p), orderNote: p.orderNote || "" }, `${p.name} added to the order list`);
+      return withBusy(b, () => save(p.id, { orderMarked: true, orderQty: suggestQty(p), orderNote: p.orderNote || "" }, `${p.name} added to the order list`));
     }
     if (b.dataset.osave) {
       const row = b.closest("tr");
@@ -124,14 +124,17 @@ function openAddModal(products, reload) {
       const f = new FormData(e.target);
       const text = String(f.get("item") || "").trim();
       if (!text) return toast("Type a medicine name", "error");
-      try {
-        const msg = await addOrderItem(products, { text, qty: parseInt(f.get("qty"), 10) || 0, note: String(f.get("note") || "").trim() });
-        toast(msg, "success");
-        close();
-        reload();
-      } catch (err) {
-        toast(err.message, "error");
-      }
+      const btn = e.target.querySelector("button[type=submit]");
+      await withBusy(btn, async () => {
+        try {
+          const msg = await addOrderItem(products, { text, qty: parseInt(f.get("qty"), 10) || 0, note: String(f.get("note") || "").trim() });
+          toast(msg, "success");
+          close();
+          reload();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      });
     });
   });
 }
