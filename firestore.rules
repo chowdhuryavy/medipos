@@ -163,7 +163,10 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /journal/{id} {
-      allow read: if canPage('accounting') || canPage('reports');
+      // Accounting and reports staff read every voucher. Anyone else reads only the vouchers they posted themselves
+      // (the voucher tab opened after a posting). A query must filter on byUid to use the second clause.
+      allow read: if canPage('accounting') || canPage('reports')
+        || (isActive() && resource.data.byUid == request.auth.uid);
       // Any staff who post money movements create journal lines through their transaction.
       // A voucher must carry its JV number. Once posted it is never edited or deleted; only its
       // reversal link and status change (when it is reversed or numbered).

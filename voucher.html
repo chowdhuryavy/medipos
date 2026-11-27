@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Journal voucher · MediPOS</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/voucher.css" />
+</head>
+<body>
+  <div class="vch-bar" id="vch-bar" hidden>
+    <button class="btn primary" id="vch-print" type="button">Print</button>
+    <button class="btn ghost" id="vch-pdf" type="button">Save PDF</button>
+    <button class="btn ghost" id="vch-xlsx" type="button">Excel</button>
+    <span class="vch-status" id="vch-status"></span>
+  </div>
+  <main class="vch-sheet" id="vch-sheet">
+    <p class="vch-msg">Loading voucher…</p>
+  </main>
+  <script type="module" src="js/voucher-page.js"></script>
+</body>
+</html>

@@ -3,6 +3,7 @@
 import { db, collection, doc, getDoc, getDocs, query, where, orderBy, limit } from "../firebase.js";
 import { money, esc, icon, toast, confirmBox, fmtDateTime, withBusy } from "../core.js";
 import { post } from "../api.js";
+import { postWithVoucher } from "../journal.js";
 
 export async function render(el) {
   el.innerHTML = `
@@ -96,7 +97,7 @@ async function showSale(el, invoiceNo) {
     if (reasonOf().length < 3) return toast("Write the reason (at least 3 letters).", "error");
     const btn = form.querySelector("button[type=submit]");
     withBusy(btn, async () => {
-      const r = await post("/api/till", { action: "return", kind: "return", saleId: sale.id, lines, reason: reasonOf(), ...approverOf() }, { secure: true });
+      const r = await postWithVoucher(() => post("/api/till", { action: "return", kind: "return", saleId: sale.id, lines, reason: reasonOf(), ...approverOf() }, { secure: true }), (x) => x.jvNo);
       await after(r, "Return");
     }).catch((err) => toast(err.message, "error"));
   });
@@ -116,7 +117,7 @@ async function showSale(el, invoiceNo) {
     if (!ok) return;
     const btn = out.querySelector(btnId);
     withBusy(btn, async () => {
-      const r = await post("/api/till", { action: "return", kind: "void", saleId: sale.id, lines, reason: reasonOf(), ...approverOf() }, { secure: true });
+      const r = await postWithVoucher(() => post("/api/till", { action: "return", kind: "void", saleId: sale.id, lines, reason: reasonOf(), ...approverOf() }, { secure: true }), (x) => x.jvNo);
       await after(r, "Void");
     }).catch((err) => toast(err.message, "error"));
   };

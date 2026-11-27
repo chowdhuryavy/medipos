@@ -1,5 +1,5 @@
 import { isPostable, ACCOUNT_STATUSES, statusLabel } from "../core.js";
-import { reserveJv, writeVoucher, reverseVoucher, numberExistingVouchers, voucherHtml } from "../journal.js";
+import { reserveJv, writeVoucher, reverseVoucher, numberExistingVouchers, voucherHtml, postWithVoucher } from "../journal.js";
 import { branding } from "../branding.js";
 import { manageExpenseCategories, expenseCategories } from "../expense-categories.js";
 import { onSubmit, onAction, downloadCSV } from "../core.js";
@@ -202,7 +202,7 @@ function openFloatTopUp(accounts, reload) {
       const type = String(f.get("kind")) === "operator" ? "recharge" : "cashin";
       const key = floatKey(type, provider);
       try {
-        await runTransaction(db, async (tx) => {
+        const jvNo = await postWithVoucher(() => runTransaction(db, async (tx) => {
           const ref = doc(db, "floats", key);
           const snap = await tx.get(ref);
           const before = snap.exists() ? Number(snap.data().balance) || 0 : 0;
@@ -214,9 +214,10 @@ function openFloatTopUp(accounts, reload) {
             ref: key,
             lines: [{ account: ACCOUNTS.WALLET_FLOAT, debit: amount }, { account: method, credit: amount }],
           }), jvNo, "float");
-        });
+          return jvNo;
+        }));
         await audit("float.topup", { key, amount });
-        toast("Float updated", "success");
+        toast(`Float updated · ${jvNo}`, "success");
         close();
         reload();
       } catch (err) {
@@ -362,7 +363,7 @@ function openReverse(v, reload) {
     body.querySelector("[data-cancel]").addEventListener("click", close);
     onSubmit(body.querySelector("#rv"), async (e) => {
       e.preventDefault();
-      const jvNo = await reverseVoucher(v.id, String(new FormData(e.target).get("reason") || "").trim());
+      const jvNo = await postWithVoucher(() => reverseVoucher(v.id, String(new FormData(e.target).get("reason") || "").trim()));
       toast(`Reversed. New voucher ${jvNo}`, "success");
       close();
       reload();
@@ -499,12 +500,13 @@ function openManualEntry(accounts, reload) {
       })).filter((l) => l.account);
       try {
         const journal = buildJournal({ date: String(f.get("date")), memo: String(f.get("memo")), ref: String(f.get("ref") || ""), lines });
-        await runTransaction(db, async (tx) => {
+        const jvNo = await postWithVoucher(() => runTransaction(db, async (tx) => {
           const jvNo = await reserveJv(tx);
           writeVoucher(tx, doc(collection(db, "journal")), journal, jvNo, "manual");
-        });
+          return jvNo;
+        }));
         await audit("journal.manual", { memo: journal.memo, amount: journal.debit });
-        toast("Entry posted", "success");
+        toast(`Entry posted · ${jvNo}`, "success");
         close();
         reload();
       } catch (err) {
@@ -690,7 +692,7 @@ function openExpenseForm(expenseAccounts, accounts, reload) {
       if (!(amount > 0)) return toast("Enter an amount above 0", "error");
       try {
         const expRef = doc(collection(db, "expenses"));
-        await runTransaction(db, async (tx) => {
+        const jvNo = await postWithVoucher(() => runTransaction(db, async (tx) => {
           const jvNo = await reserveJv(tx);
           tx.set(expRef, {
             date: String(f.get("date")), amount, account, accountName: accName, category,
@@ -703,9 +705,10 @@ function openExpenseForm(expenseAccounts, accounts, reload) {
             ref: `EXP-${expRef.id.slice(0, 6)}`,
             lines: [{ account, debit: amount }, { account: method, credit: amount }],
           }), jvNo, "expense");
-        });
+          return jvNo;
+        }));
         await audit("expense.create", { amount, account });
-        toast("Expense recorded", "success");
+        toast(`Expense recorded · ${jvNo}`, "success");
         close();
         reload();
       } catch (err) {

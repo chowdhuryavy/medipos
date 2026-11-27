@@ -1,7 +1,7 @@
 // Supplier bills on credit: due dates, status, and paying a supplier against its oldest bills first.
 import { db, collection, doc, getDocs, query, where, runTransaction, serverTimestamp } from "./firebase.js";
 import { settings, money, esc, round2, toast, openModal, onSubmit, audit, buildJournal, ACCOUNTS, todayISO } from "./core.js";
-import { reserveJv, writeVoucher } from "./journal.js";
+import { reserveJv, writeVoucher, postWithVoucher } from "./journal.js";
 
 const DAY = 86400000;
 const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -59,7 +59,7 @@ export function planAllocation(bills, amount) {
 export async function settleSupplier({ supplierId, name, amount, cashAccount }) {
   const bills = await openBillsFor(supplierId);
   const supRef = doc(db, "suppliers", supplierId);
-  const cleared = await runTransaction(db, async (tx) => {
+  const res = await runTransaction(db, async (tx) => {
     const s = await tx.get(supRef);
     if (!s.exists()) throw new Error("Supplier not found");
     const bal = round2(Number(s.data().balance) || 0);
@@ -79,10 +79,10 @@ export async function settleSupplier({ supplierId, name, amount, cashAccount }) 
       ref: `PMT-${Date.now()}`,
       lines: [{ account: ACCOUNTS.AP, debit: amount }, { account: cashAccount, credit: amount }],
     }), jvNo, "payment");
-    return plan.map((p) => p.purNo);
+    return { cleared: plan.map((p) => p.purNo), jvNo };
   });
-  await audit("supplier.payment", { id: supplierId, amount, bills: cleared.length });
-  return cleared;
+  await audit("supplier.payment", { id: supplierId, amount, bills: res.cleared.length });
+  return res;
 }
 
 /** Dialog: pay a supplier, with a live preview of which bills the amount clears. */
@@ -125,7 +125,7 @@ export async function openPaySupplier(supplier, reload) {
       const amount = round2(Number(fd.get("amount")) || 0);
       if (!(amount > 0)) return toast("Enter an amount above 0", "error");
       try {
-        const cleared = await settleSupplier({ supplierId: supplier.id, name: supplier.name, amount, cashAccount: String(fd.get("method")) });
+        const { cleared } = await postWithVoucher(() => settleSupplier({ supplierId: supplier.id, name: supplier.name, amount, cashAccount: String(fd.get("method")) }), (r) => r.jvNo);
         toast(cleared.length ? `Paid. Updated ${cleared.join(", ")}` : "Payment recorded", "success");
         close();
         reload?.();

@@ -1,4 +1,4 @@
-import { reserveJv, writeVoucher } from "../journal.js";
+import { reserveJv, writeVoucher, postWithVoucher } from "../journal.js";
 import { addDays, billDue, billRemaining, billStatus, dayDiff, allOpenBills, openPaySupplier } from "../payables.js";
 import { onSubmit, onAction, canWrite } from "../core.js";
 import { unitsOf, unitByKey, toPieces, unitOptions } from "../packs.js";
@@ -178,11 +178,11 @@ export async function render(el) {
     btn.disabled = true;
     btn.classList.add("loading");
     try {
-      const res = await postPurchase({
+      const res = await postWithVoucher(() => postPurchase({
         supplier, invoiceNo: String(form.get("invoiceNo") || ""), date, payment, dueDate: String(form.get("dueDate") || ""), lines: valid,
-      });
+      }), (r) => r.jvNo);
       await audit("purchase", { purNo: res.purNo, total: res.total });
-      toast(`Purchase ${res.purNo} posted`, "success");
+      toast(`Purchase ${res.purNo} posted · ${res.jvNo}`, "success");
       render(el);
     } catch (err) {
       toast(err.message, "error");
@@ -292,7 +292,7 @@ async function postPurchase({ supplier, invoiceNo, date, payment, dueDate, lines
       paid: payment === "credit" ? 0 : total,
       status: payment === "credit" ? "open" : "paid",
     });
-    return { purNo, total };
+    return { purNo, total, jvNo };
   });
 }
 

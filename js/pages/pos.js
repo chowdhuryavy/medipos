@@ -1,4 +1,4 @@
-import { reserveJv, writeVoucher } from "../journal.js";
+import { reserveJv, writeVoucher, postWithVoucher } from "../journal.js";
 import { db, collection, doc, getDocs, query, where, runTransaction, serverTimestamp, increment } from "../firebase.js";
 import { post } from "../api.js";
 import { onAction, onSubmit, isPostable } from "../core.js";
@@ -505,7 +505,7 @@ export async function render(el) {
     btn.classList.add("loading");
     try {
       const customer = customers.find((c) => c.id === st.customerId) || null;
-      const sale = await completeSale({ lines, discountPct: st.disc, method, customer, tendered, approvalId });
+      const sale = await postWithVoucher(() => completeSale({ lines, discountPct: st.disc, method, customer, tendered, approvalId }), (r) => r.jvNo);
       await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: method.key, services: sale.serviceCount });
       for (const l of lines) if (!isService(l)) byId[l.id].stock = (Number(byId[l.id].stock) || 0) - l.pieces;
       Object.assign(floats, sale.floatBalances || {});
@@ -775,7 +775,7 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
     });
 
     return {
-      id: saleRef.id, invoiceNo,
+      id: saleRef.id, invoiceNo, jvNo,
       subtotal: goods.subtotal, discount: goods.discount, net: saleNet, vat: goods.vat, total: saleTotal,
       fees: feesTotal, transfersIn, transfersOut, collect, serviceCount: services.length,
       lines: [

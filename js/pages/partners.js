@@ -1,5 +1,5 @@
 import { openPaySupplier } from "../payables.js";
-import { reserveJv, writeVoucher } from "../journal.js";
+import { reserveJv, writeVoucher, postWithVoucher } from "../journal.js";
 import { onSubmit, onAction, onDelegated } from "../core.js";
 import { db, collection, doc, getDocs, addDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp } from "../firebase.js";
 import { settings, money, esc, icon, toast, openModal, confirmBox, round2, buildJournal, audit, ACCOUNTS, can, session } from "../core.js";
@@ -151,7 +151,7 @@ function openSettle(type, p, reload) {
       const cashAccount = String(fd.get("method"));
       if (!(amount > 0)) return toast("Enter an amount above 0", "error");
       try {
-        await settle({ type, id: p.id, name: p.name, amount, cashAccount });
+        await postWithVoucher(() => settle({ type, id: p.id, name: p.name, amount, cashAccount }));
         toast("Recorded", "success");
         close();
         reload();
@@ -166,7 +166,7 @@ async function settle({ type, id, name, amount, cashAccount }) {
   if (type !== "customers") throw new Error("Supplier payments are made from Purchasing, Payables.");
   const isCustomer = type === "customers";
   const ref = doc(db, type, id);
-  await runTransaction(db, async (tx) => {
+  const jvNo = await runTransaction(db, async (tx) => {
     const s = await tx.get(ref);
     if (!s.exists()) throw new Error("Record not found");
     const bal = Number(s.data().balance) || 0;
@@ -180,6 +180,8 @@ async function settle({ type, id, name, amount, cashAccount }) {
         ? [{ account: cashAccount, debit: amount }, { account: ACCOUNTS.AR, credit: amount }]
         : [{ account: ACCOUNTS.AP, debit: amount }, { account: cashAccount, credit: amount }],
     }), jvNo, isCustomer ? "receipt" : "payment");
+    return jvNo;
   });
   await audit(isCustomer ? "customer.receipt" : "supplier.payment", { id, amount });
+  return jvNo;
 }

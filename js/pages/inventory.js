@@ -1,4 +1,4 @@
-import { reserveJv, writeVoucher } from "../journal.js";
+import { reserveJv, writeVoucher, postWithVoucher } from "../journal.js";
 import { onSubmit, onAction, onDelegated } from "../core.js";
 import { db, collection, doc, getDocs, query, where, addDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp, writeBatch } from "../firebase.js";
 import {
@@ -411,16 +411,17 @@ function openStock({ products, batches, preId, reload }) {
       if (!(qty > 0)) return toast("Quantity must be at least 1", "error");
       const pieces = toPieces(u, qty);
       try {
+        let jvNo = null;
         if (mode === "in") {
           const expiry = String(fd.get("expiry") || "");
           if (!expiry) return toast("An expiry date is required", "error");
           const costPerPiece = round4((Number(fd.get("cost")) || 0) / u.size);
-          await receiveStock({ productId, pieces, cost: costPerPiece, expiry, batchNo: String(fd.get("batchNo") || "") });
+          jvNo = await postWithVoucher(() => receiveStock({ productId, pieces, cost: costPerPiece, expiry, batchNo: String(fd.get("batchNo") || "") }));
         } else {
           const ids = batches.filter((b) => b.productId === productId).map((b) => b.id);
-          await writeOff({ productId, pieces, reason: String(fd.get("reason")), batchIds: ids });
+          jvNo = await postWithVoucher(() => writeOff({ productId, pieces, reason: String(fd.get("reason")), batchIds: ids }));
         }
-        toast("Stock updated", "success");
+        toast(jvNo ? `Stock updated · ${jvNo}` : "Stock updated", "success");
         close();
         reload();
       } catch (err) {
@@ -433,7 +434,7 @@ function openStock({ products, batches, preId, reload }) {
 // Stock is always stored in pieces. Cost is per piece.
 async function receiveStock({ productId, pieces, cost, expiry, batchNo }) {
   const pRef = doc(db, "products", productId);
-  await runTransaction(db, async (tx) => {
+  const jvNo = await runTransaction(db, async (tx) => {
     const snap = await tx.get(pRef);
     if (!snap.exists()) throw new Error("Product not found");
     const p = snap.data();
@@ -454,13 +455,15 @@ async function receiveStock({ productId, pieces, cost, expiry, batchNo }) {
         lines: [{ account: ACCOUNTS.INVENTORY, debit: value }, { account: ACCOUNTS.EQUITY, credit: value }],
       }), jvNo, "stock");
     }
+    return jvNo;
   });
   await audit("stock.in", { productId, pieces, expiry });
+  return jvNo;
 }
 
 async function writeOff({ productId, pieces, reason, batchIds }) {
   const pRef = doc(db, "products", productId);
-  await runTransaction(db, async (tx) => {
+  const jvNo = await runTransaction(db, async (tx) => {
     const snap = await tx.get(pRef);
     if (!snap.exists()) throw new Error("Product not found");
     const p = snap.data();
@@ -490,6 +493,8 @@ async function writeOff({ productId, pieces, reason, batchIds }) {
         lines: [{ account: ACCOUNTS.OTHER_EXPENSE, debit: value }, { account: ACCOUNTS.INVENTORY, credit: value }],
       }), jvNo, "stock");
     }
+    return jvNo;
   });
   await audit("stock.out", { productId, pieces, reason });
+  return jvNo;
 }
