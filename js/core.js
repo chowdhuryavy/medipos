@@ -126,8 +126,29 @@ export function actionsFromLists(pages = [], write = []) {
   }
   return out;
 }
-export const effectiveActions = () => session.access?.actions ?? actionsFromLists(effectivePages(), effectiveWrite());
+// A person's own actions win; otherwise the role's actions; otherwise the older lists.
+export const effectiveActions = () => session.access
+  ? (session.access.actions ?? actionsFromLists(session.access.pages || [], session.access.write || []))
+  : (roles[session.role]?.actions ?? actionsFromLists(effectivePages(), effectiveWrite()));
 export const canAct = (page, act) => !!session.role && (effectiveActions()[page] || []).includes(act);
+
+// A saved role: its per-screen actions when the admin set them, otherwise the older screen and area lists.
+const DATA_ACTS = ["add", "edit", "delete"];
+function roleFromSaved(s, key) {
+  const label = s.label || DEFAULT_ROLES[key]?.label || key;
+  if (s.actions && typeof s.actions === "object") {
+    const actions = {};
+    for (const p of Object.keys(s.actions)) {
+      if (Array.isArray(s.actions[p]) && s.actions[p].includes("view")) actions[p] = s.actions[p].filter((a) => ACTIONS.includes(a));
+    }
+    const pages = Object.keys(actions);
+    const write = [...new Set(Object.keys(AREA_OF_PAGE).filter((p) => (actions[p] || []).some((a) => DATA_ACTS.includes(a))).map((p) => AREA_OF_PAGE[p]))];
+    return { label, pages, write, actions };
+  }
+  const pages = Array.isArray(s.pages) ? s.pages : [];
+  const write = Array.isArray(s.write) ? s.write : [];
+  return { label, pages, write, actions: actionsFromLists(pages, write) };
+}
 
 /** Loads shop settings and role permissions from Firestore, merged over the defaults. */
 export async function loadSettings() {
@@ -145,12 +166,8 @@ export async function loadSettings() {
     // Admins always keep everything (the rules do the same).
     const s = saved[key] || {};
     roles[key] = key === "admin"
-      ? { label: s.label || "Administrator", pages: [...DEFAULT_ROLES.admin.pages], write: [...WRITE_AREAS] }
-      : {
-          label: s.label || DEFAULT_ROLES[key]?.label || key,
-          pages: Array.isArray(s.pages) ? s.pages : [],
-          write: Array.isArray(s.write) ? s.write : [],
-        };
+      ? { label: s.label || "Administrator", pages: [...DEFAULT_ROLES.admin.pages], write: [...WRITE_AREAS], actions: actionsFromLists(DEFAULT_ROLES.admin.pages, WRITE_AREAS) }
+      : roleFromSaved(s, key);
   }
   // The cash shift page goes with the sale screen, so anyone who can sell can open and close the shift.
   // The same goes for the new screens: the import page follows stock access; prescriptions follow the sale screen.

@@ -5,7 +5,8 @@ rules_version = '2';
 // Permissions come from the database, not from this file.
 // Each person may have their own settings in users/{uid}.access:
 //   actions: { <screen>: [ "view" | "add" | "edit" | "delete" | "print" ] }
-// If a person has no actions saved, the older lists apply:
+// settings/roles.{role}.actions has the same shape and is the default for everyone in that role.
+// If neither is saved, the older lists apply:
 //   access.pages / access.write, or else the role's pages / write in settings/roles.
 //   pages = screens (view), write = areas where add, edit and delete are allowed.
 // Print is checked in the app only (it does not change data).
@@ -54,9 +55,12 @@ service cloud.firestore {
     function ownAccess() {
       return myProfile().get('access', null);
     }
-    // Per-screen actions saved for this person. Null when none are saved (the older lists apply).
+    // Per-screen actions: the person's own actions if they have any; otherwise the role's actions
+    // (when the role was saved with actions). Null means the older lists apply.
     function actionsOf() {
-      return (ownAccess() != null && 'actions' in ownAccess()) ? ownAccess().actions : null;
+      return ownAccess() != null
+        ? (('actions' in ownAccess()) ? ownAccess().actions : null)
+        : (('actions' in roleMap()[myProfile().role]) ? roleMap()[myProfile().role].actions : null);
     }
     // Older lists: screens (pages) and areas (write). A person's own lists replace the role's lists.
     function listPages() {

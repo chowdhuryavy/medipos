@@ -882,6 +882,8 @@ async function viewButtonStyle(body) {
 /* ───────── Role access ───────── */
 
 const PAGE_KEYS = Object.keys(PAGE_NAMES);
+const ROLE_ACT_LABEL = { view: "View", add: "Add", edit: "Edit", delete: "Delete", print: "Print" };
+const AREA_ACTS = ["add", "edit", "delete"];
 const slugRole = (name) => String(name).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
 
 function viewRoles(body) {
@@ -894,11 +896,18 @@ function viewRoles(body) {
   body.replaceChildren(roleHost, staffHost);
   renderStaffCard(staffHost, () => viewRoles(body)).catch((err) => toast(err.message, "error"));
 
-  const permBox = (name, label, checked, disabled) => `
-    <label class="perm-box">
-      <input type="checkbox" name="${name}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />
-      <span>${esc(label)}</span>
-    </label>`;
+  // Screens down the side, View / Add / Edit / Delete / Print across. Add, Edit and Delete only on screens with a data area.
+  const actionGrid = (acts, locked) => `
+    <div class="table-wrap"><table class="mx-table">
+      <thead><tr><th>Screen</th>${ACTIONS.map((a) => `<th class="c mx-me">${ROLE_ACT_LABEL[a]}</th>`).join("")}</tr></thead>
+      <tbody>${PAGE_KEYS.map((p) => `
+        <tr>
+          <th scope="row"><span class="mx-name">${icon(ACCESS_ICON[p] || "dashboard")}<span>${esc(PAGE_NAMES[p])}${PAGE_DESC[p] ? `<small class="mx-desc">${esc(PAGE_DESC[p])}</small>` : ""}</span></span></th>
+          ${ACTIONS.map((act) => (act !== "view" && act !== "print" && !AREA_OF_PAGE[p])
+            ? `<td class="c"><span class="mx-dot">—</span></td>`
+            : `<td class="c mx-me"><label class="mx-toggle"><input type="checkbox" name="act__${p}__${act}" ${locked || (acts[p] || []).includes(act) ? "checked" : ""} ${locked ? "disabled" : ""} aria-label="${ROLE_ACT_LABEL[act]} ${esc(PAGE_NAMES[p])}" /><span></span></label></td>`).join("")}
+        </tr>`).join("")}</tbody>
+    </table></div>`;
 
   const draw = () => {
     roleHost.innerHTML = `
@@ -958,7 +967,7 @@ function viewRoles(body) {
         const key = slugRole(name);
         if (!key) throw new Error("Enter a name with letters or numbers.");
         if (key === "admin" || key in working) throw new Error("A role with this name already exists.");
-        working[key] = { label: name, pages: ["dashboard"], write: [] };
+        working[key] = { label: name, pages: ["dashboard"], write: [], actions: { dashboard: ["view", "print"] } };
         drafts.add(key);
         close();
         draw();
@@ -967,7 +976,7 @@ function viewRoles(body) {
     });
   }
 
-  // One role's permissions in a modal: tick screens and data areas, then Save role.
+  // One role's permissions in a modal: for each screen, tick what the role may do, then Save role.
   function openRoleEditor(key) {
     const r = working[key];
     const locked = key === "admin";
@@ -975,15 +984,8 @@ function viewRoles(body) {
       <form id="re" class="stack role-editor">
         ${locked ? "" : `<label class="field"><span class="field-label">Role name</span>
           <span class="input-wrap"><input name="label" maxlength="40" value="${esc(r.label)}" required /></span></label>`}
-        <h4 class="perm-h">Screens they can open</h4>
-        <div class="perm-grid">
-          ${PAGE_KEYS.map((p) => permBox(`page__${p}`, PAGE_NAMES[p], locked || (r.pages || []).includes(p), locked)).join("")}
-        </div>
-        <h4 class="perm-h">Data they can change</h4>
-        <div class="perm-grid">
-          ${WRITE_AREAS.map((w) => permBox(`write__${w}`, WRITE_LABEL[w], locked || (r.write || []).includes(w), locked)).join("")}
-        </div>
-        <p class="muted small">${locked ? "Administrator always has every screen and every change area." : "Everyone with this role gets exactly the ticked screens and areas."}</p>
+        ${actionGrid(r.actions || {}, locked)}
+        <p class="muted small">${locked ? "Administrator always has every screen and every action." : "Everyone with this role gets exactly the ticked actions. Acting on a screen needs View. A person can still be given more or less on their own page."}</p>
         <div class="form-actions">
           <button class="btn ghost" type="button" data-cancel>${locked ? "Close" : "Cancel"}</button>
           ${locked ? "" : `<button class="btn primary" type="submit">${icon("check")}<span>Save role</span></button>`}
@@ -996,10 +998,18 @@ function viewRoles(body) {
       if (locked) return;
       onSubmit(m.querySelector("#re"), async (e) => {
         const f = new FormData(e.target);
+        const actions = {};
+        for (const p of PAGE_KEYS) {
+          const acts = ACTIONS.filter((a) => (a === "view" || a === "print" || AREA_OF_PAGE[p]) && f.get(`act__${p}__${a}`) === "on");
+          if (acts.length && !acts.includes("view")) acts.unshift("view");
+          if (acts.includes("view")) actions[p] = acts;
+        }
+        if (!Object.keys(actions).length) throw new Error("Give the role at least one screen.");
         working[key] = {
           label: String(f.get("label") || "").trim() || key,
-          pages: PAGE_KEYS.filter((p) => f.get(`page__${p}`) === "on"),
-          write: WRITE_AREAS.filter((w) => f.get(`write__${w}`) === "on"),
+          pages: Object.keys(actions),
+          write: [...new Set(Object.keys(AREA_OF_PAGE).filter((p) => (actions[p] || []).some((a) => AREA_ACTS.includes(a))).map((p) => AREA_OF_PAGE[p]))],
+          actions,
         };
         drafts.delete(key);
         close();
@@ -1014,8 +1024,8 @@ function viewRoles(body) {
     for (const k of Object.keys(working)) {
       if (drafts.has(k)) continue;
       const r = working[k];
-      if (k === "admin") { out.admin = { label: r.label || "Administrator", pages: [...PAGE_KEYS], write: [...WRITE_AREAS] }; continue; }
-      out[k] = { label: r.label, pages: r.pages, write: r.write };
+      if (k === "admin") { out.admin = { label: r.label || "Administrator", pages: [...PAGE_KEYS], write: [...WRITE_AREAS], actions: actionsFromLists(PAGE_KEYS, WRITE_AREAS) }; continue; }
+      out[k] = { label: r.label, pages: r.pages, write: r.write, actions: r.actions || actionsFromLists(r.pages, r.write) };
     }
     if (!out.admin) throw new Error("The administrator role is required.");
     await setDoc(doc(db, "settings", "roles"), out);
@@ -1224,7 +1234,7 @@ function renderStaffAccess(root, u, { close, reload }) {
   const isSelf = uid === session.uid;
   const ACT_LABEL = { view: "View", add: "Add", edit: "Edit", delete: "Delete", print: "Print" };
   const AREA_ACTS = ["add", "edit", "delete"];
-  const roleActions = (role) => actionsFromLists(roles[role]?.pages || [], roles[role]?.write || []);
+  const roleActions = (role) => roles[role]?.actions ?? actionsFromLists(roles[role]?.pages || [], roles[role]?.write || []);
   const hasOwn = !!u.access;
 
   // Working copy: per screen, the list of actions this person may take. Nothing is saved until "Save changes".
