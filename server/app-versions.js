@@ -3,8 +3,11 @@ import { adminDb } from "./firebase-admin.js";
 import { httpError } from "./errors.js";
 import { vercelConfig, vercelRequest } from "./vercel.js";
 
-// The version number comes from the release commit message, which ends with it, for example "(1.1.47)".
-const versionOf = (text) => (String(text).match(/\((\d+\.\d+\.\d+)\)/) || [])[1] || "";
+// The version number comes from the release commit message: "(1.1.47)" in the title, or "Version 1.1.47" in the body.
+const versionOf = (text) => {
+  const s = String(text);
+  return (s.match(/\((\d+\.\d+\.\d+)\)/) || s.match(/version\s+(\d+\.\d+\.\d+)/i) || [])[1] || "";
+};
 
 // Recent production releases, newest first, one row per version.
 export async function listReleases() {

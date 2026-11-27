@@ -266,7 +266,7 @@ async function viewVersions(body) {
     return `
       <article class="vs-row ${live ? "is-live" : ""}">
         <div class="vs-info">
-          <strong>${d.version ? `Version ${esc(d.version)}` : "Release"} ${live ? `<span class="badge ok">Running now</span>` : i === 0 ? `<span class="badge">Newest</span>` : ""}</strong>
+          <strong>${d.version ? `Version ${esc(d.version)}` : "Version not recorded"} ${live ? `<span class="badge ok">Running now</span>` : i === 0 ? `<span class="badge">Newest</span>` : ""}</strong>
           <small>${esc(fmtDateTime(d.created))}</small>
           <small>${esc(d.commit)}</small>
         </div>
