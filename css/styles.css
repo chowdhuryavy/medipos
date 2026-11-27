@@ -1356,3 +1356,6 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 .role-matrix .grp-row th { background: var(--surface-2); text-align: left; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .role-head { display: grid; justify-items: center; gap: 2px; }
 .role-head-actions { display: inline-flex; gap: 2px; margin-top: 2px; }
+
+.update-banner .ub-actions { display: flex; gap: 8px; flex: none; }
+.update-banner .ub-actions .btn.ghost { color: #fff; border-color: rgba(255,255,255,.7); background: transparent; }

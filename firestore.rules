@@ -234,6 +234,11 @@ service cloud.firestore {
       // Administrators must keep access to Administration.
       allow write: if isAdmin() && 'admin' in request.resource.data && 'admin' in request.resource.data.admin.pages;
     }
+    match /settings/release {
+      // The release an admin pushed to everyone (shows the reload prompt). Everyone reads, admins write.
+      allow read: if isActive();
+      allow write: if isAdmin();
+    }
     match /settings/emails {
       // Email subject and body templates. Read by the server, edited by admins.
       allow read, write: if isAdmin();

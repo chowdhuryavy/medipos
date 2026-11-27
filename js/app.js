@@ -4,7 +4,7 @@ import { loadBranding, branding, logoHtml } from "./branding.js";
 import { passwordFields } from "./password-ui.js";
 import { post } from "./api.js";
 import { showSplash, showRouteLoader, hideRouteLoader } from "./splash.js";
-import { startUpdateWatch } from "./updates.js";
+import { startUpdateWatch, stopUpdateWatch } from "./updates.js";
 import { firebaseConfig, APP_NAME, APP_VERSION } from "./config.js";
 import { startIdleLogout, stopIdleLogout } from "./idle.js";
 import { session, roles, settings, icon, esc, can, loadSettings, DEFAULT_ROLES, openModal, toast, confirmBox, alertBox } from "./core.js";
@@ -441,6 +441,7 @@ function buildShell() {
   tick();
   clockTimer = setInterval(tick, 15000);
   startNotifications();
+  startUpdateWatch();
   runStockChecks();
 }
 
@@ -492,7 +493,6 @@ async function route() {
 }
 
 window.addEventListener("hashchange", route);
-startUpdateWatch();
 
 /* ───────── boot & auth state ───────── */
 
@@ -617,6 +617,7 @@ async function handleAuthChange(user) {
   if (!isConfigured()) return showSetup();
   if (!user) {
     stopIdleLogout();
+    stopUpdateWatch();
     sessionStorage.removeItem(OTP_KEY);
     // Logging out clears the page address, so the next sign-in starts at the dashboard.
     if (location.hash) history.replaceState(null, "", location.pathname + location.search);
