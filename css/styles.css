@@ -1118,3 +1118,25 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .scan-field label { flex: 1; }
 .scan-box { display: grid; gap: 10px; justify-items: center; }
 .scan-box video { width: 100%; max-height: 60vh; border-radius: 18px; background: #000; object-fit: cover; }
+
+/* ───────── staff permission matrix ───────── */
+.mx-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 620px; font-size: 14px; }
+.mx-table th, .mx-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.mx-table thead th { position: sticky; top: 0; background: var(--surface-2); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); text-align: left; }
+.mx-table th.c, .mx-table td.c { text-align: center; }
+.mx-table .mx-me { background: color-mix(in srgb, var(--brand) 7%, transparent); }
+.mx-table .mx-group th { background: transparent; color: var(--brand); font-size: 13px; padding-top: 16px; border-bottom: 2px solid var(--border); text-transform: none; letter-spacing: 0; }
+.mx-name { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; }
+.mx-name .ico { width: 18px; height: 18px; color: var(--brand); }
+.mx-dot { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: var(--surface-2); color: transparent; font-size: 13px; font-weight: 800; }
+.mx-dot.on { background: linear-gradient(135deg, #14b8a6, #0f766e); color: #fff; }
+.mx-toggle { position: relative; display: inline-block; width: 44px; height: 24px; cursor: pointer; }
+.mx-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.mx-toggle span { position: absolute; inset: 0; border-radius: 999px; background: var(--border); transition: background .2s; }
+.mx-toggle span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .2s; }
+.mx-toggle input:checked + span { background: var(--brand); }
+.mx-toggle input:checked + span::after { transform: translateX(20px); }
+.mx-toggle input:disabled + span { opacity: .5; }
+.mx-add { color: #047857; font-weight: 700; font-size: 12px; }
+.mx-rm { color: #be123c; font-weight: 700; font-size: 12px; }
+.mx-same { color: var(--muted); font-size: 12px; }

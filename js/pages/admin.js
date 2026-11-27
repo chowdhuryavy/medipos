@@ -993,27 +993,42 @@ async function viewStaffAccess(body, uid) {
             <div class="sa-stat"><strong>${areas}</strong><small>of ${WRITE_AREAS.length} data areas</small></div>`;
   };
 
-  const tilesHtml = () => `
-    <div class="sa-tiles">
-      ${PAGE_KEYS.map((p) => `
-        <label class="sa-tile ${hasPage(p) ? "on" : ""} ${isAdminRole() ? "locked" : ""}">
-          <input type="checkbox" data-page="${p}" ${hasPage(p) ? "checked" : ""} ${isAdminRole() ? "disabled" : ""} />
-          <span class="sa-ico">${icon(ACCESS_ICON[p] || "dashboard")}</span>
-          <span class="sa-name"><strong>${esc(PAGE_NAMES[p])}</strong><small>${hasPage(p) ? "Can open" : "Hidden"}</small></span>
-          <span class="sa-switch" aria-hidden="true"></span>
-        </label>`).join("")}
-    </div>`;
-
-  const areasHtml = () => `
-    <div class="sa-tiles">
-      ${WRITE_AREAS.map((a) => `
-        <label class="sa-tile ${hasArea(a) ? "on" : ""} ${isAdminRole() ? "locked" : ""}">
-          <input type="checkbox" data-area="${a}" ${hasArea(a) ? "checked" : ""} ${isAdminRole() ? "disabled" : ""} />
-          <span class="sa-ico">${icon(AREA_ICON[a] || "inventory")}</span>
-          <span class="sa-name"><strong>${esc(WRITE_LABEL[a])}</strong><small>${hasArea(a) ? "Can change" : "View only"}</small></span>
-          <span class="sa-switch" aria-hidden="true"></span>
-        </label>`).join("")}
-    </div>`;
+  // Permission matrix: one row per screen or data area. Columns: each role's access, this person's access, and what changed.
+  const matrixHtml = () => {
+    const base = (kind, key) => (kind === "page" ? roles[st.role]?.pages || [] : roles[st.role]?.write || []).includes(key);
+    const mine = (kind, key) => (kind === "page" ? hasPage(key) : hasArea(key));
+    const rowHtml = (kind, key, label, ico) => {
+      const m = mine(kind, key), d = base(kind, key);
+      const change = m === d ? `<span class="mx-same">Same as role</span>` : m ? `<span class="mx-add">Added</span>` : `<span class="mx-rm">Removed</span>`;
+      return `
+        <tr>
+          <th scope="row"><span class="mx-name">${icon(ico)}<span>${esc(label)}</span></span></th>
+          ${roleKeys.map((k) => {
+            const on = k === "admin" || (kind === "page" ? (roles[k]?.pages || []).includes(key) : (roles[k]?.write || []).includes(key));
+            return `<td class="c"><span class="mx-dot ${on ? "on" : ""}">${on ? "✓" : ""}</span></td>`;
+          }).join("")}
+          <td class="c mx-me"><label class="mx-toggle"><input type="checkbox" data-${kind}="${key}" ${m ? "checked" : ""} ${isAdminRole() ? "disabled" : ""} aria-label="${esc(label)} for this person" /><span></span></label></td>
+          <td class="c">${isAdminRole() ? `<span class="mx-same">Always</span>` : change}</td>
+        </tr>`;
+    };
+    const head = `<tr><th>Screen or data</th>${roleKeys.map((k) => `<th class="c">${esc(roles[k]?.label || k)}</th>`).join("")}<th class="c mx-me">This person</th><th class="c">Compared to role</th></tr>`;
+    const group = (t) => `<tr class="mx-group"><th colspan="${roleKeys.length + 3}">${esc(t)}</th></tr>`;
+    return `
+      <div class="table-wrap"><table class="mx-table">
+        <thead>${head}</thead>
+        <tbody>
+          ${group("Screens they can open")}
+          ${PAGE_KEYS.map((p) => rowHtml("page", p, PAGE_NAMES[p], ACCESS_ICON[p] || "dashboard")).join("")}
+          ${group("Data they can change")}
+          ${WRITE_AREAS.map((a) => rowHtml("area", a, WRITE_LABEL[a], AREA_ICON[a] || "inventory")).join("")}
+        </tbody>
+      </table></div>`;
+  };
+  const matrixCard = () => `
+    <section class="card">
+      <header class="card-head"><h3>Permission matrix</h3><span class="muted small">Switch the last column to give or take away access for this person. The role columns show what each role allows.</span></header>
+      <div id="sa-matrix">${matrixHtml()}</div>
+    </section>`;
 
   const roleCardsHtml = () => `
     <div class="sa-roles">
@@ -1067,15 +1082,7 @@ async function viewStaffAccess(body, uid) {
           </section>
         </div>
 
-        <section class="card">
-          <header class="card-head"><h3>Screens they can open</h3><span class="muted small">Tap a tile to switch it on or off</span></header>
-          <div id="sa-pages">${tilesHtml()}</div>
-        </section>
-
-        <section class="card">
-          <header class="card-head"><h3>Data they can change</h3><span class="muted small">Viewing is allowed on any screen they can open</span></header>
-          <div id="sa-areas">${areasHtml()}</div>
-        </section>
+        ${matrixCard()}
 
         ${isAdminRole() ? `<p class="muted small center">Administrators always have every screen and area. Change their role to limit them.</p>` : ""}
 
@@ -1089,8 +1096,7 @@ async function viewStaffAccess(body, uid) {
 
   const refreshTiles = () => {
     body.querySelector("#sa-stats").innerHTML = summaryHtml();
-    body.querySelector("#sa-pages").innerHTML = tilesHtml();
-    body.querySelector("#sa-areas").innerHTML = areasHtml();
+    body.querySelector("#sa-matrix").innerHTML = matrixHtml();
     body.querySelector("#sa-roles").innerHTML = roleCardsHtml();
     bind();
   };
