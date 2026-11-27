@@ -1465,23 +1465,108 @@ async function viewScheduledReports(body) {
   paint();
 }
 
+const AUDIT_LABELS = {
+  "user.update": "Changed a user's role or status",
+  "user.access": "Changed a user's access",
+  "settings.update": "Changed shop settings",
+  "roles.update": "Changed role permissions",
+  "integrations.update": "Updated Google Sheets reporting",
+  "integrations.email": "Updated email sending",
+  "reports.schedule": "Changed scheduled reports",
+  "branding.logo": "Changed the shop logo",
+  "branding.update": "Changed the app name or colour",
+  "emails.update": "Edited an email template",
+  "app.rollback": "Rolled back the app version",
+};
+const AUDIT_AREAS = { user: "Users & access", settings: "Shop settings", roles: "Roles & access", integrations: "Integrations", reports: "Reports", branding: "Branding & email", emails: "Branding & email", app: "App version" };
+const AUDIT_DETAIL = { role: "Role", active: "Active", requireOtp: "Sign-in code", keys: "Changed", roles: "Roles", count: "Items", provider: "Provider", from: "Sender", template: "Email", changed: "Logo changed", appName: "App name", brandColor: "Brand colour", sheets: "Google Sheets", custom: "Custom access" };
+const humanize = (s) => {
+  const t = String(s || "").replace(/[._]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+  return t ? t[0].toUpperCase() + t.slice(1).toLowerCase() : "Change";
+};
+// Turns one stored detail into readable text. Ids and nested objects are left out.
+const detailText = (k, v) => {
+  if (k === "id" || v === null || v === undefined || v === "") return "";
+  if (typeof v === "object" && !Array.isArray(v)) return "";
+  const label = AUDIT_DETAIL[k] || humanize(k);
+  if (typeof v === "boolean") return `${label}: ${v ? "Yes" : "No"}`;
+  if (Array.isArray(v)) return `${label}: ${v.length ? v.map((x) => humanize(x)).join(", ") : "None"}`;
+  return `${label}: ${v}`;
+};
+const dayKey = (d) => d.toLocaleDateString("en-CA");
+const dayName = (d) => {
+  if (dayKey(d) === dayKey(new Date())) return "Today";
+  if (dayKey(d) === dayKey(new Date(Date.now() - 864e5))) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+};
+
 async function viewAudit(body) {
-  const snap = await getDocs(query(collection(db, "audit"), orderBy("at", "desc"), limit(100)));
+  const snap = await getDocs(query(collection(db, "audit"), orderBy("at", "desc"), limit(200)));
+  const entries = snap.docs.map((d) => {
+    const a = d.data();
+    const when = a.at?.toDate ? a.at.toDate() : a.at ? new Date(a.at) : new Date();
+    const action = String(a.action || "");
+    return {
+      when,
+      area: AUDIT_AREAS[action.split(".")[0]] || "Other",
+      label: AUDIT_LABELS[action] || humanize(action),
+      who: a.by || "Unknown user",
+      details: Object.entries(a.details || {}).map(([k, v]) => detailText(k, v)).filter(Boolean),
+    };
+  });
+  const areas = [...new Set(entries.map((e) => e.area))].sort();
+  const groups = [];
+  for (const e of entries) {
+    const key = dayKey(e.when);
+    let g = groups.find((x) => x.key === key);
+    if (!g) groups.push((g = { key, name: dayName(e.when), rows: [] }));
+    g.rows.push(e);
+  }
+  const time = (d) => d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   body.innerHTML = `
     <section class="card">
-      <h3>Recent activity</h3>
-      <div class="table-wrap"><table class="stack-mobile">
-        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th></tr></thead>
-        <tbody>
-          ${snap.docs.map((d) => { const a = d.data(); return `<tr>
-            <td data-label="When">${fmtDateTime(a.at)}</td>
-            <td data-label="Who">${esc(a.by)}</td>
-            <td data-label="Action"><span class="badge">${esc(a.action)}</span></td>
-            <td data-label="Details" class="wrap-cell">${esc(JSON.stringify(a.details || {}))}</td></tr>`; }).join("")
-            || `<tr><td colspan="4" class="muted center">No activity yet</td></tr>`}
-        </tbody>
-      </table></div>
+      <h3>Activity log</h3>
+      <p class="muted small">Every change made in the admin screens, newest first. Showing the latest ${entries.length} entries.</p>
+      <div class="al-tools">
+        <input type="search" id="al-q" placeholder="Search by person, change or detail" aria-label="Search activity" />
+        <select id="al-area" aria-label="Filter by area"><option value="">All areas</option>${areas.map((a) => `<option value="${esc(a)}">${esc(a)}</option>`).join("")}</select>
+      </div>
+      <div id="al-list">
+        ${groups.map((g) => `
+          <div class="al-group">
+            <h4 class="al-day">${esc(g.name)}</h4>
+            ${g.rows.map((e) => `
+              <div class="al-row" data-area="${esc(e.area)}" data-text="${esc(`${e.label} ${e.who} ${e.details.join(" ")} ${e.area}`.toLowerCase())}">
+                <div class="al-main">
+                  <strong>${esc(e.label)}</strong>
+                  <span class="muted small">${esc(e.who)} · ${esc(time(e.when))}</span>
+                  ${e.details.length ? `<span class="al-details">${e.details.map((t) => esc(t)).join(" · ")}</span>` : ""}
+                </div>
+                <span class="badge">${esc(e.area)}</span>
+              </div>`).join("")}
+          </div>`).join("") || `<p class="muted center">No activity yet</p>`}
+      </div>
+      <p class="muted small center" id="al-empty" hidden>No activity matches your search.</p>
     </section>`;
+
+  const q = body.querySelector("#al-q"), area = body.querySelector("#al-area");
+  const apply = () => {
+    const term = q.value.trim().toLowerCase(), pick = area.value;
+    let shown = 0;
+    body.querySelectorAll(".al-group").forEach((g) => {
+      let n = 0;
+      g.querySelectorAll(".al-row").forEach((r) => {
+        const ok = (!pick || r.dataset.area === pick) && (!term || r.dataset.text.includes(term));
+        r.hidden = !ok;
+        if (ok) n++;
+      });
+      g.hidden = n === 0;
+      shown += n;
+    });
+    body.querySelector("#al-empty").hidden = shown > 0 || !entries.length;
+  };
+  q.addEventListener("input", apply);
+  area.addEventListener("change", apply);
 }
 
 /* ───────── Branding & email ───────── */

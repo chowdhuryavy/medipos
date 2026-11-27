@@ -1299,3 +1299,14 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .li-actions { display: flex; align-items: center; gap: 6px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
 .ls-form h4 { margin: 0 0 8px; }
 .ls-confirm { display: grid; gap: 14px; }
+
+/* Activity log */
+.al-tools { display: grid; gap: 10px; margin: 12px 0 4px; }
+@media (min-width: 640px) { .al-tools { grid-template-columns: 1fr 220px; } }
+.al-tools input, .al-tools select { width: 100%; }
+.al-group { margin-top: 18px; }
+.al-day { margin: 0 0 8px; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.al-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); margin-bottom: 8px; }
+.al-row[hidden], .al-group[hidden] { display: none; }
+.al-main { display: grid; gap: 3px; min-width: 0; }
+.al-details { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }

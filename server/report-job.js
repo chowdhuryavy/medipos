@@ -13,6 +13,7 @@ import { loadEmailConfig } from "./templates.js";
 import { brandPalette, shell, esc } from "./email-layout.js";
 import { buildReportTables, toSections, REPORTS } from "../js/report-tables.js";
 import { toPdf, toXlsx } from "../js/export-files.js";
+import { logoFromDataUrl } from "./logo-png.js";
 
 const DEFAULT_TZ = "Asia/Qatar";
 
@@ -79,13 +80,16 @@ export async function sendReportFor(schedule, reportDate, today) {
   const keys = schedule.reports?.length ? schedule.reports : REPORTS.map(([k]) => k);
   const sections = toSections(tables, keys);
   const shop = general.shopName || "My Pharmacy";
-  const title = "Daily reports";
-  const subtitle = `Sales day ${reportDate}${data.sales.length === 0 ? " · No sales recorded" : ""} · Sent ${new Date().toLocaleString("en-GB", { timeZone: schedule.timezone || DEFAULT_TZ })}`;
+  // The saved shop logo, read on the server so the PDF header can show it.
+  const logo = logoFromDataUrl((await adminDb().doc("branding/public").get()).data()?.logoUrl);
   const cfg = await loadEmailConfig();
-  const brand = { shop, color: cfg.brandColor, subtitle };
+  const brand = { shop, color: cfg.brandColor, logo };
   const files = [];
   const formats = schedule.formats?.length ? schedule.formats : ["pdf"];
-  const sentAt = new Date().toLocaleString("en-GB", { timeZone: schedule.timezone || DEFAULT_TZ });
+  const tz = schedule.timezone || DEFAULT_TZ;
+  // Dates read as "26 Nov 2026" in the files, not as machine dates.
+  const longDay = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const sentAt = new Date().toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: tz });
   const slug = (t) => String(t).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const shopSlug = shop.replace(/\W+/g, "-");
   const noSalesNote = data.sales.length === 0 ? " · No sales recorded" : "";
@@ -97,7 +101,7 @@ export async function sendReportFor(schedule, reportDate, today) {
     if (formats.includes("pdf")) {
       files.push({
         filename: `${base}.pdf`,
-        content: toPdf({ title: sec.title, subtitle: `Sales day ${reportDate}${noSalesNote} · Sent ${sentAt}`, footer: shop, sections: one, brand }),
+        content: toPdf({ title: sec.title, subtitle: `Period: ${longDay(reportDate)}${noSalesNote} · Generated ${sentAt}`, footer: `${shop} · Generated ${sentAt}`, sections: one, brand }),
       });
     }
     if (formats.includes("xlsx")) {

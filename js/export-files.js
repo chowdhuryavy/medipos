@@ -223,6 +223,7 @@ export function toPdf({ title, subtitle = "", footer = "", sections, brand = {} 
   const P = palette(brand.color);
   const shop = brand.shop || "MediPOS";
   const W = 595, H = 842, M = 40, CW = W - 2 * M, BOTTOM = 60, BAND = 92;
+  const ROW = 18;
   const pages = [];
   let ops = null, y = 0;
 
@@ -318,23 +319,33 @@ export function toPdf({ title, subtitle = "", footer = "", sections, brand = {} 
         y -= 19;
       };
       drawHead();
-      if (!sec.rows.length) { need(20); text(M + 7, y - 13, "Nothing to show for this period.", 8.5, false, P.grey); y -= 20; }
+      if (!sec.rows.length) {
+        // Empty period: a labelled box instead of a bare line, so the page reads as deliberate.
+        need(44);
+        rect(M, y - 40, CW, 40, P.tint);
+        const msg = "No records for this period.";
+        text(M + (CW - tw(msg, 9, false)) / 2, y - 24, msg, 9, false, P.grey);
+        y -= 40;
+      }
       sec.rows.forEach((row, ri) => {
-        if (y - 16 < BOTTOM) { newPage(); drawHead(); }
+        if (y - ROW < BOTTOM) { newPage(); drawHead(); }
         const total = /^total/i.test(String(row[0] ?? ""));
-        if (total) rect(M, y - 16, CW, 16, P.soft);
-        else if (ri % 2 === 1) rect(M, y - 16, CW, 16, P.tint);
+        if (total) rect(M, y - ROW, CW, ROW, P.soft);
+        else if (ri % 2 === 1) rect(M, y - ROW, CW, ROW, P.tint);
         headers.forEach((_, i) => {
           const s = fitText(cellText(row[i]), widths[i], 8.5, total);
-          if (numeric.has(i)) right(xs[i] + widths[i] - 7, y - 11, s, 8.5, total);
-          else text(xs[i] + 7, y - 11, s, 8.5, total);
+          if (numeric.has(i)) right(xs[i] + widths[i] - 7, y - 12.5, s, 8.5, total);
+          else text(xs[i] + 7, y - 12.5, s, 8.5, total);
         });
-        hline(M, M + CW, y - 16, P.line);
-        y -= 16;
+        hline(M, M + CW, y - ROW, P.line);
+        y -= ROW;
       });
     }
     y -= 18;
   }
+  need(24);
+  hline(M, M + CW, y + 6, P.line);
+  text(M, y - 6, "End of report", 7.5, false, P.grey);
 
   // Footer and page numbers on every page.
   const count = pages.length;
