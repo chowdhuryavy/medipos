@@ -1173,3 +1173,9 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .splash.style-bar .round-ring, .splash.style-bar .round-orbit { display: none; }
 .splash.style-bar .round-logo { animation: none; }
 .splash.style-bar .splash-bar { width: 240px; height: 8px; }
+
+/* Per-person access opens as a wide modal, so the whole permission matrix is visible. */
+.modal:has(.sa-modal) { width: min(96vw, 1000px); max-width: 96vw; }
+.sa-modal .sa-page { display: grid; gap: 14px; }
+.sa-modal .sa-hero { margin: 0; }
+.sa-modal .sa-actions { justify-content: flex-end; }

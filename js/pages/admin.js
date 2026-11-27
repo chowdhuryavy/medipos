@@ -66,10 +66,15 @@ export async function render(el) {
 
 /* ───────── Staff ───────── */
 
-async function viewUsers(body) {
+async function loadStaff() {
   const snap = await getDocs(collection(db, "users"));
-  const users = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  body.innerHTML = `
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((x, y) => (x.name || "").localeCompare(y.name || ""));
+}
+
+// One list of staff with Edit, Reset password and Delete on every person. Edit opens their access in a modal.
+async function renderStaffCard(host, reload) {
+  const users = await loadStaff();
+  host.innerHTML = `
     <section class="card">
       <div class="toolbar">
         <h3>Staff accounts</h3>
@@ -85,7 +90,7 @@ async function viewUsers(body) {
             <td data-label="Role"><span class="badge">${esc(roles[u.role]?.label || u.role)}</span>${u.requireOtp ? ' <span class="badge warn">Email code</span>' : ""}</td>
             <td data-label="Status"><span class="badge ${u.active ? "ok" : "danger"}">${u.active ? "Active" : "Disabled"}</span></td>
             <td class="actions">
-              <button class="icon-btn sm" data-edit="${esc(u.id)}" aria-label="Edit ${esc(u.name)}">${icon("edit")}</button>
+              <button class="icon-btn sm" data-edit="${esc(u.id)}" aria-label="Edit access for ${esc(u.name)}" title="Edit access">${icon("edit")}</button>
               <button class="icon-btn sm" data-reset="${esc(u.id)}" aria-label="Send password reset email" title="Send password reset email">${icon("sync")}</button>
               ${u.id !== session.uid ? `<button class="icon-btn sm hover-danger" data-delete-user="${esc(u.id)}" aria-label="Delete ${esc(u.name)}" title="Delete staff account">${icon("trash")}</button>` : ""}
             </td></tr>`).join("") || `<tr><td colspan="5" class="muted center">No staff yet</td></tr>`}
@@ -93,35 +98,33 @@ async function viewUsers(body) {
       </table></div>
     </section>`;
 
-  body.querySelector("#u-new").addEventListener("click", () => openUserForm(null, () => viewUsers(body)));
-  onDelegated(body, async (e) => {
+  host.querySelector("#u-new").addEventListener("click", () => openUserForm(null, reload));
+  onDelegated(host, async (e) => {
     const b = e.target.closest("button");
     if (!b) return;
-    if (b.dataset.edit) return viewStaffAccess(body, b.dataset.edit);
+    if (b.dataset.edit) return openStaffAccess(b.dataset.edit, reload);
     if (b.dataset.deleteUser) {
       const u = users.find((x) => x.id === b.dataset.deleteUser);
       if (!(await confirmBox(`Delete ${u.name}? Their sign-in is removed and they can no longer use MediPOS. Past sales keep their name.`))) return;
-      try {
-        await post("/api/admin/delete-user", { uid: u.id }, { secure: true });
-        toast("Staff account deleted", "success");
-        viewUsers(body);
-      } catch (err) {
-        toast(err.message, "error");
-      }
-      return;
+      await post("/api/admin/delete-user", { uid: u.id }, { secure: true });
+      toast("Staff account deleted", "success");
+      return reload();
     }
     if (b.dataset.reset) {
       const u = users.find((x) => x.id === b.dataset.reset);
       if (!(await confirmBox(`Reset ${u.name}'s password? A temporary password will be emailed to ${u.email}, and they must change it at sign-in.`))) return;
-      try {
-        await post("/api/admin/reset-password", { uid: u.id }, { secure: true });
-        toast("Temporary password emailed", "success");
-        viewUsers(body);
-      } catch (err) {
-        toast(err.message, "error");
-      }
+      await post("/api/admin/reset-password", { uid: u.id }, { secure: true });
+      toast("Temporary password emailed", "success");
+      reload();
     }
   });
+}
+
+async function viewUsers(body) {
+  const host = document.createElement("div");
+  body.replaceChildren(host);
+  const reload = () => viewUsers(body);
+  await renderStaffCard(host, reload);
 }
 
 function roleOptions(selected) {
@@ -710,9 +713,14 @@ function viewRoles(body) {
   const working = structuredClone(roles);
   const removed = new Set();
 
+  const roleHost = document.createElement("div");
+  const staffHost = document.createElement("div");
+  body.replaceChildren(roleHost, staffHost);
+  renderStaffCard(staffHost, () => viewRoles(body)).catch((err) => toast(err.message, "error"));
+
   const draw = () => {
     const keys = Object.keys(working);
-    body.innerHTML = `
+    roleHost.innerHTML = `
       <section class="card">
         <div class="toolbar">
           <div>
@@ -970,10 +978,18 @@ const ACCESS_ICON = {
 const AREA_ICON = { pos: "cart", inventory: "inventory", purchasing: "purchase", partners: "partners", accounting: "accounting" };
 
 // Opens one person's page. Everything about them is changed here and saved together.
-async function viewStaffAccess(body, uid) {
+// Opens one person's access in a modal: profile, role, and every screen and data area they may use.
+async function openStaffAccess(uid, reload) {
   const snap = await getDoc(doc(db, "users", uid));
-  if (!snap.exists()) throw new Error("This staff member no longer exists.");
+  if (!snap.exists()) return toast("This staff member no longer exists.", "error");
   const u = { id: uid, ...snap.data() };
+  openModal(`Access · ${u.name || "staff"}`, `<div class="sa-modal" id="sa-root"></div>`, (mount, close) => {
+    renderStaffAccess(mount.querySelector("#sa-root"), u, { close, reload });
+  });
+}
+
+function renderStaffAccess(root, u, { close, reload }) {
+  const uid = u.id;
   const roleKeys = Object.keys(roles);
   const isSelf = uid === session.uid;
   const roleDefaults = (role) => ({ pages: [...(roles[role]?.pages || [])], write: [...(roles[role]?.write || [])] });
@@ -1047,10 +1063,9 @@ async function viewStaffAccess(body, uid) {
     </div>`;
 
   const paint = () => {
-    body.innerHTML = `
+    root.innerHTML = `
       <div class="sa-page">
         <div class="sa-top">
-          <button class="btn ghost sm" data-back>${icon("arrowLeft")}<span>All staff</span></button>
           <span class="muted small">Changes apply the next time this person signs in.</span>
         </div>
 
@@ -1092,7 +1107,7 @@ async function viewStaffAccess(body, uid) {
 
         ${isAdminRole() ? `<p class="muted small center">Administrators always have every screen and area. Change their role to limit them.</p>` : ""}
 
-        <div class="sticky-actions sa-actions">
+        <div class="form-actions sa-actions">
           <button class="btn ghost" data-back>Cancel</button>
           <button class="btn primary" id="sa-save">${icon("check")}<span>Save changes</span></button>
         </div>
@@ -1101,40 +1116,40 @@ async function viewStaffAccess(body, uid) {
   };
 
   const refreshTiles = () => {
-    body.querySelector("#sa-stats").innerHTML = summaryHtml();
-    body.querySelector("#sa-matrix").innerHTML = matrixHtml();
-    body.querySelector("#sa-roles").innerHTML = roleCardsHtml();
+    root.querySelector("#sa-stats").innerHTML = summaryHtml();
+    root.querySelector("#sa-matrix").innerHTML = matrixHtml();
+    root.querySelector("#sa-roles").innerHTML = roleCardsHtml();
     bind();
   };
 
   function bind() {
-    body.querySelectorAll("[data-back]").forEach((b) => b.addEventListener("click", () => viewUsers(body)));
-    body.querySelector("#sa-name").addEventListener("input", (e) => { st.name = e.target.value; });
-    body.querySelector("#sa-active").addEventListener("change", (e) => { st.active = e.target.checked; });
-    body.querySelector("#sa-otp").addEventListener("change", (e) => { st.requireOtp = e.target.checked; });
-    body.querySelector("#sa-standard").addEventListener("change", (e) => {
+    root.querySelectorAll("[data-back]").forEach((b) => b.addEventListener("click", () => close()));
+    root.querySelector("#sa-name").addEventListener("input", (e) => { st.name = e.target.value; });
+    root.querySelector("#sa-active").addEventListener("change", (e) => { st.active = e.target.checked; });
+    root.querySelector("#sa-otp").addEventListener("change", (e) => { st.requireOtp = e.target.checked; });
+    root.querySelector("#sa-standard").addEventListener("change", (e) => {
       st.custom = !e.target.checked;
       if (!st.custom) Object.assign(st, roleDefaults(st.role));
       refreshTiles();
     });
-    body.querySelectorAll("[name=role]").forEach((r) => r.addEventListener("change", () => {
+    root.querySelectorAll("[name=role]").forEach((r) => r.addEventListener("change", () => {
       st.role = r.value;
       if (!st.custom) Object.assign(st, roleDefaults(st.role));
       refreshTiles();
     }));
-    body.querySelectorAll("[data-page]").forEach((c) => c.addEventListener("change", (e) => {
+    root.querySelectorAll("[data-page]").forEach((c) => c.addEventListener("change", (e) => {
       st.custom = true;
       const p = e.target.dataset.page;
       st.pages = e.target.checked ? [...new Set([...st.pages, p])] : st.pages.filter((x) => x !== p);
       refreshTiles();
     }));
-    body.querySelectorAll("[data-area]").forEach((c) => c.addEventListener("change", (e) => {
+    root.querySelectorAll("[data-area]").forEach((c) => c.addEventListener("change", (e) => {
       st.custom = true;
       const a = e.target.dataset.area;
       st.write = e.target.checked ? [...new Set([...st.write, a])] : st.write.filter((x) => x !== a);
       refreshTiles();
     }));
-    onAction(body.querySelector("#sa-save"), async () => {
+    onAction(root.querySelector("#sa-save"), async () => {
       const name = st.name.trim();
       if (!name) throw new Error("Give them a name.");
       if (isSelf && st.role !== "admin") throw new Error("You cannot remove your own admin access.");
@@ -1146,7 +1161,8 @@ async function viewStaffAccess(body, uid) {
       });
       await audit("user.access", { id: uid, role: st.role, custom: !!access, requireOtp: st.requireOtp });
       toast("Saved. The change applies the next time they sign in.", "success");
-      viewStaffAccess(body, uid);
+      close();
+      reload();
     });
   }
 
