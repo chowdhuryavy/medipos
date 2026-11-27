@@ -1422,3 +1422,8 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 .sidebar .sidebar-foot .who strong { font-size: 13px; }
 .sidebar .sidebar-foot .role-pill { font-size: 9.5px; padding: 1px 7px; }
 .sidebar .sidebar-foot .foot-chev { font-size: 18px; }
+
+/* Header bell and dark-mode toggle: smaller. */
+.topbar #bell-btn, .topbar #theme-btn { width: 36px; height: 36px; border-radius: 12px; }
+.topbar #bell-btn svg, .topbar #theme-btn svg { width: 17px; height: 17px; }
+.topbar .bell-count { top: -3px; right: -3px; min-width: 16px; height: 16px; font-size: 10px; }
