@@ -78,7 +78,7 @@ export async function sendReportFor(schedule, reportDate, today) {
   });
   const keys = schedule.reports?.length ? schedule.reports : REPORTS.map(([k]) => k);
   const sections = toSections(tables, keys);
-  const shop = general.shopName || "MediPOS";
+  const shop = general.shopName || "My Pharmacy";
   const title = `${shop} · Daily reports`;
   const subtitle = `Sales day ${reportDate} · Sent ${new Date().toLocaleString("en-GB", { timeZone: schedule.timezone || DEFAULT_TZ })}`;
   const cfg = await loadEmailConfig();
@@ -86,7 +86,7 @@ export async function sendReportFor(schedule, reportDate, today) {
   const files = [];
   const formats = schedule.formats?.length ? schedule.formats : ["pdf"];
   if (formats.includes("pdf")) {
-    files.push({ filename: `${shop.replace(/\W+/g, "-")}-reports-${reportDate}.pdf`, content: toPdf({ title, subtitle, footer: `${shop} · MediPOS`, sections, brand }) });
+    files.push({ filename: `${shop.replace(/\W+/g, "-")}-reports-${reportDate}.pdf`, content: toPdf({ title, subtitle, footer: shop, sections, brand }) });
   }
   if (formats.includes("xlsx")) {
     files.push({ filename: `${shop.replace(/\W+/g, "-")}-reports-${reportDate}.xlsx`, content: toXlsx(sections, brand) });

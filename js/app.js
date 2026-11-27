@@ -1,4 +1,4 @@
-import { effectivePages, onSubmit, onAction } from "./core.js";
+import { effectivePages, onSubmit, onAction, withBusy } from "./core.js";
 import { auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "./firebase.js";
 import { loadBranding, branding, logoHtml } from "./branding.js";
 import { passwordFields } from "./password-ui.js";
@@ -571,11 +571,14 @@ function showSignInCode(user) {
     e.preventDefault();
     msg.textContent = "";
     try {
-      await post("/api/auth/login-otp-verify", { code: root.querySelector("#code-input").value.trim() }, { secure: true });
-      // Refresh the token so the database rules see the confirmed state at once.
-      await user.getIdToken(true);
-      sessionStorage.setItem(OTP_KEY, user.uid);
-      await handleAuthChange(user);
+      // The button spins while the code is checked, so a press is never silent.
+      await withBusy(root.querySelector("#code-btn"), async () => {
+        await post("/api/auth/login-otp-verify", { code: root.querySelector("#code-input").value.trim() }, { secure: true });
+        // Refresh the token so the database rules see the confirmed state at once.
+        await user.getIdToken(true);
+        sessionStorage.setItem(OTP_KEY, user.uid);
+        await handleAuthChange(user);
+      });
     } catch (err) {
       msg.textContent = err.message;
     }

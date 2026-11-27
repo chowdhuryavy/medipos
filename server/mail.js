@@ -5,9 +5,10 @@ import { adminDb } from "./firebase-admin.js";
 // Mail settings are saved by an administrator in Administration → Integrations (settings/integrations).
 // Environment variables are used for any field left empty, so older Vercel setups keep working.
 export async function mailConfig() {
-  const [snap, sec] = await Promise.all([adminDb().doc("settings/integrations").get(), adminDb().doc("settings/secrets").get()]);
+  const [snap, sec, gen] = await Promise.all([adminDb().doc("settings/integrations").get(), adminDb().doc("settings/secrets").get(), adminDb().doc("settings/general").get()]);
   const s = snap.data() || {};
   const secrets = sec.data() || {};
+  const shopName = (gen.data() || {}).shopName || "";
   const env = process.env;
   return {
     provider: s.emailProvider || "",
@@ -17,7 +18,16 @@ export async function mailConfig() {
     smtpPort: Number(s.smtpPort || env.SMTP_PORT || 465),
     smtpUser: s.smtpUser || env.SMTP_USER || "",
     smtpPass: secrets.smtpPass || s.smtpPass || env.SMTP_PASS || "",
+    shopName,
   };
+}
+
+// The name people see as the sender is the shop name from Settings. The address comes from Integrations.
+export function senderHeader(address, name) {
+  const addr = (String(address).match(/<([^>]+)>/)?.[1] || String(address)).trim();
+  if (!addr) return addr;
+  const display = String(name || "").replace(/["<>\r\n]/g, "").trim();
+  return display ? `"${display}" <${addr}>` : addr;
 }
 
 // attachments: [{ filename, content: Uint8Array }]. to may be one address or a list.
@@ -27,7 +37,7 @@ export async function sendMail({ to, subject, text, html, attachments = [] }) {
   if (useResend) {
     if (!c.resendApiKey) throw configError("Resend is selected but no API key is saved. Add it in Administration → Integrations.");
     if (!c.from) throw configError("Set the sender address in Administration → Integrations. Use an address on your verified Resend domain.");
-    return sendWithResend({ apiKey: c.resendApiKey, from: c.from, to, subject, text, html, attachments });
+    return sendWithResend({ apiKey: c.resendApiKey, from: senderHeader(c.from, c.shopName), to, subject, text, html, attachments });
   }
   if (!c.smtpUser || !c.smtpPass) {
     throw configError("Email is not set up yet. Choose Resend or SMTP in Administration → Integrations and save it.");
@@ -39,7 +49,7 @@ export async function sendMail({ to, subject, text, html, attachments = [] }) {
     auth: { user: c.smtpUser, pass: c.smtpPass },
   });
   await transport.sendMail({
-    from: c.from || c.smtpUser, to: [].concat(to).join(","), subject, text, html,
+    from: senderHeader(c.from || c.smtpUser, c.shopName), to: [].concat(to).join(","), subject, text, html,
     attachments: attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content) })),
   });
 }
