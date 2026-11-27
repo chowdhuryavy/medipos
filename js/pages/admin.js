@@ -755,7 +755,13 @@ async function viewLists(body) {
         if (b.hasAttribute("data-done")) return close();
         if (b.hasAttribute("data-add")) return go("form", -1);
         if (b.hasAttribute("data-edit")) return go("form", Number(b.dataset.edit));
-        if (b.hasAttribute("data-del")) return go("confirm", Number(b.dataset.del));
+        if (b.hasAttribute("data-del")) {
+          // Deletes use the app's standard confirmation and notice boxes, like the rest of Settings.
+          const i = Number(b.dataset.del);
+          const info = deleteInfo(i);
+          if (info.blocked) return alertBox({ title: "Can't delete", tone: "warn", message: info.msg });
+          return confirmBox(info.msg, { title: "Delete?", confirmText: "Delete" }).then((ok) => { if (ok) performDelete(i); });
+        }
         if (b.hasAttribute("data-yes")) return performDelete(Number(b.dataset.yes));
         if (b.hasAttribute("data-cancel")) return go("list");
         if (b.hasAttribute("data-top")) {
