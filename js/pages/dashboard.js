@@ -1,4 +1,5 @@
 import { db, collection, query, where, orderBy, limit, getDocs } from "../firebase.js";
+import { returnsAsSales } from "../report-tables.js";
 import {
   session, settings, money, esc, icon, todayISO, daysAgoISO, daysFromNowISO, monthStartISO,
   animateCount, fmtDateTime, can, round2,
@@ -26,8 +27,9 @@ export async function render(el) {
   const from = weekStart < monthStart ? weekStart : monthStart;
   const soon = daysFromNowISO(settings.expiryWarnDays);
 
-  const [salesSnap, productSnap, batchSnap, recentSnap, expenseSnap, openBills] = await Promise.all([
+  const [salesSnap, retSnap, productSnap, batchSnap, recentSnap, expenseSnap, openBills] = await Promise.all([
     getDocs(query(collection(db, "sales"), where("date", ">=", from))),
+    getDocs(query(collection(db, "returns"), where("date", ">=", from))),
     getDocs(collection(db, "products")),
     getDocs(query(collection(db, "batches"), where("remaining", ">", 0))),
     getDocs(query(collection(db, "sales"), orderBy("createdAt", "desc"), limit(6))),
@@ -36,7 +38,8 @@ export async function render(el) {
     allOpenBills().catch(() => []),
   ]);
 
-  const sales = salesSnap.docs.map((d) => d.data());
+  // Returns and voids count as negative sales on their day, so the figures match the reports.
+  const sales = [...salesSnap.docs.map((d) => d.data()), ...returnsAsSales(retSnap.docs.map((d) => d.data()))];
   const products = productSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.active !== false);
   const batches = batchSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const expenses = expenseSnap.docs.map((d) => d.data());

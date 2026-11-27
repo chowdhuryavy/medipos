@@ -1,6 +1,7 @@
 import { reserveJv, writeVoucher } from "../journal.js";
 import { db, collection, doc, getDocs, query, where, runTransaction, serverTimestamp, increment } from "../firebase.js";
-import { onAction, onSubmit } from "../core.js";
+import { post } from "../api.js";
+import { onAction, onSubmit, isPostable } from "../core.js";
 import { printReceipt } from "../print.js";
 import {
   session, settings, paymentMethod, money, esc, icon, toast, openModal, alertBox, todayISO, calcTotals,
@@ -74,7 +75,7 @@ export async function render(el) {
           : "Prices are fixed by the shop. Ask an administrator to change them."}</p>
         <div class="totals" id="p-totals"></div>
         <div class="form-row">
-          <label>Discount %<input id="p-disc" type="number" inputmode="decimal" min="0" max="${settings.maxDiscountPct}" step="0.5" value="0" /></label>
+          <label>Discount %<input id="p-disc" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="0" /></label>
           <label>Paid by
             <select id="p-pay">
               ${methods.filter((m) => !m.credit || creditOk).map((m) => `<option value="${esc(m.key)}" ${m.key === st.pay ? "selected" : ""}>${esc(m.label)}</option>`).join("")}
@@ -458,7 +459,7 @@ export async function render(el) {
   });
   $("#p-customer").addEventListener("change", (e) => { st.customerId = e.target.value; });
   $("#p-disc").addEventListener("input", (e) => {
-    st.disc = Math.min(settings.maxDiscountPct, Math.max(0, Number(e.target.value) || 0));
+    st.disc = Math.min(100, Math.max(0, Number(e.target.value) || 0));
     paintBill();
   });
   $("#p-pay").addEventListener("change", () => { st.pay = $("#p-pay").value; paintBill(); });
@@ -494,12 +495,17 @@ export async function render(el) {
     const cashOnBill = method.key === "cash" && t.collect > 0;
     const tendered = cashOnBill && $("#p-tender").value !== "" ? Number($("#p-tender").value) : null;
     if (tendered !== null && tendered < 0) return toast("Cash received cannot be negative", "error");
+    // A discount above the cashier limit needs an administrator to approve it first.
+    let approvalId = null;
+    if (st.disc > settings.maxDiscountPct) {
+      try { approvalId = await askDiscountApproval(st.disc); } catch (err) { return toast(err.message, "error"); }
+    }
     const btn = $("#p-charge");
     btn.disabled = true;
     btn.classList.add("loading");
     try {
       const customer = customers.find((c) => c.id === st.customerId) || null;
-      const sale = await completeSale({ lines, discountPct: st.disc, method, customer, tendered });
+      const sale = await completeSale({ lines, discountPct: st.disc, method, customer, tendered, approvalId });
       await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: method.key, services: sale.serviceCount });
       for (const l of lines) if (!isService(l)) byId[l.id].stock = (Number(byId[l.id].stock) || 0) - l.pieces;
       Object.assign(floats, sale.floatBalances || {});
@@ -587,9 +593,40 @@ export async function render(el) {
   paintBill();
 }
 
+// Asks an administrator to approve a discount. The server checks their password and returns a short-lived approval.
+function askDiscountApproval(pct) {
+  return new Promise((resolve, reject) => {
+    openModal("Manager approval needed", `
+      <p class="muted small">This discount (${pct}%) is above the limit for cashiers (${settings.maxDiscountPct}%). An administrator must approve it with their own email and password.</p>
+      <form id="da-form" class="form-grid">
+        <label class="span-2">Administrator email<input name="email" type="email" autocomplete="off" required /></label>
+        <label class="span-2">Administrator password<input name="password" type="password" autocomplete="off" required /></label>
+        <div class="form-actions span-2">
+          <button class="btn ghost" type="button" id="da-cancel">Cancel</button>
+          <button class="btn primary" type="submit">Approve</button>
+        </div>
+      </form>`, (host, close) => {
+      const form = host.querySelector("#da-form");
+      host.querySelector("#da-cancel").addEventListener("click", () => { close(); reject(new Error("Discount cancelled.")); });
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = new FormData(form);
+        try {
+          const r = await post("/api/till", { action: "discount-approval", discountPct: pct, approverEmail: f.get("email"), approverPassword: f.get("password") }, { secure: true });
+          close();
+          toast(`Discount approved by ${r.approvedBy}`, "success");
+          resolve(r.approvalId);
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      });
+    });
+  });
+}
+
 /* Runs the whole sale atomically: stock in pieces (FEFO batches), lowest-price check, service fees and transfers,
    invoice number, one balanced journal, customer balance. */
-async function completeSale({ lines, discountPct, method, customer, tendered = null }) {
+async function completeSale({ lines, discountPct, method, customer, tendered = null, approvalId = null }) {
   const today = todayISO();
   const productLines = lines.filter((l) => l.kind !== "service");
   const serviceLines = lines.filter((l) => l.kind === "service");
@@ -605,6 +642,8 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
 
   return runTransaction(db, async (tx) => {
     const counter = await tx.get(counterRef);
+    const payAcc = await tx.get(doc(db, "accounts", method.account));
+    if (payAcc.exists() && !isPostable(payAcc.data())) throw new Error(`The payment account for ${method.label} is ${payAcc.data().status}. Make it active in Chart of accounts first.`);
     const seq = ((counter.exists() && counter.data().sale) || 0) + 1;
 
     const priced = [];
@@ -644,6 +683,7 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
         ...l, name: p.name, unit: u.name, size: u.size, pieces,
         listPrice: u.price, price: l.price, vatRate: Number(p.vatRate) || 0,
         costPrice: Number(p.costPrice) || 0, cogs: lineCogs, kind: "product",
+        batches: plan.map((step) => ({ id: step.id, pieces: step.take, cost: Number(batches.find((x) => x.id === step.id)?.cost) || 0 })),
       });
     }
 
@@ -709,7 +749,7 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
       ...goods.lines.map((l) => ({
         productId: l.id, name: l.name, unit: l.unit, unitSize: l.size, qty: l.qty, pieces: l.pieces,
         price: l.price, listPrice: l.listPrice, priceExtra: round2(Math.max(0, l.price - l.listPrice) * l.qty),
-        vatRate: l.vatRate, costPrice: l.costPrice, cogs: l.cogs,
+        vatRate: l.vatRate, costPrice: l.costPrice, cogs: l.cogs, batches: l.batches || [],
         lineNet: l.lineNet, lineVat: l.lineVat, lineTotal: l.lineTotal, kind: "product",
       })),
       ...services.map((v) => ({
@@ -730,6 +770,7 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
       payment: method.key, paymentLabel: method.label,
       tendered: paid, change: paid === null ? null : round2(paid - collect),
       cashier: session.name, cashierUid: session.uid, journalId: journalRef.id,
+      paymentAccount: method.account, approvalId: approvalId || null,
       createdAt: serverTimestamp(),
     });
 

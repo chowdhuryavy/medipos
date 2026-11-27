@@ -52,14 +52,16 @@ export function isDue(schedule, now = new Date()) {
 
 async function loadData(from, to) {
   const db = adminDb();
-  const [sales, expenses, products, batches] = await Promise.all([
+  const [sales, returns, expenses, products, batches] = await Promise.all([
     db.collection("sales").where("date", ">=", from).where("date", "<=", to).get(),
+    db.collection("returns").where("date", ">=", from).where("date", "<=", to).get(),
     db.collection("expenses").where("date", ">=", from).where("date", "<=", to).get(),
     db.collection("products").get(),
     db.collection("batches").get(),
   ]);
   return {
     sales: sales.docs.map((d) => d.data()),
+    returns: returns.docs.map((d) => d.data()),
     expenses: expenses.docs.map((d) => d.data()),
     products: products.docs.map((d) => ({ id: d.id, ...d.data() })),
     batches: batches.docs.map((d) => d.data()),

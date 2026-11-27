@@ -52,14 +52,16 @@ export async function render(el) {
   async function load() {
     out.innerHTML = `<div class="skeleton"></div>`;
     const { from, to } = range();
-    const [salesSnap, expSnap, prodSnap, batchSnap] = await Promise.all([
+    const [salesSnap, retSnap, expSnap, prodSnap, batchSnap] = await Promise.all([
       getDocs(query(collection(db, "sales"), where("date", ">=", from), where("date", "<=", to))),
+      getDocs(query(collection(db, "returns"), where("date", ">=", from), where("date", "<=", to))),
       getDocs(query(collection(db, "expenses"), where("date", ">=", from), where("date", "<=", to))),
       getDocs(collection(db, "products")),
       getDocs(collection(db, "batches")),
     ]);
     tables = buildReportTables({
       sales: salesSnap.docs.map((d) => d.data()),
+      returns: retSnap.docs.map((d) => d.data()),
       expenses: expSnap.docs.map((d) => d.data()),
       products: prodSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
       batches: batchSnap.docs.map((d) => d.data()),

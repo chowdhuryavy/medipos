@@ -38,7 +38,7 @@ const TABS = [
 ];
 const PAGE_NAMES = {
   dashboard: "Dashboard", pos: "Sell", inventory: "Inventory", purchasing: "Purchasing", partners: "Customers & suppliers",
-  accounting: "Accounting", reports: "Reports", admin: "Administration",
+  accounting: "Accounting", reports: "Reports", returns: "Returns & voids", admin: "Administration",
 };
 
 export async function render(el) {
@@ -111,14 +111,14 @@ async function renderStaffCard(host, reload) {
     if (b.dataset.deleteUser) {
       const u = users.find((x) => x.id === b.dataset.deleteUser);
       if (!(await confirmBox(`Delete ${u.name}? Their sign-in is removed and they can no longer use MediPOS. Past sales keep their name.`))) return;
-      await post("/api/admin/delete-user", { uid: u.id }, { secure: true });
+      await post("/api/admin/users", { action: "delete", uid: u.id }, { secure: true });
       toast("Staff account deleted", "success");
       return reload();
     }
     if (b.dataset.reset) {
       const u = users.find((x) => x.id === b.dataset.reset);
       if (!(await confirmBox(`Reset ${u.name}'s password? A temporary password will be emailed to ${u.email}, and they must change it at sign-in.`))) return;
-      await post("/api/admin/reset-password", { uid: u.id }, { secure: true });
+      await post("/api/admin/users", { action: "reset", uid: u.id }, { secure: true });
       toast("Temporary password emailed", "success");
       reload();
     }
@@ -166,7 +166,7 @@ function openUserForm(u, reload) {
       try {
         if (isNew) {
           const email = String(f.get("email") || "").trim();
-          const created = await post("/api/admin/create-user", { name, email, role }, { secure: true });
+          const created = await post("/api/admin/users", { action: "create", name, email, role }, { secure: true });
           const extra = {};
           if (!active) extra.active = false;
           if (requireOtp) extra.requireOtp = true;

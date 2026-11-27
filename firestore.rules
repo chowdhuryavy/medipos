@@ -124,9 +124,32 @@ service cloud.firestore {
 
     // ───── transactions (append-only) ─────
     match /sales/{id} {
-      allow read: if canPage('pos') || canPage('dashboard') || canPage('reports') || canPage('accounting');
-      allow create: if canWrite('pos');
+      allow read: if canPage('pos') || canPage('dashboard') || canPage('reports') || canPage('accounting') || canPage('returns');
+      // A discount above the cashier limit (settings/general.maxDiscountPct) needs an administrator's approval:
+      // an approvals/{id} record made for this same cashier, for at least this discount, and not yet expired.
+      allow create: if canWrite('pos') && (
+        request.resource.data.discountPct <= get(/databases/$(database)/documents/settings/general).data.get('maxDiscountPct', 100)
+        || (request.resource.data.get('approvalId', null) != null
+          && exists(/databases/$(database)/documents/approvals/$(request.resource.data.approvalId))
+          && get(/databases/$(database)/documents/approvals/$(request.resource.data.approvalId)).data.kind == 'discount'
+          && get(/databases/$(database)/documents/approvals/$(request.resource.data.approvalId)).data.requestedBy == request.auth.uid
+          && get(/databases/$(database)/documents/approvals/$(request.resource.data.approvalId)).data.pct >= request.resource.data.discountPct
+          && get(/databases/$(database)/documents/approvals/$(request.resource.data.approvalId)).data.expiresAt > request.time)
+      );
       allow update, delete: if false;
+    }
+    // Returns and voids are written only by the server, after the approver's password is checked.
+    match /returns/{id} {
+      allow read: if canPage('returns') || canPage('reports') || canPage('accounting');
+      allow create, update, delete: if false;
+    }
+    match /saleReturns/{id} {
+      allow read: if canPage('returns');
+      allow write: if false;
+    }
+    // Discount approvals: written by the server only.
+    match /approvals/{id} {
+      allow read, write: if false;
     }
     match /purchases/{id} {
       allow read: if canPage('purchasing') || canPage('reports') || canPage('accounting') || canWrite('partners');

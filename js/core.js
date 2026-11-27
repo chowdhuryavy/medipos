@@ -51,9 +51,9 @@ export const settings = structuredClone(DEFAULT_SETTINGS);
 export const WRITE_AREAS = ["pos", "inventory", "purchasing", "partners", "accounting"];
 
 export const DEFAULT_ROLES = {
-  admin:       { label: "Administrator", pages: ["dashboard", "pos", "inventory", "purchasing", "partners", "accounting", "reports", "admin"], write: [...WRITE_AREAS] },
-  pharmacist:  { label: "Pharmacist",    pages: ["dashboard", "pos", "inventory", "purchasing", "partners", "reports"], write: ["pos", "inventory", "purchasing", "partners"] },
-  cashier:     { label: "Cashier",       pages: ["dashboard", "pos", "partners"], write: ["pos", "partners"] },
+  admin:       { label: "Administrator", pages: ["dashboard", "pos", "returns", "inventory", "purchasing", "partners", "accounting", "reports", "admin"], write: [...WRITE_AREAS] },
+  pharmacist:  { label: "Pharmacist",    pages: ["dashboard", "pos", "returns", "inventory", "purchasing", "partners", "reports"], write: ["pos", "inventory", "purchasing", "partners"] },
+  cashier:     { label: "Cashier",       pages: ["dashboard", "pos", "returns", "partners"], write: ["pos", "partners"] },
   storekeeper: { label: "Storekeeper",   pages: ["inventory", "purchasing", "partners"], write: ["inventory", "purchasing"] },
   accountant:  { label: "Accountant",    pages: ["dashboard", "accounting", "reports", "purchasing", "partners"], write: ["accounting"] },
 };
@@ -124,6 +124,11 @@ export const DEFAULT_ACCOUNTS = [
 ];
 
 export const PURCHASE_PAYMENT_ACCOUNT = { cash: ACCOUNTS.CASH, bank: ACCOUNTS.BANK, credit: ACCOUNTS.AP };
+
+// Active accounts take new postings. Inactive and closed accounts keep their history, but cannot be picked or posted to.
+export const ACCOUNT_STATUSES = [["active", "Active"], ["inactive", "Inactive"], ["closed", "Closed"]];
+export const isPostable = (a) => !a.status || a.status === "active";
+export const statusLabel = (a) => (isPostable(a) ? "" : ACCOUNT_STATUSES.find(([v]) => v === a.status)?.[1] || "Inactive");
 
 /* ───────────────────────── formatting & dates ───────────────────────── */
 
@@ -331,9 +336,15 @@ export function allocateFEFO(batches, qty, { includeExpired = false } = {}) {
 
 // Double-entry guard: every journal must balance before it is written.
 export function buildJournal({ date = todayISO(), memo, ref = "", lines }) {
-  const norm = lines
-    .filter((l) => (Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0)
-    .map((l) => ({ account: String(l.account), debit: round2(Number(l.debit) || 0), credit: round2(Number(l.credit) || 0) }));
+  // Every line is checked: no negative amounts, one side per line, nothing dropped silently.
+  const norm = [];
+  for (const l of lines) {
+    const d = round2(Number(l.debit) || 0), c = round2(Number(l.credit) || 0);
+    if (d < 0 || c < 0) throw new Error(`Journal amounts cannot be negative (account ${l.account}).`);
+    if (d > 0 && c > 0) throw new Error(`Account ${l.account} has a debit and a credit on one line. Use two lines.`);
+    if (d === 0 && c === 0) continue;
+    norm.push({ account: String(l.account), debit: d, credit: c });
+  }
   if (!norm.length) throw new Error("Journal has no amounts");
   const debit = round2(norm.reduce((s, l) => s + l.debit, 0));
   const credit = round2(norm.reduce((s, l) => s + l.credit, 0));

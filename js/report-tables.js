@@ -130,13 +130,36 @@ function servicesTable(sales, money) {
   };
 }
 
+// A return or void is reported as a negative sale on the day it happened, so revenue, profit and stock reports net out.
+export function returnsAsSales(returns = []) {
+  const n = (v) => Number(v) || 0;
+  return returns.map((r) => ({
+    date: r.date,
+    invoiceNo: `${r.invoiceNo} (${r.type === "void" ? "void" : "return"})`,
+    customerName: r.customerName || "Walk-in",
+    customerId: r.customerId || null,
+    payment: r.paymentKey || "",
+    paymentLabel: r.paymentKey || "",
+    items: (r.lines || []).map((l) => ({
+      productId: l.productId, name: l.name, unit: "", unitSize: 1,
+      qty: -n(l.qty), pieces: -n(l.pieces), price: n(l.qty) ? -(n(l.total) / n(l.qty)) : 0,
+      listPrice: 0, priceExtra: 0, vatRate: 0, costPrice: 0, cogs: -n(l.cogs),
+      lineNet: -n(l.net), lineVat: -n(l.vat), lineTotal: -n(l.total), kind: "product",
+    })),
+    subtotal: 0, discount: 0, net: -n(r.net), vat: -n(r.vat), total: -n(r.total), cogs: -n(r.cogs),
+    priceExtra: 0, serviceFees: 0, serviceCount: 0, transfersIn: 0, transfersOut: 0, collect: -n(r.total),
+    isReturn: true,
+  }));
+}
+
 /**
  * All report tables for a date range.
  * data: { sales, expenses, products, batches }  (raw Firestore documents' data)
  * opts: { from, to, today, soon, group, money }
  */
-export function buildReportTables({ sales = [], expenses = [], products = [], batches = [] }, { from, to, today, soon, group = "month", money }) {
+export function buildReportTables({ sales: soldSales = [], returns = [], expenses = [], products = [], batches = [] }, { from, to, today, soon, group = "month", money }) {
   const fmt = money || ((n) => (Number(n) || 0).toFixed(2));
+  const sales = [...soldSales, ...returnsAsSales(returns)];
   const sorted = [...sales].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
   // Sales detail, product summary and the daily chart (computed in the same pass).
@@ -181,7 +204,7 @@ export function buildReportTables({ sales = [], expenses = [], products = [], ba
       numeric: [4, 5, 6, 7, 8, 9],
       rows: saleRows,
       summary: [
-        ["Bills", sales.length],
+        ["Bills", sales.filter((s) => !s.isReturn).length],
         ["Revenue (net)", fmt(round2(net))],
         ["VAT", fmt(round2(vat))],
         ["Total collected", fmt(round2(total))],

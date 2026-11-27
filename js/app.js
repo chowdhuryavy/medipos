@@ -21,12 +21,13 @@ const PAGES = {
   partners: "Customers",
   accounting: "Accounting",
   reports: "Reports",
+  returns: "Returns",
   admin: "Admin",
 };
 const PAGE_TITLE = { ...PAGES, pos: "Point of Sale", partners: "Customers & Suppliers", admin: "Administration" };
 const PAGE_ICON = {
   dashboard: "dashboard", pos: "cart", inventory: "inventory", purchasing: "purchase",
-  partners: "partners", accounting: "accounting", reports: "reports", admin: "admin",
+  partners: "partners", accounting: "accounting", reports: "reports", returns: "cart", admin: "admin",
 };
 const MOBILE_MAX_TABS = 4;
 

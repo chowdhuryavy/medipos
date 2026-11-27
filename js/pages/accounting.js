@@ -1,3 +1,4 @@
+import { isPostable, ACCOUNT_STATUSES, statusLabel } from "../core.js";
 import { reserveJv, writeVoucher, reverseVoucher, numberExistingVouchers, voucherHtml } from "../journal.js";
 import { branding } from "../branding.js";
 import { manageExpenseCategories, expenseCategories } from "../expense-categories.js";
@@ -53,7 +54,7 @@ const monthKey = (d) => d.slice(0, 7);
 async function viewOverview(body, go) {
   const [accounts, jSnap, floatSnap] = await Promise.all([loadAccounts(), getDocs(collection(db, "journal")), getDocs(collection(db, "floats")).catch(() => ({ docs: [] }))]);
   const entries = jSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const expenseAccounts = accounts.filter((a) => a.type === "expense");
+  const expenseAccounts = accounts.filter((a) => a.type === "expense" && isPostable(a));
   const all = accumulate(entries, accounts, "0000-00-00");
   const byCode = Object.fromEntries(all.map((a) => [a.code, a]));
   const balanceOf = (code) => {
@@ -158,9 +159,9 @@ async function viewOverview(body, go) {
 
   body.querySelectorAll("[data-qa]").forEach((b) => b.addEventListener("click", () => {
     const k = b.dataset.qa;
-    if (k === "manual") openManualEntry(accounts, () => viewOverview(body, go));
+    if (k === "manual") openManualEntry(accounts.filter(isPostable), () => viewOverview(body, go));
     else if (k === "expense") openExpenseForm(expenseAccounts, accounts, () => viewOverview(body, go));
-    else if (k === "topup") openFloatTopUp(accounts, () => viewOverview(body, go));
+    else if (k === "topup") openFloatTopUp(accounts.filter(isPostable), () => viewOverview(body, go));
     else go(k);
   }));
 }
@@ -443,7 +444,7 @@ async function viewLedger(body) {
 }
 
 function openManualEntry(accounts, reload) {
-  const opts = accounts.map((a) => `<option value="${esc(a.code)}">${esc(a.code)} · ${esc(a.name)}</option>`).join("");
+  const opts = accounts.filter(isPostable).map((a) => `<option value="${esc(a.code)}">${esc(a.code)} · ${esc(a.name)}</option>`).join("");
   const rowHtml = () => `
     <div class="jl-row">
       <select data-k="account" aria-label="Account"><option value="">Account…</option>${opts}</select>
@@ -544,7 +545,7 @@ async function viewChart(body) {
         <tbody>
           ${accounts.map((a) => `<tr class="row-in">
             <td data-label="Code">${esc(a.code)}${isSystem(a.code) ? ` <span class="badge">System</span>` : ""}</td>
-            <td data-label="Name">${esc(a.name)}</td>
+            <td data-label="Name">${esc(a.name)}${statusLabel(a) ? ` <span class="badge">${esc(statusLabel(a))}</span>` : ""}</td>
             <td data-label="Type"><span class="badge">${esc(a.type)}</span></td>
             <td data-label="Entries" class="r">${entries.get(a.code) || 0}</td>
             <td class="actions">
@@ -590,6 +591,11 @@ function openAccountForm(account, reload, isSystem = () => false) {
             .map(([v, l]) => `<option value="${v}" ${a.type === v ? "selected" : ""}>${l}</option>`).join("")}
         </select>
       </label>
+      <label>Status
+        <select name="status" ${locked ? "disabled" : ""}>
+          ${ACCOUNT_STATUSES.map(([v, l]) => `<option value="${v}" ${(a.status || "active") === v ? "selected" : ""}>${l}</option>`).join("")}
+        </select>
+      </label>
       <label class="span-2">Name<input name="name" required maxlength="80" value="${esc(a.name)}" /></label>
       <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">${editing ? "Save changes" : "Create"}</button></div>
     </form>`, (body, close) => {
@@ -600,7 +606,7 @@ function openAccountForm(account, reload, isSystem = () => false) {
       const name = String(f.get("name")).trim();
       if (!name) throw new Error("Give the account a name.");
       if (editing) {
-        const patch = { name };
+        const patch = { name, status: locked ? "active" : String(f.get("status") || "active") };
         if (!locked) patch.type = String(f.get("type"));
         await updateDoc(doc(db, "accounts", a.code), patch);
         await audit("account.update", { code: a.code, ...patch });
@@ -610,7 +616,7 @@ function openAccountForm(account, reload, isSystem = () => false) {
         if (!/^\d{4,6}$/.test(code)) throw new Error("The code must be 4 to 6 digits.");
         const ref = doc(db, "accounts", code);
         if ((await getDoc(ref)).exists()) throw new Error("That code already exists.");
-        await setDoc(ref, { code, name, type: String(f.get("type")) });
+        await setDoc(ref, { code, name, type: String(f.get("type")), status: String(f.get("status") || "active") });
         await audit("account.create", { code });
         toast("Account created", "success");
       }
@@ -627,7 +633,7 @@ async function viewExpenses(body) {
     getDocs(query(collection(db, "expenses"), orderBy("date", "desc"), limit(100))),
     loadAccounts(),
   ]);
-  const expenseAccounts = accounts.filter((a) => a.type === "expense");
+  const expenseAccounts = accounts.filter((a) => a.type === "expense" && isPostable(a));
   const rows = snap.docs.map((d) => d.data());
   body.innerHTML = `
     <section class="card">
