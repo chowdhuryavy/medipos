@@ -375,7 +375,7 @@ function buildShell() {
       <div class="scrim" id="scrim"></div>
       <aside class="sidebar" id="sidebar">
         <div class="brand-card">
-          <div class="brand-logo-wrap">${branding.logoUrl ? `<img class="brand-logo-sm" src="${branding.logoUrl}" alt="" />` : `<div class="brand-mark">${icon("pos")}</div>`}</div>
+          <div class="brand-logo-wrap">${branding.logoUrl ? `<img class="brand-logo-sm" src="${esc(branding.logoUrl)}" alt="" />` : `<div class="brand-mark">${icon("pos")}</div>`}</div>
           <div class="brand-text"><strong>${esc(settings.shopName)}</strong><small>POS &amp; Accounts</small></div>
         </div>
         <nav class="nav">

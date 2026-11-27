@@ -1165,3 +1165,11 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 @media (max-width: 900px) {
   .sticky-actions { bottom: calc(var(--tabbar-h) + 8px); }
 }
+
+/* Loading screen styles (chosen in Branding) */
+.splash.style-pulse .round-orbit { display: none; }
+.splash.style-pulse .round-ring { animation: ringBreathe 1.8s ease-in-out infinite; }
+@keyframes ringBreathe { 0%, 100% { transform: scale(.94); opacity: .55; } 50% { transform: scale(1.06); opacity: 1; } }
+.splash.style-bar .round-ring, .splash.style-bar .round-orbit { display: none; }
+.splash.style-bar .round-logo { animation: none; }
+.splash.style-bar .splash-bar { width: 240px; height: 8px; }

@@ -1,9 +1,12 @@
+import { timingSafeEqual } from "node:crypto";
 import { runDueSchedules } from "../../server/report-job.js";
 
 // Called by Vercel Cron. Vercel sends "Authorization: Bearer <CRON_SECRET>", so nobody else can trigger it.
 export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.authorization !== `Bearer ${secret}`) {
+  const given = Buffer.from(String(req.headers.authorization || ""));
+  const want = Buffer.from(`Bearer ${secret || ""}`);
+  if (!secret || given.length !== want.length || !timingSafeEqual(given, want)) {
     return res.status(401).json({ error: "Not allowed." });
   }
   try {

@@ -5,17 +5,18 @@ import { adminDb } from "./firebase-admin.js";
 // Mail settings are saved by an administrator in Administration → Integrations (settings/integrations).
 // Environment variables are used for any field left empty, so older Vercel setups keep working.
 export async function mailConfig() {
-  const snap = await adminDb().doc("settings/integrations").get();
+  const [snap, sec] = await Promise.all([adminDb().doc("settings/integrations").get(), adminDb().doc("settings/secrets").get()]);
   const s = snap.data() || {};
+  const secrets = sec.data() || {};
   const env = process.env;
   return {
     provider: s.emailProvider || "",
-    resendApiKey: s.resendApiKey || env.RESEND_API_KEY || "",
+    resendApiKey: secrets.resendApiKey || s.resendApiKey || env.RESEND_API_KEY || "",
     from: s.mailFrom || env.MAIL_FROM || "",
     smtpHost: s.smtpHost || env.SMTP_HOST || "smtp.gmail.com",
     smtpPort: Number(s.smtpPort || env.SMTP_PORT || 465),
     smtpUser: s.smtpUser || env.SMTP_USER || "",
-    smtpPass: s.smtpPass || env.SMTP_PASS || "",
+    smtpPass: secrets.smtpPass || s.smtpPass || env.SMTP_PASS || "",
   };
 }
 

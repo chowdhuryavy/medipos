@@ -2,12 +2,16 @@ import { APP_VERSION, APP_NAME } from "./config.js";
 import { branding, logoHtml } from "./branding.js";
 import { icon, esc } from "./core.js";
 
-/** The one loading screen: the logo in a round badge, a ring turning around it and a dot orbiting. */
-export function splashHtml(message) {
+/** Loading screen styles an administrator can choose in Branding. */
+export const LOADING_STYLES = { orbit: "Orbit (rotating ring)", pulse: "Pulse (breathing ring)", bar: "Progress bar" };
+
+/** The loading screen: the logo in a round badge, with the chosen animation around it. */
+export function splashHtml(message, style) {
   const name = branding.shopName || APP_NAME;
   const msg = message || branding.loadingMessage || "Loading…";
+  const s = LOADING_STYLES[style] ? style : LOADING_STYLES[branding.loadingStyle] ? branding.loadingStyle : "orbit";
   return `
-    <section class="splash" role="status" aria-live="polite">
+    <section class="splash style-${s}" role="status" aria-live="polite">
       <div class="splash-bg" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span></div>
       <span class="sparkle s1" aria-hidden="true"></span><span class="sparkle s2" aria-hidden="true"></span><span class="sparkle s3" aria-hidden="true"></span><span class="sparkle s4" aria-hidden="true"></span>
       <div class="splash-core">
@@ -32,10 +36,10 @@ export function showSplash(root, message) {
 }
 
 /** Full-screen loader shown while another screen is opening. Returns a handle for hideRouteLoader. */
-export function showRouteLoader(message) {
+export function showRouteLoader(message, style) {
   const wrap = document.createElement("div");
   wrap.className = "route-loader";
-  wrap.innerHTML = splashHtml(message);
+  wrap.innerHTML = splashHtml(message, style);
   document.body.appendChild(wrap);
   return { wrap, started: performance.now() };
 }

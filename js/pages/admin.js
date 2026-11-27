@@ -5,7 +5,7 @@ import {
 } from "../firebase.js";
 import { firebaseConfig } from "../config.js";
 import { nextExpenseCode, expenseCategories } from "../expense-categories.js";
-import { showRouteLoader, hideRouteLoader } from "../splash.js";
+import { showRouteLoader, hideRouteLoader, LOADING_STYLES } from "../splash.js";
 import {
   session, roles, DEFAULT_ROLES, WRITE_AREAS, settings, DEFAULT_SETTINGS, esc, icon, toast, openModal, confirmBox, alertBox,
   audit, ensureChartOfAccounts, fmtDateTime, money,
@@ -236,7 +236,7 @@ async function viewSettings(body) {
         <h3>Shop logo</h3>
         <p class="muted small">Shown on the sign-in page, the sidebar, the top bar, the dashboard, every email and as the app icon.</p>
         <div class="logo-editor">
-          <div class="logo-preview" id="logo-preview">${logoUrl ? `<img src="${logoUrl}" alt="Current logo" />` : `<span class="muted small">No logo yet</span>`}</div>
+          <div class="logo-preview" id="logo-preview">${logoUrl ? `<img src="${esc(logoUrl)}" alt="Current logo" />` : `<span class="muted small">No logo yet</span>`}</div>
           <div class="logo-actions">
             <label class="btn ghost sm file-btn">${icon("upload")}<span>Choose logo</span>
               <input type="file" id="logo-file" accept="image/*" hidden /></label>
@@ -267,7 +267,7 @@ async function viewSettings(body) {
     try {
       logoUrl = await readLogo(file);
       logoChanged = true;
-      body.querySelector("#logo-preview").innerHTML = `<img src="${logoUrl}" alt="New logo" />`;
+      body.querySelector("#logo-preview").innerHTML = `<img src="${esc(logoUrl)}" alt="New logo" />`;
     } catch (err) {
       toast(err.message, "error");
     }
@@ -853,7 +853,7 @@ async function viewIntegrations(body) {
       <p class="muted small">Sheets is a reporting copy, not the live database. Set up the Apps Script described in the README, then paste its web-app URL here. Sign-in is not needed: the shared secret protects the link.</p>
       <form id="if" class="form-grid">
         <label class="span-2">Apps Script web-app URL<input name="sheetsUrl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.sheetsUrl || "")}" /></label>
-        <label class="span-2">Shared secret<input name="sheetsSecret" type="password" autocomplete="off" value="${esc(cfg.sheetsSecret || "")}" /></label>
+        <label class="span-2">Shared secret<input name="sheetsSecret" type="password" autocomplete="off" placeholder="${cfg.sheetsSecret ? "Saved. Type a new secret to replace it." : "Paste the secret from the script"}" /></label>
         <div class="form-actions span-2">
           <button type="button" class="btn ghost" id="if-test">${icon("sync")}<span>Test connection</span></button>
           <button class="btn primary" type="submit">${icon("check")}<span>Save</span></button>
@@ -900,9 +900,12 @@ async function viewIntegrations(body) {
     const f = new FormData(e.target);
     await setDoc(doc(db, "settings", "integrations"), {
       sheetsUrl: String(f.get("sheetsUrl") || "").trim(),
-      sheetsSecret: String(f.get("sheetsSecret") || ""),
       updatedAt: serverTimestamp(),
     }, { merge: true });
+    // The secret is only written when a new one is typed, so saving the form never blanks it.
+    if (String(f.get("sheetsSecret") || "")) {
+      await setDoc(doc(db, "settings", "integrations"), { sheetsSecret: String(f.get("sheetsSecret")), updatedAt: serverTimestamp() }, { merge: true });
+    }
     await audit("integrations.update", { sheets: true });
     toast("Saved", "success");
   });
@@ -924,13 +927,16 @@ async function viewIntegrations(body) {
       smtpPort: Number(f.get("smtpPort")) || 0,
       smtpUser: String(f.get("smtpUser") || "").trim(),
     };
-    // Secrets are only written when a new value is typed.
+    // Email secrets go to settings/secrets, which no browser can read back. Only typed values are written.
     const resendApiKey = String(f.get("resendApiKey") || "").trim();
     const smtpPass = String(f.get("smtpPass") || "");
-    if (resendApiKey) patch.resendApiKey = resendApiKey;
-    if (smtpPass) patch.smtpPass = smtpPass;
     try {
-      await setDoc(doc(db, "settings", "integrations"), { ...patch, updatedAt: serverTimestamp() }, { merge: true });
+      const secrets = {};
+      if (resendApiKey) secrets.resendApiKey = resendApiKey;
+      if (smtpPass) secrets.smtpPass = smtpPass;
+      if (Object.keys(secrets).length) await setDoc(doc(db, "settings", "secrets"), { ...secrets, updatedAt: serverTimestamp() }, { merge: true });
+      // Remove any secret that an older version stored in the readable integrations document.
+      await setDoc(doc(db, "settings", "integrations"), { ...patch, resendApiKey: deleteField(), smtpPass: deleteField(), updatedAt: serverTimestamp() }, { merge: true });
       await audit("integrations.email", { provider: patch.emailProvider, from: patch.mailFrom });
       toast("Email settings saved", "success");
     } catch (err) {
@@ -1390,6 +1396,7 @@ async function viewBranding(body) {
         <h3>Loading screen</h3>
         <p class="muted small">Shown when the app opens and each time someone switches to another screen. Applies to everyone, including the sign-in page.</p>
         <div class="form-grid">
+          <label>Style<select name="loadingStyle">${Object.entries(LOADING_STYLES).map(([k, l]) => `<option value="${k}" ${(brand.loadingStyle || "orbit") === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
           <label>Message<input name="loadingMessage" maxlength="60" placeholder="Loading…" value="${esc(brand.loadingMessage || "")}" /></label>
         </div>
         <div class="form-actions"><button type="button" class="btn ghost sm" id="ls-preview">Preview loading screen</button></div>
@@ -1423,7 +1430,8 @@ async function viewBranding(body) {
 
   body.querySelector("#ls-preview").addEventListener("click", () => {
     const msg = body.querySelector('[name="loadingMessage"]').value.trim() || "Loading…";
-    const loader = showRouteLoader(msg);
+    const style = body.querySelector('[name="loadingStyle"]').value;
+    const loader = showRouteLoader(msg, style);
     setTimeout(() => hideRouteLoader(loader, 0), 2600);
   });
 
@@ -1459,6 +1467,7 @@ async function viewBranding(body) {
       await setDoc(doc(db, "branding", "public"), {
         appName, shopName: settings.shopName, brandColor, updatedAt: serverTimestamp(),
         loadingMessage: String(f.get("loadingMessage") || "").trim().slice(0, 60),
+        loadingStyle: LOADING_STYLES[f.get("loadingStyle")] ? String(f.get("loadingStyle")) : "orbit",
       }, { merge: true });
       await setDoc(doc(db, "settings", "emails"), { ...emails, updatedAt: serverTimestamp() });
       await audit("branding.update", { appName, brandColor });

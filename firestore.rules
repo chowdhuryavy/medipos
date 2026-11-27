@@ -82,7 +82,11 @@ service cloud.firestore {
     // ───── public branding (app name, shop name, logo). Contains nothing secret. ─────
     match /branding/public {
       allow read: if true;
-      allow write: if isAdmin();
+      // The logo must be a small embedded PNG, JPEG or WebP image: nothing else can be stored there.
+      allow write: if isAdmin()
+        && (!('logoUrl' in request.resource.data) || request.resource.data.logoUrl == ''
+            || (request.resource.data.logoUrl.size() < 400000
+                && request.resource.data.logoUrl.matches('^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$')));
     }
 
     // ───── catalogue ─────
@@ -128,8 +132,11 @@ service cloud.firestore {
       allow read: if canPage('purchasing') || canPage('reports') || canPage('accounting') || canWrite('partners');
       allow create: if canWrite('purchasing');
       // Paying a supplier only marks bills as paid. Otherwise a posted bill is never changed.
+      // Paid can only go up and never beyond the bill total, so a bill cannot be cleared without a payment.
       allow update: if (canWrite('partners') || canWrite('purchasing'))
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paid', 'status', 'paidAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paid', 'status', 'paidAt'])
+        && request.resource.data.paid >= resource.data.paid
+        && request.resource.data.paid <= resource.data.total;
       allow delete: if false;
     }
     match /journal/{id} {
@@ -137,9 +144,11 @@ service cloud.firestore {
       // Any staff who post money movements create journal lines through their transaction.
       // A voucher must carry its JV number. Once posted it is never edited or deleted; only its
       // reversal link and status change (when it is reversed or numbered).
+      // A voucher has at least two lines (debit and credit).
       allow create: if (canWrite('accounting') || canWrite('pos') || canWrite('purchasing')
         || canWrite('partners') || canWrite('inventory'))
-        && request.resource.data.jvNo is string;
+        && request.resource.data.jvNo is string
+        && request.resource.data.lines is list && request.resource.data.lines.size() >= 2;
       allow update: if canWrite('accounting')
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['jvNo', 'status', 'reversedBy']);
       allow delete: if false;
@@ -207,12 +216,19 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     match /settings/integrations {
-      // Holds the Google Sheets secret: administrators only.
+      // Holds the Google Sheets secret: administrators only. Email keys are NOT stored here any more.
       allow read, write: if isAdmin();
+    }
+    match /settings/secrets {
+      // Email API key and SMTP password. Write-only from the browser: no client can read them back.
+      // The server reads them with full rights.
+      allow read: if false;
+      allow write: if isAdmin();
     }
     match /audit/{id} {
       allow read: if isAdmin();
-      allow create: if isActive();
+      // Entries must name the signed-in person, so nobody can write a log entry as someone else.
+      allow create: if isActive() && request.resource.data.byUid == request.auth.uid;
       allow update, delete: if false;
     }
 
