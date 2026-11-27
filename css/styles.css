@@ -1359,3 +1359,37 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 
 .update-banner .ub-actions { display: flex; gap: 8px; flex: none; }
 .update-banner .ub-actions .btn.ghost { color: #fff; border-color: rgba(255,255,255,.7); background: transparent; }
+
+/* ───────── menu button (phones): animated three-line icon that turns into an X ───────── */
+.menu-btn {
+  display: none; position: relative; width: 44px; height: 44px; padding: 0; flex: none;
+  border: 0; border-radius: 14px; cursor: pointer; place-items: center; color: #fff;
+  background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);
+  box-shadow: 0 10px 22px -10px rgba(15, 118, 110, .8), inset 0 1px 0 rgba(255, 255, 255, .25);
+  transition: transform .18s var(--ease), box-shadow .2s;
+}
+@media (max-width: 900px) { .menu-btn { display: grid; } }
+.menu-btn:hover { box-shadow: 0 14px 26px -10px rgba(15, 118, 110, .9), inset 0 1px 0 rgba(255, 255, 255, .25); }
+.menu-btn:active { transform: scale(.92); }
+.menu-btn:focus-visible { outline: 3px solid #5eead4; outline-offset: 3px; }
+.burger { position: relative; width: 20px; height: 14px; display: block; }
+.burger i {
+  position: absolute; left: 0; width: 100%; height: 2.5px; border-radius: 3px; background: currentColor;
+  transition: transform .34s var(--ease), opacity .2s, top .34s var(--ease);
+}
+.burger i:nth-child(1) { top: 0; }
+.burger i:nth-child(2) { top: 5.75px; }
+.burger i:nth-child(3) { top: 11.5px; }
+.menu-btn.is-open .burger i:nth-child(1) { top: 5.75px; transform: rotate(45deg); }
+.menu-btn.is-open .burger i:nth-child(2) { opacity: 0; transform: scaleX(.2); }
+.menu-btn.is-open .burger i:nth-child(3) { top: 5.75px; transform: rotate(-45deg); }
+.menu-count {
+  position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+  display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #fff; background: var(--danger);
+  box-shadow: 0 0 0 3px var(--bg, #fff);
+  animation: menuPop .4s var(--ease) both;
+}
+.menu-count[hidden] { display: none; }
+.menu-btn.is-open .menu-count { display: none; }
+@keyframes menuPop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .burger i, .menu-btn, .menu-count { transition: none; animation: none; } }

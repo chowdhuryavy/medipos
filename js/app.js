@@ -401,7 +401,10 @@ function buildShell() {
       </aside>
       <div class="main">
         <header class="topbar">
-          <button class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu">${icon("menu")}</button>
+          <button class="menu-btn" id="menu-btn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
+            <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="menu-count" id="menu-count" hidden></span>
+          </button>
           ${branding.logoUrl ? `<img class="topbar-logo" src="${branding.logoUrl}" alt="${esc(settings.shopName || "")} logo" />` : ""}
           <div class="topbar-title"><strong class="topbar-shop">${esc(settings.shopName || "MediPOS")}</strong><small id="page-title"></small></div>
           <div class="grow"></div>
@@ -420,7 +423,13 @@ function buildShell() {
 
   const sidebar = document.getElementById("sidebar");
   const scrim = document.getElementById("scrim");
-  const setDrawer = (open) => { sidebar.classList.toggle("open", open); scrim.classList.toggle("show", open); };
+  const menuBtn = document.getElementById("menu-btn");
+  const setDrawer = (open) => {
+    sidebar.classList.toggle("open", open);
+    scrim.classList.toggle("show", open);
+    menuBtn.classList.toggle("is-open", open);
+    menuBtn.setAttribute("aria-expanded", String(open));
+  };
   document.getElementById("menu-btn").addEventListener("click", () => setDrawer(!sidebar.classList.contains("open")));
   document.getElementById("more-btn")?.addEventListener("click", () => setDrawer(true));
   scrim.addEventListener("click", () => setDrawer(false));

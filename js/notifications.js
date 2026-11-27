@@ -63,6 +63,9 @@ function paintBadge() {
   badge.hidden = n === 0;
   badge.textContent = n > 99 ? "99+" : String(n);
   btn.classList.toggle("has-new", n > 0);
+  // The same count shows on the menu button on phones, so it is seen before the menu opens.
+  const menuCount = document.getElementById("menu-count");
+  if (menuCount) { menuCount.hidden = n === 0; menuCount.textContent = n > 9 ? "9+" : String(n); }
   btn.setAttribute("aria-label", n ? `Notifications, ${n} unread` : "Notifications");
 }
 
