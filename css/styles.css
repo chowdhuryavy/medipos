@@ -1595,3 +1595,36 @@ html[data-lang="bn"] body { line-height: 1.6; }
 .hc-row.ok .hc-dot { background: var(--ok); }
 .hc-row.warn .hc-dot { background: var(--warn); }
 .hc-row.fail .hc-dot { background: var(--danger); }
+
+/* ───────── login motion (visual only) ───────── */
+.login-card { animation: loginCardIn .6s cubic-bezier(.2, .8, .2, 1) both; }
+.login-card > * { animation: loginItemIn .5s cubic-bezier(.2, .8, .2, 1) both; }
+.login-card > *:nth-child(1) { animation-delay: .05s; }
+.login-card > *:nth-child(2) { animation-delay: .12s; }
+.login-card > *:nth-child(3) { animation-delay: .19s; }
+.login-card > *:nth-child(4) { animation-delay: .26s; }
+.login-card > *:nth-child(5) { animation-delay: .33s; }
+.login-card > *:nth-child(6) { animation-delay: .40s; }
+.login-card .brand-logo, .login-card .brand-mark { animation: loginLogoIn .8s cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: .1s; }
+.login-form > * { animation: loginItemIn .5s cubic-bezier(.2, .8, .2, 1) both; }
+.login-form > *:nth-child(1) { animation-delay: .3s; }
+.login-form > *:nth-child(2) { animation-delay: .36s; }
+.login-form > *:nth-child(3) { animation-delay: .42s; }
+.login-form > *:nth-child(4) { animation-delay: .48s; }
+.login-card .btn.xl { transition: transform .18s ease, box-shadow .18s ease; }
+.login-card .btn.xl:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 18px 32px -12px rgba(15, 118, 110, .9); }
+.login-card .btn.xl:active:not(:disabled) { transform: translateY(0) scale(.98); }
+.login-screen .login-art .orb { filter: blur(40px); opacity: .55; animation: loginOrb 14s ease-in-out infinite; }
+.login-screen .login-art .orb.o2 { animation-duration: 18s; animation-direction: reverse; }
+.login-screen .login-art .orb.o3 { animation-duration: 22s; }
+.login-card .brand-logo, .login-card .brand-mark { will-change: transform; }
+
+@keyframes loginCardIn { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes loginItemIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes loginLogoIn { from { opacity: 0; transform: scale(.6) rotate(-12deg); } to { opacity: 1; transform: none; } }
+@keyframes loginOrb { 0%, 100% { translate: 0 0; } 50% { translate: 30px -24px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .login-card, .login-card > *, .login-form > *, .login-card .brand-logo, .login-card .brand-mark, .login-screen .login-art .orb { animation: none !important; }
+  .login-card .btn.xl:hover:not(:disabled) { transform: none; }
+}
