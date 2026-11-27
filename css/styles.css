@@ -340,8 +340,7 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 
 /* ───────── sign-in: more attractive card and desktop side picture ───────── */
 .login-card { border: 1px solid rgba(255, 255, 255, .55); }
-.login-card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px; border-radius: 22px 22px 0 0;
-  background: linear-gradient(90deg, var(--brand), var(--brand-2), #f59e0b); }
+.login-card .brand-logo { width: 96px; height: 96px; max-width: none; max-height: none; border-radius: 50%; object-fit: contain; background: #fff; padding: 8px; box-shadow: 0 12px 28px -10px rgba(0, 0, 0, .45); }
 .login-card h1 { font-size: 26px; letter-spacing: -.01em; margin-top: 6px; }
 .login-card .brand-mark { margin-top: 4px; }
 .login-form .input-wrap input { transition: box-shadow .2s, border-color .2s; }
