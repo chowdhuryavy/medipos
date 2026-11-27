@@ -962,8 +962,8 @@ function viewRoles(body) {
     roleHost.querySelectorAll("[data-del-role]").forEach((b) => b.addEventListener("click", () => deleteRole(b.dataset.delRole, b)));
   }
 
-  // One form for both creating and editing: the name and the permissions are saved together.
-  // key is null for a new role.
+  // Creating: step 1 is the name, then the permissions matrix opens in the same dialog to tick.
+  // Editing: the name and the matrix are shown together. key is null for a new role.
   function openRoleForm(key) {
     const isNew = key === null;
     const locked = key === "admin";
@@ -971,47 +971,81 @@ function viewRoles(body) {
     const staff = isNew ? 0 : (staffCount[key] || 0);
     const title = locked ? `View ${r.label}` : isNew ? "New role" : `Edit ${r.label}`;
 
-    openModal(title, `
-      <form id="re" class="stack role-editor">
-        <label class="field"><span class="field-label">Role name</span>
-          <span class="input-wrap"><input name="label" maxlength="40" value="${esc(r.label)}" placeholder="e.g. Senior cashier" ${locked ? "disabled" : "required"} /></span></label>
-        ${actionGrid(r.actions || {}, locked)}
-        <p class="muted small">${locked
-          ? "Administrator always has every screen and every action."
-          : `Acting on a screen needs View. Everyone with this role gets exactly these actions. A person can still be given more or less on their own page.${!isNew && staff ? ` ${staff} staff use this role now.` : ""}`}</p>
-        <div class="form-actions">
-          <button class="btn ghost" type="button" data-cancel>${locked ? "Close" : "Cancel"}</button>
-          ${locked ? "" : `<button class="btn primary" type="submit">${icon("check")}<span>${isNew ? "Create role" : "Save role"}</span></button>`}
-        </div>
-      </form>`, (m, close) => {
-      m.querySelector("[data-cancel]").addEventListener("click", close);
-      if (locked) return;
-      onSubmit(m.querySelector("#re"), async (e) => {
-        const f = new FormData(e.target);
-        const label = String(f.get("label") || "").trim();
-        if (!label) throw new Error("Enter a role name.");
+    const nameField = (value) => `<label class="field"><span class="field-label">Role name</span>
+          <span class="input-wrap"><input name="label" maxlength="40" value="${esc(value)}" placeholder="e.g. Senior cashier" ${locked ? "disabled" : "required"} /></span></label>`;
 
-        const actions = {};
-        for (const p of PAGE_KEYS) {
-          const acts = ACTIONS.filter((a) => (a === "view" || a === "print" || AREA_OF_PAGE[p]) && f.get(`act__${p}__${a}`) === "on");
-          if (acts.length && !acts.includes("view")) acts.unshift("view");
-          if (acts.includes("view")) actions[p] = acts;
-        }
-        if (!Object.keys(actions).length) throw new Error("Tick View on at least one screen.");
+    openModal(title, `<div id="re-body"></div>`, (m, close) => {
+      const host = m.querySelector("#re-body");
 
-        const roleKey = isNew ? slugRole(label) : key;
-        if (!roleKey) throw new Error("Enter a name with letters or numbers.");
-        if (roleKey === "admin" || (isNew && roleKey in working)) throw new Error("A role with this name already exists.");
+      // Step 1 (new role only): the name, then Continue opens the matrix.
+      const showName = () => {
+        host.innerHTML = `
+          <form id="rn" class="stack role-editor">
+            ${nameField(r.label)}
+            <p class="muted small">Next, tick the screens and actions this role gets.</p>
+            <div class="form-actions">
+              <button class="btn ghost" type="button" data-cancel>Cancel</button>
+              <button class="btn primary" type="submit"><span>Continue</span></button>
+            </div>
+          </form>`;
+        host.querySelector("[data-cancel]").addEventListener("click", close);
+        onSubmit(host.querySelector("#rn"), async (e) => {
+          const label = String(new FormData(e.target).get("label") || "").trim();
+          if (!label) throw new Error("Enter a role name.");
+          if (!slugRole(label)) throw new Error("Enter a name with letters or numbers.");
+          if (slugRole(label) === "admin" || slugRole(label) in working) throw new Error("A role with this name already exists.");
+          r.label = label;
+          showMatrix();
+        });
+      };
 
-        working[roleKey] = {
-          label,
-          pages: Object.keys(actions),
-          write: [...new Set(Object.keys(AREA_OF_PAGE).filter((p) => (actions[p] || []).some((a) => AREA_ACTS.includes(a))).map((p) => AREA_OF_PAGE[p]))],
-          actions,
-        };
-        close();
-        await persistRoles();
-      });
+      // Step 2: the permissions matrix. Locked for administrator.
+      const showMatrix = () => {
+        host.innerHTML = `
+          <form id="re" class="stack role-editor">
+            ${locked ? "" : nameField(r.label)}
+            ${actionGrid(r.actions || {}, locked)}
+            <p class="muted small">${locked
+              ? "Administrator always has every screen and every action."
+              : `Acting on a screen needs View. Everyone with this role gets exactly these actions. A person can still be given more or less on their own page.${!isNew && staff ? ` ${staff} staff use this role now.` : ""}`}</p>
+            <div class="form-actions">
+              <button class="btn ghost" type="button" data-cancel>${locked ? "Close" : isNew ? "Back" : "Cancel"}</button>
+              ${locked ? "" : `<button class="btn primary" type="submit">${icon("check")}<span>${isNew ? "Create role" : "Save role"}</span></button>`}
+            </div>
+          </form>`;
+        const cancel = host.querySelector("[data-cancel]");
+        if (isNew && !locked) cancel.addEventListener("click", showName);
+        else cancel.addEventListener("click", close);
+        if (locked) return;
+        onSubmit(host.querySelector("#re"), async (e) => {
+          const f = new FormData(e.target);
+          const label = String(f.get("label") || "").trim();
+          if (!label) throw new Error("Enter a role name.");
+
+          const actions = {};
+          for (const p of PAGE_KEYS) {
+            const acts = ACTIONS.filter((a) => (a === "view" || a === "print" || AREA_OF_PAGE[p]) && f.get(`act__${p}__${a}`) === "on");
+            if (acts.length && !acts.includes("view")) acts.unshift("view");
+            if (acts.includes("view")) actions[p] = acts;
+          }
+          if (!Object.keys(actions).length) throw new Error("Tick View on at least one screen.");
+
+          const roleKey = isNew ? slugRole(label) : key;
+          if (!roleKey) throw new Error("Enter a name with letters or numbers.");
+          if (roleKey === "admin" || (isNew && roleKey in working)) throw new Error("A role with this name already exists.");
+
+          working[roleKey] = {
+            label,
+            pages: Object.keys(actions),
+            write: [...new Set(Object.keys(AREA_OF_PAGE).filter((p) => (actions[p] || []).some((a) => AREA_ACTS.includes(a))).map((p) => AREA_OF_PAGE[p]))],
+            actions,
+          };
+          close();
+          await persistRoles();
+        });
+      };
+
+      if (isNew) showName(); else showMatrix();
     }, { dialog: true });
   }
 
