@@ -147,8 +147,10 @@ function openForgotPassword(prefillEmail = "") {
         <li class="step" data-step="2"><span>2</span> Code &amp; new password</li>
       </ol>
       <form id="fp-form" class="stack" novalidate>
-        <label class="field"><span class="field-label">Email</span>
-          <span class="input-wrap">${icon("mail")}<input type="email" name="email" inputmode="email" autocomplete="username" value="${esc(prefillEmail)}" required /></span></label>
+        <div id="fp-step1">
+          <label class="field"><span class="field-label">Email</span>
+            <span class="input-wrap">${icon("mail")}<input type="email" name="email" inputmode="email" autocomplete="username" value="${esc(prefillEmail)}" required /></span></label>
+        </div>
         <div id="fp-step2" hidden class="stack">
           <label class="field"><span class="field-label">6-digit code</span>
             <span class="input-wrap">${icon("key")}<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required /></span></label>
@@ -159,6 +161,7 @@ function openForgotPassword(prefillEmail = "") {
       </form>
     </div>`, (body, close) => {
     const form = body.querySelector("#fp-form");
+    const step1 = body.querySelector("#fp-step1");
     const step2 = body.querySelector("#fp-step2");
     const submit = body.querySelector("#fp-submit");
     const help = body.querySelector("#fp-help");
@@ -197,8 +200,9 @@ function openForgotPassword(prefillEmail = "") {
           await post("/api/otp/request", { email });
           stage = 2;
           setStep(2);
-          help.textContent = "We sent a 6-digit code to your email. It expires in 10 minutes.";
-          form.email.readOnly = true;
+          // Once the account is found and the code is sent, only the code and new password are shown.
+          help.textContent = "Enter the 6-digit code we emailed you, then choose a new password.";
+          step1.hidden = true;
           step2.hidden = false;
           if (!pw) pw = passwordFields(body.querySelector("#fp-pw"));
           busy(false, "Reset password");
