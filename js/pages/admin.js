@@ -1,4 +1,7 @@
 import { onSubmit, onAction, onDelegated, withBusy } from "../core.js";
+import { VERSION } from "../version.js";
+import { checkForUpdate } from "../updates.js";
+
 import {
   auth, db, initializeApp, deleteApp, getAuth, createUserWithEmailAndPassword, signOut,
   sendPasswordResetEmail, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, query, where, orderBy, limit, serverTimestamp, writeBatch,
@@ -229,6 +232,40 @@ const FIELDS = [
   ]],
 ];
 
+// Lists recent releases. "Go back" asks for confirmation, then makes that release live.
+function openVersionsModal() {
+  openModal("App versions", `<div class="vs-list" id="vs-list"><p class="muted">Loading recent releases…</p></div>`, (body) => {
+    post("/api/admin/versions", {}, { secure: true }).then(({ deployments }) => {
+      body.querySelector("#vs-list").innerHTML = deployments.length ? deployments.map((d, i) => {
+        const live = d.version === VERSION;
+        return `
+          <article class="vs-row ${live ? "is-live" : ""}">
+            <div class="vs-info">
+              <strong>${d.version ? `Version ${esc(d.version)}` : "Release"} ${live ? `<span class="badge ok">Running now</span>` : i === 0 ? `<span class="badge">Newest</span>` : ""}</strong>
+              <small>${esc(fmtDateTime(d.created))}</small>
+              <small>${esc(d.commit)}</small>
+            </div>
+            ${live ? "" : `<button type="button" class="btn ghost sm" data-go="${esc(d.id)}" data-ver="${esc(d.version ? "version " + d.version : "this release")}">${icon("sync")}<span>Go back</span></button>`}
+          </article>`;
+      }).join("") : `<p class="muted">No earlier releases found.</p>`;
+    }).catch((err) => { body.querySelector("#vs-list").innerHTML = `<p class="muted">${esc(err.message)}</p>`; });
+
+    body.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-go]");
+      if (!b) return;
+      const ok = await confirmBox(`Go back to ${b.dataset.ver}? Everyone gets it the next time they reload. Your data and Firestore rules stay as they are.`, { title: "Go back to an earlier version", tone: "warn", confirmText: "Go back" });
+      if (!ok) return;
+      try {
+        await post("/api/admin/rollback", { deploymentId: b.dataset.go }, { secure: true });
+        toast("Done. A banner will ask everyone to reload.", "success");
+        setTimeout(checkForUpdate, 4000);
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
+  });
+}
+
 async function viewSettings(body) {
   const bSnap = await getDoc(doc(db, "branding", "public"));
   let logoUrl = (bSnap.exists() && bSnap.data().logoUrl) || "";
@@ -263,6 +300,16 @@ async function viewSettings(body) {
         <button class="btn primary" type="submit">${icon("check")}<span>Save settings</span></button>
       </div>
     </form>`;
+
+  // App version: see recent releases and go back to one if the current version misbehaves.
+  const versionCard = document.createElement("section");
+  versionCard.className = "card";
+  versionCard.innerHTML = `
+    <h3>App version</h3>
+    <p class="muted small">You are running version ${esc(VERSION)}. If the app misbehaves after an update, go back to an earlier release. Your data and Firestore rules are not changed.</p>
+    <div class="form-actions"><button type="button" class="btn ghost" id="vs-open">${icon("sync")}<span>Show versions</span></button></div>`;
+  body.querySelector("#sf").children[0].insertAdjacentElement("afterend", versionCard);
+  versionCard.querySelector("#vs-open").addEventListener("click", openVersionsModal);
 
   body.querySelector("#logo-file").addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
