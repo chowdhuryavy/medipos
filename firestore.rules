@@ -215,6 +215,10 @@ service cloud.firestore {
       // Scheduled report emails: admins only. The server reads it with full rights.
       allow read, write: if isAdmin();
     }
+    match /settings/backupSchedule {
+      // Daily backup email settings: admins only. The server reads it with full rights.
+      allow read, write: if isAdmin();
+    }
     match /settings/integrations {
       // Holds the Google Sheets secret: administrators only. Email keys are NOT stored here any more.
       allow read, write: if isAdmin();

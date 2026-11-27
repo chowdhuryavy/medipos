@@ -32,6 +32,7 @@ const TABS = [
   ["roles", "Role access"],
   ["branding", "Branding & email"],
   ["reports", "Scheduled reports"],
+  ["backup", "Daily backup"],
   ["integrations", "Integrations"],
   ["audit", "Activity log"],
 ];
@@ -47,7 +48,7 @@ export async function render(el) {
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
-  const views = { users: viewUsers, settings: viewSettings, versions: viewVersions, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, integrations: viewIntegrations, audit: viewAudit };
+  const views = { users: viewUsers, settings: viewSettings, versions: viewVersions, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit };
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
@@ -1499,6 +1500,75 @@ const dayName = (d) => {
   if (dayKey(d) === dayKey(new Date(Date.now() - 864e5))) return "Yesterday";
   return d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 };
+
+/* ───────── Daily backup ───────── */
+
+const BK_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function viewBackup(body) {
+  const ref = doc(db, "settings", "backupSchedule");
+  const s = (await getDoc(ref)).data() || {};
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const recipRow = (v = "") => `
+    <div class="recip-row">
+      <input type="email" data-rec value="${esc(v)}" placeholder="name@shop.com" aria-label="Recipient email" />
+      <button type="button" class="icon-btn sm hover-danger" data-rec-remove aria-label="Remove this email">${icon("trash")}</button>
+    </div>`;
+  body.innerHTML = `
+    <section class="card">
+      <h3>Daily backup</h3>
+      <p class="muted small">Once a day, at the time you choose, the app emails a zip file of all shop data (sales, stock, customers, accounts, journal, users and settings) to the addresses below. Passwords and keys are never included. The backup holds customer and staff information, so only send it to trusted addresses.</p>
+      <form id="bk-form" class="form-grid">
+        <label class="check span-2"><input type="checkbox" name="enabled" ${s.enabled ? "checked" : ""} /> Send a backup every day</label>
+        <label>Send at<input type="time" name="time" value="${esc(s.time || "03:00")}" /></label>
+        <label>Shop time zone<input name="timezone" value="${esc(s.timezone || browserTz)}" /></label>
+        <fieldset class="span-2 sched-recip"><legend>Send to</legend>
+          <div id="bk-recip">${(s.recipients?.length ? s.recipients : [""]).map((r) => recipRow(r)).join("")}</div>
+          <button type="button" class="btn ghost sm" id="bk-add">${icon("plus")}<span>Add email</span></button>
+        </fieldset>
+        <p class="span-2 muted small">Last run: ${esc(s.lastRunStatus || "Not run yet")}</p>
+        <div class="form-actions span-2">
+          <button type="button" class="btn ghost" id="bk-now">${icon("mail")}<span>Send backup now</span></button>
+          <button class="btn primary" type="submit">${icon("check")}<span>Save backup settings</span></button>
+        </div>
+        <p class="span-2 muted small">"Send backup now" uses the saved settings, so save first.</p>
+      </form>
+    </section>`;
+
+  const list = body.querySelector("#bk-recip");
+  body.querySelector("#bk-add").addEventListener("click", () => list.insertAdjacentHTML("beforeend", recipRow()));
+  list.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-rec-remove]");
+    if (!btn) return;
+    btn.closest(".recip-row").remove();
+    if (!list.querySelector(".recip-row")) list.insertAdjacentHTML("beforeend", recipRow());
+  });
+
+  const form = body.querySelector("#bk-form");
+  const emails = () => [...body.querySelectorAll("[data-rec]")].map((i) => i.value.trim().toLowerCase()).filter(Boolean);
+  onSubmit(form, async (e) => {
+    e.preventDefault();
+    const f = new FormData(form);
+    const addresses = [...new Set(emails())];
+    const bad = addresses.filter((v) => !BK_EMAIL_RE.test(v));
+    if (bad.length) { toast(`Check these addresses: ${bad.join(", ")}`, "error"); return; }
+    await setDoc(ref, {
+      enabled: f.get("enabled") === "on",
+      time: String(f.get("time") || "03:00"),
+      timezone: String(f.get("timezone") || "").trim() || browserTz,
+      recipients: addresses,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    await audit("backup.update", { enabled: f.get("enabled") === "on", recipients: addresses.length });
+    toast("Backup settings saved", "success");
+  });
+
+  const now = body.querySelector("#bk-now");
+  onAction(now, () => withBusy(now, async () => {
+    const r = await post("/api/admin/mail", { action: "backup" }, { secure: true });
+    toast(`Backup sent to ${r.to.join(", ")} (${r.sizeMb} MB)`, "success");
+  }));
+}
 
 async function viewAudit(body) {
   const snap = await getDocs(query(collection(db, "audit"), orderBy("at", "desc"), limit(200)));
