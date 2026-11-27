@@ -16,12 +16,14 @@ const TABS = [
   ["overview", "Overview"],
   ["journal", "Vouchers"],
   ["ledger", "General ledger"],
+  ["trial", "Trial balance"],
+  ["income", "Income statement"],
   ["chart", "Chart of accounts"],
   ["expenses", "Expenses"],
   ["statements", "Statements"],
 ];
 
-const VIEWS = { overview: viewOverview, journal: viewJournal, ledger: viewLedger, chart: viewChart, expenses: viewExpenses, statements: viewStatements };
+const VIEWS = { overview: viewOverview, journal: viewJournal, ledger: viewLedger, trial: viewTrialBalance, income: viewIncomeStatement, chart: viewChart, expenses: viewExpenses, statements: viewStatements };
 
 export async function render(el) {
   el.innerHTML = `
@@ -849,4 +851,103 @@ function trialBalance(accts, to) {
       <thead><tr><th>Code</th><th>Account</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead>
       <tbody>${rows}<tr class="grand-row"><td colspan="2">Totals</td><td class="r">${money(round2(dTot))}</td><td class="r">${money(round2(cTot))}</td></tr></tbody>
     </table></div>`;
+}
+
+// Shared loader for the two reports: every journal line up to the end date, with activity since the start date.
+async function reportData(from, to) {
+  const [jSnap, accounts] = await Promise.all([
+    getDocs(query(collection(db, "journal"), where("date", "<=", to))),
+    loadAccounts(),
+  ]);
+  return accumulate(jSnap.docs.map((d) => d.data()), accounts, from);
+}
+
+async function viewTrialBalance(body) {
+  body.innerHTML = `
+    <section class="card">
+      <div class="toolbar wrap">
+        <h3>Trial balance</h3>
+        <div class="grow"></div>
+        <label class="inline">As of<input type="date" id="tb-to" value="${todayISO()}" /></label>
+        <button class="btn primary" id="tb-run">${icon("reports")}<span>Show</span></button>
+        <button class="btn ghost" id="tb-csv">${icon("download")}<span>Excel (CSV)</span></button>
+        <button class="btn ghost" id="tb-print">${icon("print")}<span>Print</span></button>
+      </div>
+      <div id="tb-out" class="statement"></div>
+    </section>`;
+  const out = body.querySelector("#tb-out");
+  let last = null;
+  const run = async () => {
+    const to = body.querySelector("#tb-to").value || todayISO();
+    out.innerHTML = `<div class="skeleton"></div>`;
+    const accts = await reportData("0000-01-01", to);
+    const diff = round2(accts.reduce((s, a) => s + (a.debit - a.credit), 0));
+    const ok = Math.abs(diff) < 0.01;
+    last = { to, accts: accts.filter((a) => a.debit || a.credit).sort((a, b) => a.code.localeCompare(b.code)) };
+    out.innerHTML = trialBalance(accts, to) + `<p class="badge ${ok ? "ok" : "danger"}">${ok ? "Debits equal credits" : `Out of balance by ${money(diff)}`}</p>`;
+  };
+  body.querySelector("#tb-run").addEventListener("click", run);
+  body.querySelector("#tb-print").addEventListener("click", () => { if (out.innerHTML.trim()) printHtml("Trial balance", out.innerHTML); });
+  body.querySelector("#tb-csv").addEventListener("click", () => {
+    if (!last) return;
+    const rows = [["Code", "Account", "Debit", "Credit"]];
+    let d = 0, c = 0;
+    for (const a of last.accts) {
+      const net = round2(a.debit - a.credit);
+      const dv = net > 0 ? net : 0, cv = net < 0 ? -net : 0;
+      d += dv; c += cv;
+      rows.push([a.code, a.name, dv || "", cv || ""]);
+    }
+    rows.push(["", "Totals", round2(d), round2(c)]);
+    downloadCSV(`trial-balance-${last.to}.csv`, rows);
+  });
+  body.querySelector("#tb-to").addEventListener("change", run);
+  run();
+}
+
+async function viewIncomeStatement(body) {
+  body.innerHTML = `
+    <section class="card">
+      <div class="toolbar wrap">
+        <h3>Income statement</h3>
+        <div class="grow"></div>
+        <label class="inline">From<input type="date" id="is-from" value="${monthStartISO()}" /></label>
+        <label class="inline">To<input type="date" id="is-to" value="${todayISO()}" /></label>
+        <button class="btn primary" id="is-run">${icon("reports")}<span>Show</span></button>
+        <button class="btn ghost" id="is-print">${icon("print")}<span>Print</span></button>
+      </div>
+      <div id="is-out" class="statement"></div>
+    </section>`;
+  const out = body.querySelector("#is-out");
+  const run = async () => {
+    const from = body.querySelector("#is-from").value || "0000-01-01";
+    const to = body.querySelector("#is-to").value || todayISO();
+    out.innerHTML = `<div class="skeleton"></div>`;
+    const accts = await reportData(from, to);
+    out.innerHTML = incomeStatement(accts, from, to);
+  };
+  body.querySelector("#is-run").addEventListener("click", run);
+  body.querySelector("#is-print").addEventListener("click", () => { if (out.innerHTML.trim()) printHtml("Income statement", out.innerHTML); });
+  run();
+}
+
+// Revenue, cost of sales (accounts starting with 5), gross profit, operating expenses, net profit.
+function incomeStatement(accts, from, to) {
+  const rAmt = (a) => a.pCredit - a.pDebit;
+  const eAmt = (a) => a.pDebit - a.pCredit;
+  const revenue = section("Revenue", accts.filter((a) => a.type === "revenue"), rAmt);
+  const expenses = accts.filter((a) => a.type === "expense");
+  const cogs = section("Cost of sales", expenses.filter((a) => String(a.code).startsWith("5")), eAmt);
+  const opex = section("Operating expenses", expenses.filter((a) => !String(a.code).startsWith("5")), eAmt);
+  const gross = round2(revenue.total - cogs.total);
+  const net = round2(gross - opex.total);
+  const margin = revenue.total > 0 ? ((gross / revenue.total) * 100).toFixed(1) : "0.0";
+  return `
+    <h3>Income statement · ${esc(from)} to ${esc(to)}</h3>
+    ${statementTable(null,
+      revenue.html + totalRow("Total revenue", revenue.total)
+      + cogs.html + totalRow("Total cost of sales", cogs.total)
+      + `<tr class="total"><td colspan="2">Gross profit (margin ${margin}%)</td><td class="r">${money(gross)}</td></tr>`
+      + opex.html + totalRow("Total operating expenses", opex.total),
+      `<tr class="grand-row ${net >= 0 ? "ok-text" : "bad-text"}"><td colspan="2">Net profit</td><td class="r">${money(net)}</td></tr>`)}`;
 }
