@@ -145,6 +145,12 @@ export async function render(el) {
       </tr>`).join("") || `<tr><td colspan="10" class="muted center">No products match. Try another search or filter.</td></tr>`;
   }
 
+  // The Order list tab has no product table, so only its own controls are wired here.
+  if (invTab === "order") {
+    el.querySelectorAll("[data-itab]").forEach((b) => b.addEventListener("click", () => { invTab = b.dataset.itab; render(el); }));
+    bindOrderCard(el, products, () => render(el));
+    return;
+  }
   el.querySelector("#i-search").addEventListener("input", paint);
   el.querySelector("#i-filter").addEventListener("change", paint);
   el.querySelector("#i-new").addEventListener("click", () => openProduct(null, reload));
