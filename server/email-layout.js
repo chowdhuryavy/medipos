@@ -71,7 +71,7 @@ export function shell({ cfg, pal, subject, preheader, icon, eyebrow, heading, bo
           <td valign="middle" style="padding-right:12px">${logoBlock(cfg)}</td>
           <td valign="middle">
             <div style="color:#ffffff;font-family:Georgia,'Times New Roman',serif;font-size:20px;font-weight:700;letter-spacing:.3px">${esc(cfg.appName)}</div>
-            <div style="color:#ffffff;opacity:.85;font-size:11px;letter-spacing:1.5px;text-transform:uppercase">${esc(cfg.shopName)}</div>
+            ${cfg.shopName && String(cfg.shopName).trim().toLowerCase() !== String(cfg.appName || "").trim().toLowerCase() ? `<div style="color:#ffffff;opacity:.85;font-size:11px;letter-spacing:1.5px;text-transform:uppercase">${esc(cfg.shopName)}</div>` : ""}
           </td>
         </tr></table>
       </td></tr>
