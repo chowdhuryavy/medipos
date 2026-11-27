@@ -217,6 +217,14 @@ const FIELDS = [
     ["allowCreditSales", "Allow sales on account (credit)", "bool"],
     ["allowPriceChange", "Let cashiers raise prices (lowest price is always enforced)", "bool"],
   ]],
+  ["POS buttons", [
+    ["posTab1Active", "Show the first sale-screen button", "bool"],
+    ["posTab1Label", "First button name", "text"],
+    ["posTab1Categories", "Product categories for the first button (comma separated, e.g. Medicine, Syrup)", "text"],
+    ["posTab2Active", "Show the second sale-screen button", "bool"],
+    ["posTab2Label", "Second button name", "text"],
+    ["posTab2Categories", "Product categories for the second button (comma separated). Empty = all other categories", "text"],
+  ]],
   ["Numbering", [
     ["invoicePrefix", "Invoice prefix", "text"],
     ["purchasePrefix", "Purchase prefix", "text"],

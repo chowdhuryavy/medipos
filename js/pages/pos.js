@@ -35,7 +35,7 @@ export async function render(el) {
   const allowChange = settings.allowPriceChange !== false;
 
   const st = {
-    cat: "All", q: "", disc: 0,
+    cat: "All", tab: "1", q: "", disc: 0,
     pay: methods.find((m) => !m.credit)?.key || methods[0]?.key || "cash",
     customerId: "",
     cart: new Map(), // product lines: "productId|unitKey"; service lines: "svc|n"
@@ -124,7 +124,22 @@ export async function render(el) {
     return { goods, fees, transfersIn, transfersOut, saleTotal, collect };
   }
 
+  // Two sale-screen buttons: only when both are on. Each one shows the products of its categories.
+  const listOf = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const tabsOn = () => !!settings.posTab1Active && !!settings.posTab2Active;
+  const tabLabel = (n) => settings[`posTab${n}Label`] || `Button ${n}`;
+  function inTab(p, n) {
+    const cat = p.category || "General";
+    const mine = listOf(settings[`posTab${n}Categories`]);
+    const other = listOf(settings[`posTab${3 - n}Categories`]);
+    return mine.length ? mine.includes(cat) : !other.includes(cat);
+  }
+
   function paintCats() {
+    if (tabsOn()) {
+      $("#p-cats").innerHTML = [1, 2].map((n) => `<button class="chip ${String(n) === st.tab ? "active" : ""}" data-tab="${n}">${esc(tabLabel(n))}</button>`).join("");
+      return;
+    }
     const cats = ["All", ...new Set(products.map((p) => p.category || "General"))];
     $("#p-cats").innerHTML = cats.map((c) => `<button class="chip ${c === st.cat ? "active" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`).join("");
   }
@@ -132,7 +147,7 @@ export async function render(el) {
   function paintGrid() {
     const q = st.q.trim().toLowerCase();
     const list = products.filter((p) =>
-      (st.cat === "All" || (p.category || "General") === st.cat) &&
+      (tabsOn() ? inTab(p, Number(st.tab)) : (st.cat === "All" || (p.category || "General") === st.cat)) &&
       (!q || [p.name, p.sku, p.barcode].some((v) => String(v || "").toLowerCase().includes(q))));
     $("#p-grid").innerHTML = list.map((p, i) => {
       const stock = Number(p.stock) || 0;
@@ -418,6 +433,13 @@ export async function render(el) {
   const calcFeePreview = (type, T) => calcFee(type, T);
 
   $("#p-cats").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-tab]");
+    if (t) {
+      st.tab = t.dataset.tab;
+      paintCats();
+      paintGrid();
+      return;
+    }
     const b = e.target.closest("[data-cat]");
     if (!b) return;
     st.cat = b.dataset.cat;

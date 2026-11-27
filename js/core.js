@@ -23,6 +23,9 @@ export const DEFAULT_SETTINGS = {
   maxDiscountPct: 100,
   allowCreditSales: true,
   allowPriceChange: true,
+  // Two sale-screen buttons. They show only when both are on; each shows the products of its categories.
+  posTab1Active: false, posTab1Label: "Medicine", posTab1Categories: "",
+  posTab2Active: false, posTab2Label: "Others", posTab2Categories: "",
   floatWarnAmount: 1000,
   // Sign out after this many minutes with no activity. 0 = never.
   sessionTimeoutMinutes: 0,
