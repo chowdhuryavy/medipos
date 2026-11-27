@@ -365,6 +365,16 @@ const NAV_GROUPS = [
   ["Money & reports", ["accounting", "reports"]],
   ["Administration", ["admin"]],
 ];
+// Groups kept at the bottom of the sidebar, under the other pages.
+const PINNED_GROUPS = ["Administration"];
+function navLinks(groups) {
+  return groups.map((g) => `
+    <p class="nav-group">${esc(g.label)}</p>
+    ${g.items.map((p) => `
+      <a class="nav-link" href="#/${p.key}" data-page="${p.key}">
+        <span class="nav-ico">${icon(p.icon)}</span><span class="nav-text">${esc(PAGE_TITLE[p.key])}</span>
+      </a>`).join("")}`).join("");
+}
 function navGroups(items) {
   const left = new Map(items.map((p) => [p.key, p]));
   const groups = NAV_GROUPS.map(([label, keys]) => ({ label, items: keys.filter((k) => left.has(k)).map((k) => left.get(k)) }));
@@ -389,13 +399,11 @@ function buildShell() {
           <div class="brand-text"><strong>${esc(settings.shopName)}</strong><small>POS &amp; Accounts</small></div>
         </div>
         <nav class="nav">
-          ${navGroups(items).map((g) => `
-            <p class="nav-group">${esc(g.label)}</p>
-            ${g.items.map((p) => `
-              <a class="nav-link" href="#/${p.key}" data-page="${p.key}">
-                <span class="nav-ico">${icon(p.icon)}</span><span class="nav-text">${esc(PAGE_TITLE[p.key])}</span>
-              </a>`).join("")}`).join("")}
+          ${navLinks(navGroups(items).filter((g) => !PINNED_GROUPS.includes(g.label)))}
         </nav>
+        ${navGroups(items).some((g) => PINNED_GROUPS.includes(g.label)) ? `<nav class="nav nav-pinned" aria-label="Administration">
+          ${navLinks(navGroups(items).filter((g) => PINNED_GROUPS.includes(g.label)))}
+        </nav>` : ""}
         <div class="sidebar-foot avatar-trigger" id="avatar-side" role="button" tabindex="0" aria-label="Your account">
           <div class="avatar-ring"><div class="avatar">${esc((session.name || "?").charAt(0).toUpperCase())}</div></div>
           <div class="who"><strong>${esc(session.name)}</strong><span class="role-pill">${esc(roles[session.role].label)}</span></div>

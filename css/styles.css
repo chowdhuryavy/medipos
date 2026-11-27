@@ -1455,3 +1455,6 @@ body, button, input, select, textarea { font-family: var(--app-font); }
   .sidebar .brand-logo-wrap, .sidebar .nav-link:hover .nav-ico svg, .sidebar .sidebar-foot:hover .avatar-ring { animation: none; }
   .sidebar .nav-link::before, .sidebar .nav-link .nav-text { transition: none; }
 }
+
+/* Administration stays at the bottom of the sidebar. */
+.nav-pinned { margin-top: auto; padding-top: 6px; border-top: 1px solid rgba(204, 251, 241, .15); }
