@@ -559,14 +559,32 @@ function showSignInCode(user) {
     </section>`;
   const help = root.querySelector("#code-help");
   const msg = root.querySelector("#code-msg");
+  const resendBtn = root.querySelector("#code-resend");
+  let resendTimer = null;
+  // Counts down before a new code can be asked for, so an older code is not replaced by accident.
+  const startResendTimer = (seconds) => {
+    clearInterval(resendTimer);
+    let left = seconds;
+    const paint = () => {
+      if (!resendBtn.isConnected) return clearInterval(resendTimer);
+      resendBtn.disabled = left > 0;
+      resendBtn.textContent = left > 0 ? `Send a new code in ${left}s` : "Send a new code";
+      if (left <= 0) clearInterval(resendTimer);
+    };
+    paint();
+    resendTimer = setInterval(() => { left -= 1; paint(); }, 1000);
+  };
   const send = async () => {
     msg.textContent = "";
+    resendBtn.disabled = true;
     try {
       const out = await post("/api/auth/login-otp-request", {}, { secure: true });
-      help.textContent = `We sent a 6-digit code to ${out.sentTo}.`;
+      help.textContent = `We sent a 6-digit code to ${out.sentTo}. Only the newest code works.`;
+      startResendTimer(60);
     } catch (err) {
       help.textContent = "Check your email for the code.";
       msg.textContent = err.message;
+      startResendTimer(0);
     }
   };
   root.querySelector("#code-resend").addEventListener("click", send);
