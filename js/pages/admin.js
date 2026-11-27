@@ -1390,9 +1390,12 @@ async function viewScheduledReports(body) {
     body.querySelectorAll("[data-now]").forEach((b) => b.addEventListener("click", async () => {
       const i = Number(b.closest(".sched-card").dataset.i);
       try {
-        await save();
-        const out = await post("/api/admin/mail", { action: "report", scheduleId: items[i].id }, { secure: true });
-        toast(`Sent the reports for ${out.reportDate} to ${out.to.join ? out.to.join(", ") : out.to}`, "success");
+        // The button spins until the reports are sent, so a press is never silent.
+        await withBusy(b, async () => {
+          await save();
+          const out = await post("/api/admin/mail", { action: "report", scheduleId: items[i].id }, { secure: true });
+          toast(`Sent the reports for ${out.reportDate} to ${out.to.join ? out.to.join(", ") : out.to}`, "success");
+        });
       } catch (err) {
         toast(err.message, "error");
       }
