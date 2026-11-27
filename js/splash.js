@@ -50,6 +50,8 @@ export function showSplash(root, message) {
 
 /** Full-screen loader shown while another screen is opening. Returns a handle for hideRouteLoader. */
 export function showRouteLoader(message, style) {
+  // Only one page loader is ever on screen: a new one replaces any that is still showing.
+  document.querySelectorAll(".route-loader").forEach((w) => w.remove());
   const wrap = document.createElement("div");
   wrap.className = "route-loader";
   wrap.innerHTML = splashHtml(message, style);
