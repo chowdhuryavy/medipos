@@ -1518,3 +1518,4 @@ body, button, input, select, textarea { font-family: var(--app-font); }
   .print-root.thermal.narrow58 { page: thermal58; width: 52mm; }
 }
 html[data-lang="bn"] body { line-height: 1.6; }
+.mx-desc { display: block; font-size: 12px; font-weight: 400; opacity: .7; line-height: 1.35; margin-top: 2px; }

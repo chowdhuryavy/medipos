@@ -1181,6 +1181,29 @@ const ACCESS_ICON = {
   partners: "partners", accounting: "accounting", reports: "reports", activity: "partners", admin: "admin",
 };
 const AREA_ICON = { pos: "cart", inventory: "inventory", purchasing: "purchase", partners: "partners", accounting: "accounting" };
+// What each screen lets someone do, shown under its name in the permission matrix.
+const PAGE_DESC = {
+  dashboard: "Sales, stock and profit overview",
+  pos: "Sell, hold bills and take payment. Selling changes stock only, never prices",
+  shift: "Open and close the cash shift with a counted cash figure",
+  prescriptions: "Record prescriptions, controlled drugs, doctors and clinics",
+  inventory: "Products, prices, batches and stock adjustments",
+  import: "Bulk product import from a CSV file",
+  purchasing: "Supplier bills, stock in and supplier payments",
+  partners: "Customer and supplier records",
+  accounting: "Vouchers, ledger, trial balance, income statement and expenses",
+  reports: "Sales, stock and accounting reports",
+  returns: "Returns and voids",
+  activity: "Staff activity log",
+  admin: "Settings, staff, roles and branding",
+};
+const AREA_DESC = {
+  pos: "Sales, customer balances and wallet floats",
+  inventory: "Product details, prices and stock",
+  purchasing: "Purchase bills, stock in and supplier payments",
+  partners: "Customer and supplier records",
+  accounting: "Journal vouchers, expenses and accounts",
+};
 
 // Opens one person's page. Everything about them is changed here and saved together.
 // Opens one person's access in a modal: profile, role, and every screen and data area they may use.
@@ -1226,10 +1249,11 @@ function renderStaffAccess(root, u, { close, reload }) {
     const mine = (kind, key) => (kind === "page" ? hasPage(key) : hasArea(key));
     const rowHtml = (kind, key, label, ico) => {
       const m = mine(kind, key), d = base(kind, key);
+      const desc = (kind === "page" ? PAGE_DESC[key] : AREA_DESC[key]) || "";
       const change = m === d ? `<span class="mx-same">Same as role</span>` : m ? `<span class="mx-add">Added</span>` : `<span class="mx-rm">Removed</span>`;
       return `
         <tr>
-          <th scope="row"><span class="mx-name">${icon(ico)}<span>${esc(label)}</span></span></th>
+          <th scope="row"><span class="mx-name">${icon(ico)}<span>${esc(label)}${desc ? `<small class="mx-desc">${esc(desc)}</small>` : ""}</span></span></th>
           ${roleKeys.map((k) => {
             const on = k === "admin" || (kind === "page" ? (roles[k]?.pages || []).includes(key) : (roles[k]?.write || []).includes(key));
             return `<td class="c"><span class="mx-dot ${on ? "on" : ""}">${on ? "✓" : ""}</span></td>`;
