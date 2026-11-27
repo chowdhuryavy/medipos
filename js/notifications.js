@@ -129,6 +129,8 @@ export function toggleNotifications() {
     <div class="np-list"></div>`;
   document.body.appendChild(panel);
   paintPanel();
+  // Opening the panel counts as having seen them, so the badge does not come back on the next load.
+  markRead(items.filter(isUnread).map((x) => x.id)).catch((err) => console.warn("Could not mark notifications read:", err.message));
   panel.querySelector("[data-close]").addEventListener("click", closePanel);
   panel.querySelector("[data-readall]").addEventListener("click", async (e) => {
     const btn = e.currentTarget;
