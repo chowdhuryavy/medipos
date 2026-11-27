@@ -1509,3 +1509,11 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 @media (max-width: 640px) { .rx-item { grid-template-columns: 1fr 70px; } .rx-item label, .rx-item [data-rm] { grid-column: span 1; } }
 .inline { display: inline-flex; align-items: center; gap: 6px; }
 .warn-text { color: var(--warn); font-weight: 600; }
+
+/* 58mm receipt roll */
+@media print {
+  @page thermal58 { size: 58mm auto; margin: 2mm; }
+  .print-root.thermal.narrow58 { page: thermal58; width: 52mm; }
+}
+.lang-btn { font-weight: 700; font-size: 12px; min-width: 36px; }
+html[data-lang="bn"] body { line-height: 1.6; }

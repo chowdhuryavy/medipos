@@ -668,10 +668,12 @@ export async function render(el) {
       </div>
       <div class="form-actions">
         <button class="btn ghost" type="button" data-print-thermal>${icon("print")}<span>Receipt 80mm</span></button>
+        <button class="btn ghost" type="button" data-print-thermal58>${icon("print")}<span>Receipt 58mm</span></button>
         <button class="btn ghost" type="button" data-print-a4>${icon("print")}<span>A4 invoice</span></button>
         <button class="btn primary" type="button" data-done>${icon("check")}<span>New sale</span></button>
       </div>`, (body, close) => {
       body.querySelector("[data-print-thermal]").addEventListener("click", () => printReceipt(sale, "thermal"));
+      body.querySelector("[data-print-thermal58]").addEventListener("click", () => printReceipt(sale, "thermal58"));
       body.querySelector("[data-print-a4]").addEventListener("click", () => printReceipt(sale, "a4"));
       body.querySelector("[data-done]").addEventListener("click", close);
     });

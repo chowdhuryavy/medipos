@@ -27,6 +27,8 @@ const stamp = () => new Date().toLocaleString();
 /** Receipt: "thermal" (80mm roll printer) or "a4" (full tax invoice). */
 export function printReceipt(sale, mode = "thermal") {
   if (mode === "a4") return printNow("a4", a4Frame("Tax invoice", `${sale.invoiceNo}`, invoiceBody(sale)));
+  // 58mm rolls use the same layout at a narrower width.
+  if (mode === "thermal58") return printNow("thermal narrow58", thermalBody(sale));
   printNow("thermal", thermalBody(sale));
 }
 

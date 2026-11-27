@@ -84,6 +84,8 @@ export function takeReturnPage() {
 
 /** Sets the app font from the settings. Printed receipts and reports keep their own fonts. */
 export function applyAppFont() {
+  // Bangla screens keep their Bangla font (see i18n.js), even when settings reload.
+  if (document.documentElement.dataset.lang === "bn") return;
   const f = APP_FONTS[settings.appFont] || APP_FONTS.system;
   document.documentElement.style.setProperty("--app-font", f.stack);
 }
