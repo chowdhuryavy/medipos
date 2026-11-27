@@ -29,9 +29,13 @@ export async function sendEmailDiagnostics(uid) {
   const user = await adminAuth().getUser(uid);
   if (!user.email) throw httpError(400, "Your account has no email address.");
   const c = await mailConfig();
-  if (c.provider !== "resend" || !c.resendApiKey || !c.from) {
-    throw httpError(400, "Choose Resend in Administration → Integrations, with a sender address, before running this test.");
+  // Same rule as sendMail: Resend when chosen, or when no provider is chosen but a Resend key is saved (Settings or Vercel).
+  const useResend = c.provider === "resend" || (!c.provider && !!c.resendApiKey);
+  if (!useResend) {
+    throw httpError(400, "Resend is not in use. Choose Resend in Administration → Integrations, or add RESEND_API_KEY in Vercel.");
   }
+  if (!c.resendApiKey) throw httpError(400, "No Resend API key found. Add it in Administration → Integrations or as RESEND_API_KEY in Vercel.");
+  if (!c.from) throw httpError(400, "No sender address. Set it in Administration → Integrations (MAIL_FROM in Vercel also works).");
   const cfg = await loadEmailConfig();
   const from = senderHeader(c.from, c.shopName);
   const plain = `Your verification code is ${TEST_CODE}`;
