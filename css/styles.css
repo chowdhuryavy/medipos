@@ -1653,3 +1653,7 @@ html[data-lang="bn"] body { line-height: 1.6; }
 /* Reset dialog: shop logo in place of the shield */
 .reset-icon:has(.reset-logo) { background: #fff; padding: 6px; box-shadow: 0 10px 22px -10px rgba(0, 0, 0, .45); }
 .reset-logo { width: 100%; height: 100%; object-fit: contain; border-radius: 12px; display: block; }
+
+/* Loading screen: logo and text sit higher; "Designed by" and version stay at the bottom */
+.splash .splash-core { transform: translateY(-12vh); }
+@media (max-height: 640px) { .splash .splash-core { transform: translateY(-6vh); } }
