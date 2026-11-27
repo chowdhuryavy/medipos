@@ -489,6 +489,9 @@ startUpdateWatch();
 /* ───────── boot & auth state ───────── */
 
 restoreTheme();
+// Never leave the page blank: if this device has the saved loading style cached, draw it right away.
+// First visits with no cache keep a blank page for the moment it takes to read the saved style.
+if (localStorage.getItem("medipos.branding")) showSplash(root, "Loading…");
 // Branding must never hold up the sign-in page: wait at most 4 seconds for it.
 const brandingReady = Promise.race([
   loadBranding(),
