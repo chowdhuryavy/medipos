@@ -339,7 +339,7 @@ async function viewJournal(body) {
 function openVoucher(v, name, reload) {
   if (!v) return;
   const html = voucherHtml(v, {
-    shop: settings.shopName || "MediPOS", address: settings.shopAddress || "", phone: settings.shopPhone || "", logo: branding.logoUrl || "", accountName: name,
+    shop: settings.shopName || "MediPOS", address: settings.shopAddress || "", phone: settings.shopPhone || "", logo: branding.logoUrl || "", tax: settings.taxNumber || "", by: session.name || "", accountName: name,
   });
   openModal(v.jvNo ? `Voucher ${v.jvNo}` : "Voucher", `<div class="jv-view">${html}</div>
     <div class="form-actions"><button class="btn ghost" data-cancel>Close</button><button class="btn primary" id="jv-print">${icon("print")}<span>Print</span></button></div>`,

@@ -206,10 +206,10 @@ export function toast(message, type = "info") {
   setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 300); }, 3200);
 }
 
-export function openModal(title, html, onMount) {
+export function openModal(title, html, onMount, opts = {}) {
   const host = document.getElementById("modal-root");
   host.innerHTML = `
-    <div class="modal-backdrop">
+    <div class="modal-backdrop${opts.center ? " modal-center" : ""}">
       <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
         <header><h3>${esc(title)}</h3>
           <button class="icon-btn sm" type="button" data-close aria-label="Close">${icon("x")}</button>
@@ -243,11 +243,12 @@ export function alertBox({ title = "Notice", message = "", tone = "info", button
     openModal(title, `
       <div class="app-alert tone-${tone}">
         <div class="aa-ico">${icon(TONE_ICON[tone] || "reports")}</div>
+        <h3 class="aa-title">${esc(title)}</h3>
         <p class="aa-msg">${esc(message)}</p>
         <div class="form-actions"><button class="btn primary" type="button" data-ok>${esc(button)}</button></div>
       </div>`, (body, close) => {
       body.querySelector("[data-ok]").addEventListener("click", () => { close(); resolve(true); });
-    });
+    }, { center: true });
   });
 }
 
@@ -257,6 +258,7 @@ export function confirmBox(message, { title = "Please confirm", confirmText = "C
     openModal(title, `
       <div class="app-alert tone-${tone}">
         <div class="aa-ico">${icon(TONE_ICON[tone] || "alert")}</div>
+        <h3 class="aa-title">${esc(title)}</h3>
         <p class="aa-msg">${esc(message)}</p>
         <div class="form-actions">
           <button class="btn ghost" type="button" data-no>Cancel</button>
@@ -265,7 +267,7 @@ export function confirmBox(message, { title = "Please confirm", confirmText = "C
       </div>`, (body, close) => {
       body.querySelector("[data-no]").addEventListener("click", () => { close(); resolve(false); });
       body.querySelector("[data-yes]").addEventListener("click", () => { close(); resolve(true); });
-    });
+    }, { center: true });
   });
 }
 

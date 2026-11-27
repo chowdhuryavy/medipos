@@ -1183,3 +1183,31 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 /* Admin and other pages: each block fits the screen width. A wide table scrolls inside its own box instead of pushing the page. */
 .view { grid-template-columns: minmax(0, 1fr); }
 .view > * { min-width: 0; }
+
+/* Printed documents: shop logo and name block (A4, receipt and voucher) */
+.a4-logo-cell { min-width: 0; }
+.a4-logo { max-height: 22mm; max-width: 50mm; object-fit: contain; display: block; }
+.a4-shop-name { font-size: 18px; color: #111; }
+.a4-shop small { display: block; }
+.thermal .t-addr { font-size: 11px; }
+.thermal .t-title { font-weight: 800; margin-top: 4px; letter-spacing: .5px; }
+
+/* Alerts and confirmations: a centred card with a coloured icon, a clear title and large buttons */
+.app-alert.tone-success { --tone: #16a34a; }
+.app-alert.tone-error { --tone: #dc2626; }
+.app-alert.tone-warn { --tone: #d97706; }
+.app-alert.tone-info { --tone: var(--brand); }
+.modal-backdrop.modal-center { align-items: center; justify-items: center; padding: 18px; }
+.modal-backdrop.modal-center .modal { width: min(400px, 100%); max-height: none; border: 0; border-radius: 28px; overflow: hidden; text-align: center; box-shadow: 0 30px 80px -18px rgba(2, 6, 23, .6); animation: alertPop .38s var(--ease) both; }
+.modal-backdrop.modal-center .modal header { display: none; }
+.modal-backdrop.modal-center .modal-body { padding: 0; }
+.modal-backdrop.modal-center .app-alert { padding: 34px 26px 24px; gap: 0; justify-items: center; background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 13%, var(--surface)) 0%, var(--surface) 65%); }
+.modal-backdrop.modal-center .aa-ico { width: 84px; height: 84px; margin: 0 auto; color: var(--tone); background: color-mix(in srgb, var(--tone) 18%, var(--surface)); box-shadow: 0 0 0 10px color-mix(in srgb, var(--tone) 12%, transparent), 0 16px 30px -10px color-mix(in srgb, var(--tone) 70%, transparent); }
+.modal-backdrop.modal-center .aa-ico .ico { width: 36px; height: 36px; }
+.modal-backdrop.modal-center .aa-title { margin: 20px 0 6px; font-size: 21px; font-weight: 800; letter-spacing: -.01em; color: var(--text); }
+.modal-backdrop.modal-center .aa-msg { color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 32ch; margin: 0 auto; }
+.modal-backdrop.modal-center .form-actions { position: static; background: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin: 26px 0 0; padding: 0; }
+.modal-backdrop.modal-center .form-actions:has(> :only-child) { grid-template-columns: 1fr; }
+.modal-backdrop.modal-center .form-actions .btn { min-height: 50px; border-radius: 16px; font-weight: 700; justify-content: center; width: 100%; }
+.modal-backdrop.modal-center .form-actions .btn.primary { box-shadow: 0 12px 24px -10px var(--tone); }
+@keyframes alertPop { from { opacity: 0; transform: translateY(14px) scale(.94); } to { opacity: 1; transform: none; } }

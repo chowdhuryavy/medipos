@@ -72,7 +72,10 @@ export async function numberExistingVouchers() {
 }
 
 /** Printable journal voucher: shop name, JV number, dates, lines, totals and sign-off boxes. */
-export function voucherHtml(v, { shop, address = "", phone = "", logo = "", accountName = (c) => c }) {
+export function voucherHtml(v, { shop, address = "", phone = "", tax = "", logo = "", by = "", accountName = (c) => c }) {
+  const debit = (v.lines || []).reduce((t, l) => t + (Number(l.debit) || 0), 0);
+  const credit = (v.lines || []).reduce((t, l) => t + (Number(l.credit) || 0), 0);
+  const balanced = Math.abs(debit - credit) < 0.005;
   const reversedNote = v.status === "reversed" ? `Reversed by ${esc(v.reversedBy)}` : v.reverses ? `Reversal of ${esc(v.reverses)}` : "";
   const rows = (v.lines || []).map((l) => `
     <tr><td>${esc(l.account)}</td><td>${esc(accountName(l.account))}</td>
@@ -82,9 +85,10 @@ export function voucherHtml(v, { shop, address = "", phone = "", logo = "", acco
     <header class="jv-head">
       <div>
         ${logo ? `<img class="jv-logo" src="${esc(logo)}" alt="" />` : ""}
-        <h1>${esc(shop)}</h1>
+        <h1>${esc(shop || "Pharmacy")}</h1>
         ${address ? `<div>${esc(address)}</div>` : ""}
-        ${phone ? `<div>${esc(phone)}</div>` : ""}
+        ${phone ? `<div>Tel: ${esc(phone)}</div>` : ""}
+        ${tax ? `<div>Tax no. ${esc(tax)}</div>` : ""}
       </div>
       <div class="jv-title">
         <h2>JOURNAL VOUCHER</h2>
@@ -101,10 +105,11 @@ export function voucherHtml(v, { shop, address = "", phone = "", logo = "", acco
     <table class="jv-lines">
       <thead><tr><th>Account</th><th>Account name</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><th colspan="2">Total</th><th class="r">${money(v.debit)}</th><th class="r">${money(v.credit)}</th></tr></tfoot>
+      <tfoot><tr><th colspan="2">Total</th><th class="r">${money(debit)}</th><th class="r">${money(credit)}</th></tr></tfoot>
     </table>
+    <p class="jv-note">${balanced ? "Balanced: total debits equal total credits." : "WARNING: debits and credits do not match."}</p>
     <div class="jv-sign">
-      <div>Prepared by<br><small>${esc(v.by || "")}</small></div>
+      <div>Prepared by<br><small>${esc(by || v.by || "")}</small></div>
       <div>Checked by</div>
       <div>Approved by</div>
     </div>

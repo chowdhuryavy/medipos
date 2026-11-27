@@ -30,6 +30,16 @@ export function printReceipt(sale, mode = "thermal") {
   printNow("thermal", thermalBody(sale));
 }
 
+// Shop details printed on every document. The name falls back to the app name, so it is never blank.
+function shopInfo() {
+  return {
+    name: settings.shopName || branding.shopName || branding.appName || "Pharmacy",
+    address: settings.shopAddress || "",
+    phone: settings.shopPhone || "",
+    tax: settings.taxNumber || "",
+  };
+}
+
 function thermalBody(sale) {
   const row = (k, v, cls = "") => `<div class="t-row ${cls}"><span>${k}</span><span>${v}</span></div>`;
   const items = sale.lines.map((l) => `
@@ -37,13 +47,16 @@ function thermalBody(sale) {
       <div class="t-name">${esc(l.name)}</div>
       <div class="t-row"><span>${l.qty} × ${money(l.price)}</span><span>${money(l.lineTotal)}</span></div>
     </div>`).join("");
+  const s = shopInfo();
   return `
     <div class="thermal">
-      ${logo("print-logo t-logo")}
       <div class="t-center">
-        <div class="t-shop">${esc(settings.shopName)}</div>
-        ${settings.shopAddress ? `<div>${esc(settings.shopAddress)}</div>` : ""}
-        ${settings.taxNumber ? `<div>Tax no. ${esc(settings.taxNumber)}</div>` : ""}
+        ${branding.logoUrl ? `<img class="t-logo" src="${esc(branding.logoUrl)}" alt="" />` : ""}
+        <div class="t-shop">${esc(s.name)}</div>
+        ${s.address ? `<div class="t-addr">${esc(s.address)}</div>` : ""}
+        ${s.phone ? `<div class="t-addr">Tel: ${esc(s.phone)}</div>` : ""}
+        ${s.tax ? `<div class="t-addr">Tax no. ${esc(s.tax)}</div>` : ""}
+        <div class="t-title">SALES RECEIPT</div>
       </div>
       <div class="t-dash"></div>
       ${row("Invoice", esc(sale.invoiceNo))}
@@ -108,14 +121,16 @@ export function printHtml(title, html) {
 }
 
 function a4Frame(title, period, body) {
+  const s = shopInfo();
   return `
     <div class="a4">
       <header class="a4-head">
-        ${logo()}
+        <div class="a4-logo-cell">${branding.logoUrl ? `<img class="a4-logo" src="${esc(branding.logoUrl)}" alt="" />` : ""}</div>
         <div class="a4-shop">
-          <strong>${esc(settings.shopName)}</strong>
-          ${settings.shopAddress ? `<small>${esc(settings.shopAddress)}</small>` : ""}
-          ${settings.taxNumber ? `<small>Tax no. ${esc(settings.taxNumber)}</small>` : ""}
+          <strong class="a4-shop-name">${esc(s.name)}</strong>
+          ${s.address ? `<small>${esc(s.address)}</small>` : ""}
+          ${s.phone ? `<small>Tel: ${esc(s.phone)}</small>` : ""}
+          ${s.tax ? `<small>Tax no. ${esc(s.tax)}</small>` : ""}
         </div>
         <div class="a4-title">
           <h1>${esc(title)}</h1>
@@ -124,6 +139,6 @@ function a4Frame(title, period, body) {
         </div>
       </header>
       ${body}
-      <footer class="a4-foot"><span>${esc(branding.appName || "MediPOS")}</span><span>Printed by ${esc(session.name || "")}</span></footer>
+      <footer class="a4-foot"><span>${esc(s.name)}</span><span>Printed by ${esc(session.name || "")}</span></footer>
     </div>`;
 }
