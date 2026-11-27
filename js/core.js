@@ -24,7 +24,7 @@ export const DEFAULT_SETTINGS = {
   allowCreditSales: true,
   allowPriceChange: true,
   // App font: a key of APP_FONTS below. Only fonts already on the device are used, so nothing is downloaded.
-  appFont: "system",
+  appFont: "times",
   menuStyle: "classic",
   // Two sale-screen buttons. They show only when both are on; each shows the products of its categories.
   posTab1Active: false, posTab1Label: "Medicine", posTab1Categories: "",
@@ -54,7 +54,8 @@ export const settings = structuredClone(DEFAULT_SETTINGS);
 
 // Fonts that are already on the phone or computer. Each stack lists fallbacks.
 export const APP_FONTS = {
-  system: { label: "System (default)", stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+  times: { label: "Times New Roman (default)", stack: '"Times New Roman", Times, serif' },
+  system: { label: "System", stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
   arial: { label: "Arial", stack: 'Arial, Helvetica, sans-serif' },
   verdana: { label: "Verdana", stack: 'Verdana, Geneva, sans-serif' },
   trebuchet: { label: "Trebuchet", stack: '"Trebuchet MS", Helvetica, sans-serif' },
