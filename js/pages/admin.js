@@ -11,7 +11,7 @@ import { nextExpenseCode, expenseCategories } from "../expense-categories.js";
 import { showRouteLoader, hideRouteLoader, LOADING_STYLES } from "../splash.js";
 import {
   session, roles, DEFAULT_ROLES, WRITE_AREAS, settings, DEFAULT_SETTINGS, esc, icon, toast, openModal, confirmBox, alertBox,
-  audit, ensureChartOfAccounts, fmtDateTime, money,
+  audit, ensureChartOfAccounts, fmtDateTime, money, ACTIONS, AREA_OF_PAGE, actionsFromLists,
 } from "../core.js";
 
 const WRITE_LABEL = {
@@ -1222,64 +1222,60 @@ function renderStaffAccess(root, u, { close, reload }) {
   const uid = u.id;
   const roleKeys = Object.keys(roles);
   const isSelf = uid === session.uid;
-  const roleDefaults = (role) => ({ pages: [...(roles[role]?.pages || [])], write: [...(roles[role]?.write || [])] });
+  const ACT_LABEL = { view: "View", add: "Add", edit: "Edit", delete: "Delete", print: "Print" };
+  const AREA_ACTS = ["add", "edit", "delete"];
+  const roleActions = (role) => actionsFromLists(roles[role]?.pages || [], roles[role]?.write || []);
   const hasOwn = !!u.access;
 
-  // Working copy. Nothing is saved until "Save changes".
+  // Working copy: per screen, the list of actions this person may take. Nothing is saved until "Save changes".
   const st = {
     name: u.name || "",
     active: u.active !== false,
     requireOtp: !!u.requireOtp,
     role: u.role || roleKeys[0],
     custom: hasOwn,
-    ...(hasOwn ? { pages: [...(u.access.pages || [])], write: [...(u.access.write || [])] } : roleDefaults(u.role)),
+    actions: hasOwn
+      ? structuredClone(u.access.actions || actionsFromLists(u.access.pages || [], u.access.write || []))
+      : roleActions(u.role || roleKeys[0]),
   };
   const isAdminRole = () => st.role === "admin";
-  const hasPage = (p) => isAdminRole() || st.pages.includes(p);
-  const hasArea = (a) => isAdminRole() || st.write.includes(a);
+  const hasAct = (page, act) => isAdminRole() || (st.actions[page] || []).includes(act);
+  const screensOn = () => Object.keys(st.actions).filter((p) => (st.actions[p] || []).includes("view")).length;
+  const actionsOn = () => Object.values(st.actions).reduce((n, a) => n + a.length, 0);
+  const sameAsRole = (p) => JSON.stringify([...(st.actions[p] || [])].sort()) === JSON.stringify([...(roleActions(st.role)[p] || [])].sort());
 
   const summaryHtml = () => {
-    const pages = isAdminRole() ? PAGE_KEYS.length : st.pages.length;
-    const areas = isAdminRole() ? WRITE_AREAS.length : st.write.length;
-    return `<div class="sa-stat"><strong>${pages}</strong><small>of ${PAGE_KEYS.length} screens</small></div>
-            <div class="sa-stat"><strong>${areas}</strong><small>of ${WRITE_AREAS.length} data areas</small></div>`;
+    const screens = isAdminRole() ? PAGE_KEYS.length : screensOn();
+    return `<div class="sa-stat"><strong>${screens}</strong><small>of ${PAGE_KEYS.length} screens</small></div>
+            <div class="sa-stat"><strong>${isAdminRole() ? "All" : actionsOn()}</strong><small>actions allowed</small></div>`;
   };
 
-  // Permission matrix: one row per screen or data area. Columns: each role's access, this person's access, and what changed.
+  // Permission matrix: one row per screen. Columns: View, Add, Edit, Delete, Print. Add, Edit and Delete apply only to screens with a data area.
   const matrixHtml = () => {
-    const base = (kind, key) => (kind === "page" ? roles[st.role]?.pages || [] : roles[st.role]?.write || []).includes(key);
-    const mine = (kind, key) => (kind === "page" ? hasPage(key) : hasArea(key));
-    const rowHtml = (kind, key, label, ico) => {
-      const m = mine(kind, key), d = base(kind, key);
-      const desc = (kind === "page" ? PAGE_DESC[key] : AREA_DESC[key]) || "";
-      const change = m === d ? `<span class="mx-same">Same as role</span>` : m ? `<span class="mx-add">Added</span>` : `<span class="mx-rm">Removed</span>`;
+    const cell = (p, act) => {
+      if (act !== "view" && act !== "print" && !AREA_OF_PAGE[p]) return `<td class="c"><span class="mx-dot">—</span></td>`;
+      return `<td class="c mx-me"><label class="mx-toggle"><input type="checkbox" data-pact="${p}" data-act="${act}" ${hasAct(p, act) ? "checked" : ""} ${isAdminRole() ? "disabled" : ""} aria-label="${esc(ACT_LABEL[act])} ${esc(PAGE_NAMES[p])} for this person" /><span></span></label></td>`;
+    };
+    const rows = PAGE_KEYS.map((p) => {
+      const desc = PAGE_DESC[p] || "";
+      const status = isAdminRole() ? `<span class="mx-same">Always</span>` : sameAsRole(p) ? `<span class="mx-same">Same as role</span>` : `<span class="mx-add">Changed</span>`;
       return `
         <tr>
-          <th scope="row"><span class="mx-name">${icon(ico)}<span>${esc(label)}${desc ? `<small class="mx-desc">${esc(desc)}</small>` : ""}</span></span></th>
-          ${roleKeys.map((k) => {
-            const on = k === "admin" || (kind === "page" ? (roles[k]?.pages || []).includes(key) : (roles[k]?.write || []).includes(key));
-            return `<td class="c"><span class="mx-dot ${on ? "on" : ""}">${on ? "✓" : ""}</span></td>`;
-          }).join("")}
-          <td class="c mx-me"><label class="mx-toggle"><input type="checkbox" data-${kind}="${key}" ${m ? "checked" : ""} ${isAdminRole() ? "disabled" : ""} aria-label="${esc(label)} for this person" /><span></span></label></td>
-          <td class="c">${isAdminRole() ? `<span class="mx-same">Always</span>` : change}</td>
+          <th scope="row"><span class="mx-name">${icon(ACCESS_ICON[p] || "dashboard")}<span>${esc(PAGE_NAMES[p])}${desc ? `<small class="mx-desc">${esc(desc)}</small>` : ""}</span></span></th>
+          ${ACTIONS.map((act) => cell(p, act)).join("")}
+          <td class="c">${status}</td>
         </tr>`;
-    };
-    const head = `<tr><th>Screen or data</th>${roleKeys.map((k) => `<th class="c">${esc(roles[k]?.label || k)}</th>`).join("")}<th class="c mx-me">This person</th><th class="c">Compared to role</th></tr>`;
-    const group = (t) => `<tr class="mx-group"><th colspan="${roleKeys.length + 3}">${esc(t)}</th></tr>`;
+    }).join("");
+    const head = `<tr><th>Screen</th>${ACTIONS.map((a) => `<th class="c mx-me">${ACT_LABEL[a]}</th>`).join("")}<th class="c">Compared to role</th></tr>`;
     return `
       <div class="table-wrap"><table class="mx-table">
         <thead>${head}</thead>
-        <tbody>
-          ${group("Screens they can open")}
-          ${PAGE_KEYS.map((p) => rowHtml("page", p, PAGE_NAMES[p], ACCESS_ICON[p] || "dashboard")).join("")}
-          ${group("Data they can change")}
-          ${WRITE_AREAS.map((a) => rowHtml("area", a, WRITE_LABEL[a], AREA_ICON[a] || "inventory")).join("")}
-        </tbody>
+        <tbody>${rows}</tbody>
       </table></div>`;
   };
   const matrixCard = () => `
     <section class="card">
-      <header class="card-head"><h3>Permission matrix</h3><span class="muted small">Switch the last column to give or take away access for this person. The role columns show what each role allows.</span></header>
+      <header class="card-head"><h3>Permission matrix</h3><span class="muted small">Tick what this person may do on each screen. Acting on a screen needs View. Changes apply the next time they sign in.</span></header>
       <div id="sa-matrix">${matrixHtml()}</div>
     </section>`;
 
@@ -1289,7 +1285,7 @@ function renderStaffAccess(root, u, { close, reload }) {
         <label class="sa-role ${st.role === k ? "on" : ""}">
           <input type="radio" name="role" value="${esc(k)}" ${st.role === k ? "checked" : ""} />
           <strong>${esc(roles[k].label)}</strong>
-          <small>${k === "admin" ? "Everything, always" : `${(roles[k].pages || []).length} screens · ${(roles[k].write || []).length} areas`}</small>
+          <small>${k === "admin" ? "Everything, always" : `${(roles[k].pages || []).length} screens`}</small>
         </label>`).join("")}
     </div>`;
 
@@ -1327,16 +1323,16 @@ function renderStaffAccess(root, u, { close, reload }) {
 
           <section class="card">
             <header class="card-head"><h3>Role</h3></header>
-            <p class="muted small">A role is a starting point. Change the screens and areas below to give this person more or less.</p>
+            <p class="muted small">A role is a starting point. Change the matrix below to give this person more or less.</p>
             <div id="sa-roles">${roleCardsHtml()}</div>
             <label class="sa-switch-row"><input type="checkbox" id="sa-standard" ${st.custom ? "" : "checked"} ${isAdminRole() ? "disabled" : ""} />
-              <span><strong>Use the role's standard access</strong><small>Untick to choose screens and areas for this person.</small></span></label>
+              <span><strong>Use the role's standard access</strong><small>Untick to choose what this person may do.</small></span></label>
           </section>
         </div>
 
         ${matrixCard()}
 
-        ${isAdminRole() ? `<p class="muted small center">Administrators always have every screen and area. Change their role to limit them.</p>` : ""}
+        ${isAdminRole() ? `<p class="muted small center">Administrators always have every screen and action. Change their role to limit them.</p>` : ""}
 
         <div class="form-actions sa-actions">
           <button class="btn ghost" data-back>Cancel</button>
@@ -1360,24 +1356,30 @@ function renderStaffAccess(root, u, { close, reload }) {
     root.querySelector("#sa-otp").addEventListener("change", (e) => { st.requireOtp = e.target.checked; });
     root.querySelector("#sa-standard").addEventListener("change", (e) => {
       st.custom = !e.target.checked;
-      if (!st.custom) Object.assign(st, roleDefaults(st.role));
+      if (!st.custom) st.actions = roleActions(st.role);
       refreshTiles();
     });
     root.querySelectorAll("[name=role]").forEach((r) => r.addEventListener("change", () => {
       st.role = r.value;
-      if (!st.custom) Object.assign(st, roleDefaults(st.role));
+      if (!st.custom) st.actions = roleActions(st.role);
       refreshTiles();
     }));
-    root.querySelectorAll("[data-page]").forEach((c) => c.addEventListener("change", (e) => {
+    // One tick on one screen and one action. Acting needs View; removing View removes everything on that screen.
+    root.querySelectorAll("[data-pact]").forEach((c) => c.addEventListener("change", (e) => {
       st.custom = true;
-      const p = e.target.dataset.page;
-      st.pages = e.target.checked ? [...new Set([...st.pages, p])] : st.pages.filter((x) => x !== p);
-      refreshTiles();
-    }));
-    root.querySelectorAll("[data-area]").forEach((c) => c.addEventListener("change", (e) => {
-      st.custom = true;
-      const a = e.target.dataset.area;
-      st.write = e.target.checked ? [...new Set([...st.write, a])] : st.write.filter((x) => x !== a);
+      const p = e.target.dataset.pact;
+      const act = e.target.dataset.act;
+      const cur = new Set(st.actions[p] || []);
+      if (e.target.checked) {
+        cur.add(act);
+        if (act !== "view") cur.add("view");
+      } else if (act === "view") {
+        cur.clear();
+      } else {
+        cur.delete(act);
+      }
+      const list = ACTIONS.filter((x) => cur.has(x));
+      if (list.length) st.actions[p] = list; else delete st.actions[p];
       refreshTiles();
     }));
     onAction(root.querySelector("#sa-save"), async () => {
@@ -1385,8 +1387,13 @@ function renderStaffAccess(root, u, { close, reload }) {
       if (!name) throw new Error("Give them a name.");
       if (isSelf && st.role !== "admin") throw new Error("You cannot remove your own admin access.");
       if (isSelf && !st.active) throw new Error("You cannot disable your own account.");
-      if (!isAdminRole() && st.custom && !st.pages.length) throw new Error("Give them at least one screen.");
-      const access = st.custom && !isAdminRole() ? { pages: [...st.pages], write: [...st.write] } : null;
+      if (!isAdminRole() && st.custom && screensOn() === 0) throw new Error("Give them at least one screen.");
+      // The screen list and the area list are derived from the actions, so older checks keep working.
+      const pages = Object.keys(st.actions).filter((p) => (st.actions[p] || []).includes("view"));
+      const write = [...new Set(Object.keys(AREA_OF_PAGE)
+        .filter((p) => (st.actions[p] || []).some((a) => AREA_ACTS.includes(a)))
+        .map((p) => AREA_OF_PAGE[p]))];
+      const access = st.custom && !isAdminRole() ? { pages, write, actions: structuredClone(st.actions) } : null;
       await updateDoc(doc(db, "users", uid), {
         name, active: st.active, requireOtp: st.requireOtp, role: st.role, access, updatedAt: serverTimestamp(),
       });

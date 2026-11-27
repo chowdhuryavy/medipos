@@ -2,12 +2,15 @@ rules_version = '2';
 
 // MediPOS security rules. Deploy with:  firebase deploy --only firestore:rules
 //
-// Permissions come from the database, not from this file:
-//   settings/roles  →  { <role>: { label, pages: [...], write: [...] } }
-//     pages = screens a role can open (read access to that area)
-//     write = areas a role can change: pos, inventory, purchasing, partners, accounting
+// Permissions come from the database, not from this file.
+// Each person may have their own settings in users/{uid}.access:
+//   actions: { <screen>: [ "view" | "add" | "edit" | "delete" | "print" ] }
+// If a person has no actions saved, the older lists apply:
+//   access.pages / access.write, or else the role's pages / write in settings/roles.
+//   pages = screens (view), write = areas where add, edit and delete are allowed.
+// Print is checked in the app only (it does not change data).
 // Administrators are always allowed everything, so the admin cannot be locked out.
-// Field-level limits (e.g. cashiers can change stock but not prices) are enforced here.
+// Field-level limits (e.g. sales staff can change stock but not prices) are enforced here.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -47,25 +50,40 @@ service cloud.firestore {
     function otpOk() {
       return request.auth.token.get('otp', false) == true || myProfile().get('requireOtp', false) != true;
     }
-    // A person's own lists (set by an administrator) replace the role's lists. Null means the role's lists apply.
+    // A person's own access (set by an administrator). Null means the role's lists apply.
     function ownAccess() {
       return myProfile().get('access', null);
     }
-    function pagesOf() {
-      return (ownAccess() != null && 'pages' in ownAccess()) ? ownAccess().pages : roleMap()[myProfile().role].pages;
+    // Per-screen actions saved for this person. Null when none are saved (the older lists apply).
+    function actionsOf() {
+      return (ownAccess() != null && 'actions' in ownAccess()) ? ownAccess().actions : null;
     }
-    function writeOf() {
-      return (ownAccess() != null && 'write' in ownAccess()) ? ownAccess().write : roleMap()[myProfile().role].write;
+    // Older lists: screens (pages) and areas (write). A person's own lists replace the role's lists.
+    function listPages() {
+      return (ownAccess() != null && 'pages' in ownAccess()) ? ownAccess().pages
+        : ('pages' in roleMap()[myProfile().role] ? roleMap()[myProfile().role].pages : []);
     }
+    function listWrite() {
+      return (ownAccess() != null && 'write' in ownAccess()) ? ownAccess().write
+        : ('write' in roleMap()[myProfile().role] ? roleMap()[myProfile().role].write : []);
+    }
+    // The one check every rule uses: may this active person do this action on this screen?
+    // page = a screen name (pos, inventory, purchasing, partners, accounting, reports, returns, dashboard ...)
+    // act  = "view" | "add" | "edit" | "delete" | "print"
+    function can(page, act) {
+      return isAdmin() || (isActive() && (
+        actionsOf() != null
+          ? (page in actionsOf() && act in actionsOf()[page])
+          : ((act == 'view' || act == 'print') ? page in listPages() : page in listWrite())
+      ));
+    }
+    // Shorthands kept for readability in the rules below.
     function canPage(page) {
-      return isAdmin() || (isActive()
-        && 'pages' in roleMap()[myProfile().role]
-        && page in pagesOf());
+      return can(page, 'view');
     }
+    // Any change at all in an area (used where one rule covers adding, editing and deleting).
     function canWrite(area) {
-      return isAdmin() || (isActive()
-        && 'write' in roleMap()[myProfile().role]
-        && area in writeOf());
+      return can(area, 'add') || can(area, 'edit') || can(area, 'delete');
     }
 
     // ───── staff ─────
@@ -92,42 +110,45 @@ service cloud.firestore {
     // ───── catalogue ─────
     match /products/{id} {
       allow read: if isActive();
-      allow create, delete: if canWrite('inventory');
+      allow create: if can('inventory', 'add');
+      allow delete: if can('inventory', 'delete');
       // Inventory staff may change anything. Purchasing may change stock and cost.
       // Sales may only change stock (never prices, names or costs).
-      allow update: if canWrite('inventory')
-        || (canWrite('purchasing')
+      allow update: if can('inventory', 'edit')
+        || (can('purchasing', 'edit')
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'costPrice', 'updatedAt']))
-        || (canWrite('pos')
+        || (can('pos', 'edit')
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'updatedAt']));
     }
     match /batches/{id} {
       allow read: if isActive();
-      allow create: if canWrite('inventory') || canWrite('purchasing');
-      allow update: if canWrite('inventory')
-        || (canWrite('pos') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remaining']));
+      allow create: if can('inventory', 'add') || can('purchasing', 'add');
+      allow update: if can('inventory', 'edit')
+        || (can('pos', 'edit') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remaining']));
       allow delete: if isAdmin();
     }
 
     // ───── customers & suppliers ─────
     match /customers/{id} {
       allow read: if isActive();
-      allow create, update: if canWrite('partners')
-        || (canWrite('pos') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'updatedAt']));
+      allow create: if can('partners', 'add');
+      allow update: if can('partners', 'edit')
+        || (can('pos', 'edit') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'updatedAt']));
       allow delete: if isAdmin();
     }
     match /suppliers/{id} {
       allow read: if isActive();
-      allow create, update: if canWrite('purchasing') || canWrite('partners');
+      allow create: if can('purchasing', 'add') || can('partners', 'add');
+      allow update: if can('purchasing', 'edit') || can('partners', 'edit');
       allow delete: if isAdmin();
     }
 
     // ───── transactions (append-only) ─────
     match /sales/{id} {
-      allow read: if canPage('pos') || canPage('dashboard') || canPage('reports') || canPage('accounting') || canPage('returns');
+      allow read: if can('pos', 'view') || can('dashboard', 'view') || can('reports', 'view') || can('accounting', 'view') || can('returns', 'view');
       // A discount above the cashier limit (settings/general.maxDiscountPct) needs an administrator's approval:
       // an approvals/{id} record made for this same cashier, for at least this discount, and not yet expired.
-      allow create: if canWrite('pos') && (
+      allow create: if can('pos', 'add') && (
         request.resource.data.discountPct <= get(/databases/$(database)/documents/settings/general).data.get('maxDiscountPct', 100)
         || (request.resource.data.get('approvalId', null) != null
           && exists(/databases/$(database)/documents/approvals/$(request.resource.data.approvalId))
@@ -140,11 +161,11 @@ service cloud.firestore {
     }
     // Returns and voids are written only by the server, after the approver's password is checked.
     match /returns/{id} {
-      allow read: if canPage('returns') || canPage('reports') || canPage('accounting');
+      allow read: if can('returns', 'view') || can('reports', 'view') || can('accounting', 'view');
       allow create, update, delete: if false;
     }
     match /saleReturns/{id} {
-      allow read: if canPage('returns');
+      allow read: if can('returns', 'view');
       allow write: if false;
     }
     // Discount approvals: written by the server only.
@@ -153,9 +174,9 @@ service cloud.firestore {
     }
     match /purchases/{id} {
       match /bills/{bid} {
-        allow read: if canPage('purchasing') || canPage('accounting') || canPage('reports');
+        allow read: if can('purchasing', 'view') || can('accounting', 'view') || can('reports', 'view');
         // A bill is a photo or PDF of at most about 900 KB, written once with the posting it belongs to.
-        allow create: if canWrite('purchasing')
+        allow create: if can('purchasing', 'add')
           && request.resource.data.keys().hasOnly(['name', 'type', 'size', 'data', 'uploadedBy', 'uploadedByUid', 'uploadedAt', 'copied'])
           && request.resource.data.type in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
           && request.resource.data.data is string && request.resource.data.data.size() <= 900000
@@ -163,11 +184,11 @@ service cloud.firestore {
           && request.resource.data.uploadedByUid == request.auth.uid;
         allow update, delete: if false;
       }
-      allow read: if canPage('purchasing') || canPage('reports') || canPage('accounting') || canWrite('partners');
-      allow create: if canWrite('purchasing');
+      allow read: if can('purchasing', 'view') || can('reports', 'view') || can('accounting', 'view') || can('partners', 'edit');
+      allow create: if can('purchasing', 'add');
       // Paying a supplier only marks bills as paid. Otherwise a posted bill is never changed.
       // Paid can only go up and never beyond the bill total, so a bill cannot be cleared without a payment.
-      allow update: if (canWrite('partners') || canWrite('purchasing'))
+      allow update: if (can('partners', 'edit') || can('purchasing', 'edit'))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paid', 'status', 'paidAt'])
         && request.resource.data.paid >= resource.data.paid
         && request.resource.data.paid <= resource.data.total;
@@ -176,25 +197,25 @@ service cloud.firestore {
     match /journal/{id} {
       // Accounting and reports staff read every voucher. Anyone else reads only the vouchers they posted themselves
       // (the voucher tab opened after a posting). A query must filter on byUid to use the second clause.
-      allow read: if canPage('accounting') || canPage('reports')
+      allow read: if can('accounting', 'view') || can('reports', 'view')
         || (isActive() && resource.data.byUid == request.auth.uid);
       // Any staff who post money movements create journal lines through their transaction.
       // A voucher must carry its JV number. Once posted it is never edited or deleted; only its
       // reversal link and status change (when it is reversed or numbered).
       // A voucher has at least two lines (debit and credit).
-      allow create: if (canWrite('accounting') || canWrite('pos') || canWrite('purchasing')
-        || canWrite('partners') || canWrite('inventory'))
+      allow create: if (can('accounting', 'add') || can('pos', 'add') || can('purchasing', 'add')
+        || can('partners', 'add') || can('inventory', 'add'))
         && request.resource.data.jvNo is string
         && request.resource.data.lines is list && request.resource.data.lines.size() >= 2;
-      allow update: if canWrite('accounting')
+      allow update: if can('accounting', 'edit')
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['jvNo', 'status', 'reversedBy']);
       allow delete: if false;
     }
     match /expenses/{id} {
       match /bills/{bid} {
-        allow read: if canPage('accounting');
+        allow read: if can('accounting', 'view');
         // A bill is a photo or PDF of at most about 900 KB, written once with the posting it belongs to.
-        allow create: if canWrite('accounting')
+        allow create: if can('accounting', 'add')
           && request.resource.data.keys().hasOnly(['name', 'type', 'size', 'data', 'uploadedBy', 'uploadedByUid', 'uploadedAt', 'copied'])
           && request.resource.data.type in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
           && request.resource.data.data is string && request.resource.data.data.size() <= 900000
@@ -202,15 +223,16 @@ service cloud.firestore {
           && request.resource.data.uploadedByUid == request.auth.uid;
         allow update, delete: if false;
       }
-      allow read: if canPage('accounting');
-      allow create: if canWrite('accounting');
+      allow read: if can('accounting', 'view');
+      allow create: if can('accounting', 'add');
       allow update, delete: if false;
     }
 
     // ───── accounting setup ─────
     match /accounts/{code} {
-      allow read: if canPage('accounting');
-      allow write: if canWrite('accounting');
+      allow read: if can('accounting', 'view');
+      allow create, update: if can('accounting', 'add') || can('accounting', 'edit');
+      allow delete: if can('accounting', 'delete');
     }
 
     // ───── system ─────
@@ -240,7 +262,7 @@ service cloud.firestore {
     }
     match /floats/{id} {
       // Wallet and operator float balances: sales and top-ups update them; staff who sell or keep accounts can read them.
-      allow read: if canPage('pos') || canPage('accounting') || canPage('dashboard');
+      allow read: if can('pos', 'view') || can('accounting', 'view') || can('dashboard', 'view');
       allow create, update: if canWrite('pos') || canWrite('accounting');
       // Only administrators delete a float, and only when a wallet or operator is renamed (its balance moves) or removed at zero.
       allow delete: if isAdmin();
@@ -280,8 +302,8 @@ service cloud.firestore {
     // Cash shifts: opened with a counted float and closed with a counted cash figure, by the same person.
     match /shifts/{id} {
       allow read: if isActive();
-      allow create: if canPage('pos') && request.resource.data.status == 'open' && request.resource.data.openedByUid == request.auth.uid;
-      allow update: if canPage('pos') && resource.data.status == 'open' && request.resource.data.status == 'closed'
+      allow create: if can('pos', 'add') && request.resource.data.status == 'open' && request.resource.data.openedByUid == request.auth.uid;
+      allow update: if can('pos', 'edit') && resource.data.status == 'open' && request.resource.data.status == 'closed'
         && request.resource.data.closedByUid == request.auth.uid
         && request.resource.data.openedByUid == resource.data.openedByUid
         && request.resource.data.openingCash == resource.data.openingCash;
@@ -290,15 +312,15 @@ service cloud.firestore {
 
     // Prescription register: append-only. Sales users record; readers of reports, accounting and the sale screen can view.
     match /prescriptions/{id} {
-      allow read: if canPage('pos') || canPage('reports') || canPage('accounting');
-      allow create: if canPage('pos') && request.resource.data.recordedByUid == request.auth.uid
+      allow read: if can('pos', 'view') || can('reports', 'view') || can('accounting', 'view');
+      allow create: if can('pos', 'add') && request.resource.data.recordedByUid == request.auth.uid
         && request.resource.data.items is list && request.resource.data.items.size() >= 1;
       allow update, delete: if false;
     }
     // Doctors and clinics used on prescriptions. Sales users add; only administrators remove.
     match /doctors/{id} {
       allow read: if isActive();
-      allow create: if canPage('pos') && request.resource.data.createdByUid == request.auth.uid;
+      allow create: if can('pos', 'add') && request.resource.data.createdByUid == request.auth.uid;
       allow update: if false;
       allow delete: if isAdmin();
     }

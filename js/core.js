@@ -113,6 +113,22 @@ export const effectiveWrite = () => session.access?.write ?? roles[session.role]
 export const can = (page) => !!session.role && effectivePages().includes(page);
 export const canWrite = (area) => !!session.role && effectiveWrite().includes(area);
 
+/* Per-screen actions: view, add, edit, delete, print. Matches the rules: add/edit/delete follow the screen's data area. */
+export const ACTIONS = ["view", "add", "edit", "delete", "print"];
+export const AREA_OF_PAGE = { pos: "pos", inventory: "inventory", purchasing: "purchasing", partners: "partners", accounting: "accounting" };
+// Turns older screen and area lists into actions. Viewing and printing follow the screen; add, edit and delete follow its data area.
+export function actionsFromLists(pages = [], write = []) {
+  const out = {};
+  for (const p of pages) {
+    const acts = ["view", "print"];
+    if (AREA_OF_PAGE[p] && write.includes(AREA_OF_PAGE[p])) acts.push("add", "edit", "delete");
+    out[p] = acts;
+  }
+  return out;
+}
+export const effectiveActions = () => session.access?.actions ?? actionsFromLists(effectivePages(), effectiveWrite());
+export const canAct = (page, act) => !!session.role && (effectiveActions()[page] || []).includes(act);
+
 /** Loads shop settings and role permissions from Firestore, merged over the defaults. */
 export async function loadSettings() {
   const g = await getDoc(doc(db, "settings", "general"));
