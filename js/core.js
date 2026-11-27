@@ -23,6 +23,8 @@ export const DEFAULT_SETTINGS = {
   maxDiscountPct: 100,
   allowCreditSales: true,
   allowPriceChange: true,
+  // App font: a key of APP_FONTS below. Only fonts already on the device are used, so nothing is downloaded.
+  appFont: "system",
   // Two sale-screen buttons. They show only when both are on; each shows the products of its categories.
   posTab1Active: false, posTab1Label: "Medicine", posTab1Categories: "",
   posTab2Active: false, posTab2Label: "Others", posTab2Categories: "",
@@ -48,6 +50,22 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const settings = structuredClone(DEFAULT_SETTINGS);
+
+// Fonts that are already on the phone or computer. Each stack lists fallbacks.
+export const APP_FONTS = {
+  system: { label: "System (default)", stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+  arial: { label: "Arial", stack: 'Arial, Helvetica, sans-serif' },
+  verdana: { label: "Verdana", stack: 'Verdana, Geneva, sans-serif' },
+  trebuchet: { label: "Trebuchet", stack: '"Trebuchet MS", Helvetica, sans-serif' },
+  tahoma: { label: "Tahoma", stack: 'Tahoma, Geneva, sans-serif' },
+  georgia: { label: "Georgia (serif)", stack: 'Georgia, "Times New Roman", serif' },
+};
+
+/** Sets the app font from the settings. Printed receipts and reports keep their own fonts. */
+export function applyAppFont() {
+  const f = APP_FONTS[settings.appFont] || APP_FONTS.system;
+  document.documentElement.style.setProperty("--app-font", f.stack);
+}
 
 // Areas a role can change data in. The database (firestore.rules) enforces these;
 // the screens only mirror them so people are not shown buttons that would fail.
@@ -76,6 +94,7 @@ export const canWrite = (area) => !!session.role && effectiveWrite().includes(ar
 export async function loadSettings() {
   const g = await getDoc(doc(db, "settings", "general"));
   Object.assign(settings, structuredClone(DEFAULT_SETTINGS), g.exists() ? g.data() : {});
+  applyAppFont();
   const r = await getDoc(doc(db, "settings", "roles"));
   const saved = r.exists() ? r.data() : {};
   // Every role in the database is loaded, including roles the admin created.

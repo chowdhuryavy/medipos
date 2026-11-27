@@ -1332,3 +1332,7 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
   .code-input { font-size: 26px; letter-spacing: .35em; }
   .code-card .code-row { flex-direction: column; gap: 4px; }
 }
+
+/* App font: set from Settings → Appearance. Print and receipt styles keep their own fonts. */
+:root { --app-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body, button, input, select, textarea { font-family: var(--app-font); }

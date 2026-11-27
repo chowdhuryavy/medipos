@@ -1,4 +1,4 @@
-import { onSubmit, onAction, onDelegated, withBusy } from "../core.js";
+import { onSubmit, onAction, onDelegated, withBusy, APP_FONTS } from "../core.js";
 import { VERSION } from "../version.js";
 import { checkForUpdate } from "../updates.js";
 
@@ -225,6 +225,9 @@ const FIELDS = [
     ["posTab2Label", "Second button name", "text"],
     ["posTab2Categories", "Product categories for the second button (comma separated). Empty = all other categories", "text"],
   ]],
+  ["Appearance", [
+    ["appFont", "App font", "font"],
+  ]],
   ["Numbering", [
     ["invoicePrefix", "Invoice prefix", "text"],
     ["purchasePrefix", "Purchase prefix", "text"],
@@ -295,6 +298,7 @@ async function viewSettings(body) {
     "Numbering": "Prefixes for invoice and purchase numbers.",
     "Password reset": "How long a reset code stays valid.",
     "Security": "Automatic sign-out after a period of inactivity.",
+    "Appearance": "The font used across the app. Applies after the next reload.",
   };
   // Every section opens in its own window with its own save. The logo is one of them.
   const GROUPS = [
@@ -373,6 +377,9 @@ async function viewSettings(body) {
         <div class="form-grid">
           ${fields.map(([k, label, type]) => type === "bool"
             ? `<label class="check span-2"><input type="checkbox" name="${k}" ${settings[k] ? "checked" : ""} /> <span>${esc(label)}</span></label>`
+            : type === "font"
+              ? `<label class="span-2">${esc(label)}
+                <select name="${k}">${Object.entries(APP_FONTS).map(([key, f]) => `<option value="${key}" ${settings[k] === key ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></label>`
             : `<label class="${k === "receiptFooter" || k === "shopAddress" ? "span-2" : ""}">${esc(label)}
                 <input name="${k}" type="${type}" ${type === "number" ? 'inputmode="decimal" step="any"' : ""} value="${esc(settings[k] ?? "")}" /></label>`).join("")}
         </div>
