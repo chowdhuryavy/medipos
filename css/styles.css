@@ -1458,3 +1458,21 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 
 /* Administration stays at the bottom of the sidebar. */
 .nav-pinned { margin-top: auto; padding-top: 6px; border-top: 1px solid rgba(204, 251, 241, .15); }
+
+/* Sale screen: payment chips and quick cash. */
+.bill-meta { margin: -6px 0 2px; }
+.pay-field { display: grid; gap: 6px; min-width: 0; }
+.pay-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.pay-chip {
+  padding: 9px 14px; border-radius: 999px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text);
+  font-weight: 700; font-size: 14px; cursor: pointer; transition: transform .15s, background .2s, color .2s, border-color .2s;
+}
+.pay-chip:hover { border-color: var(--brand); }
+.pay-chip:active { transform: scale(.95); }
+.pay-chip.active { background: linear-gradient(135deg, #14b8a6, #0f766e); color: #fff; border-color: transparent; box-shadow: 0 8px 18px -10px var(--brand); }
+.quick-cash { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick-cash[hidden] { display: none; }
+.quick-btn { padding: 7px 11px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-weight: 700; font-size: 13px; cursor: pointer; transition: border-color .2s, transform .15s; }
+.quick-btn:hover { border-color: var(--brand); }
+.quick-btn:active { transform: scale(.95); }
+.quick-btn.exact { border-color: var(--brand); color: var(--brand); }

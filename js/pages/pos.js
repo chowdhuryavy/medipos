@@ -58,6 +58,7 @@ export async function render(el) {
 
       <aside class="card pos-bill" id="p-bill">
         <header class="card-head"><h3>${icon("cart")} Current bill</h3><span class="badge" id="p-count">0 items</span></header>
+        <p class="bill-meta muted small">${esc(session.name || "")} · ${esc(todayISO())}</p>
         <div class="bill-actions">
           <button class="btn ghost sm" id="p-hold" title="Hold this bill (F8)">${icon("pause")}<span>Hold</span></button>
           <button class="btn ghost sm" id="p-held" title="Resume a held bill">${icon("refresh")}<span>Held <b id="p-held-n">0</b></span></button>
@@ -76,15 +77,18 @@ export async function render(el) {
         <div class="totals" id="p-totals"></div>
         <div class="form-row">
           <label>Discount %<input id="p-disc" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="0" /></label>
-          <label>Paid by
-            <select id="p-pay">
+          <div class="pay-field">
+            <span class="field-label">Paid by</span>
+            <div class="pay-seg" id="p-paychips" role="radiogroup" aria-label="Paid by"></div>
+            <select id="p-pay" hidden>
               ${methods.filter((m) => !m.credit || creditOk).map((m) => `<option value="${esc(m.key)}" ${m.key === st.pay ? "selected" : ""}>${esc(m.label)}</option>`).join("")}
             </select>
-          </label>
+          </div>
         </div>
         <label id="p-cashrow" class="cash-row">Cash received
           <input id="p-tender" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount given by customer" />
         </label>
+        <div class="quick-cash" id="p-quick" hidden></div>
         <div class="change-due" id="p-change" aria-live="polite"></div>
         <button class="btn primary block xl" id="p-charge">${icon("check")}<span>Charge</span></button>
         <button class="btn ghost block" id="p-clear">Clear bill</button>
@@ -242,7 +246,37 @@ export async function render(el) {
       $("#p-change").className = "change-due";
     }
     $("#p-held-n").textContent = st.holds.length;
+
+    // Payment methods as tap chips (the hidden select keeps the value for the rest of the screen).
+    $("#p-paychips").innerHTML = methods.filter((m) => !m.credit || creditOk).map((m) =>
+      `<button type="button" class="pay-chip ${m.key === st.pay ? "active" : ""}" data-pay="${esc(m.key)}" role="radio" aria-checked="${m.key === st.pay}">${esc(m.label)}</button>`).join("");
+    // Quick cash: the exact amount, then the next few notes above it.
+    const quick = $("#p-quick");
+    if (needsTender) {
+      const exact = round2(t.collect);
+      const notes = [20, 50, 100, 200, 500, 1000, 2000].filter((n) => n > exact).slice(0, 3);
+      quick.innerHTML = [`<button type="button" class="quick-btn exact" data-tender="${exact}">Exact ${money(exact)}</button>`,
+        ...notes.map((n) => `<button type="button" class="quick-btn" data-tender="${n}">${money(n)}</button>`)].join("");
+      quick.hidden = false;
+    } else {
+      quick.hidden = true;
+    }
   }
+
+  $("#p-paychips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-pay]");
+    if (!b) return;
+    st.pay = b.dataset.pay;
+    $("#p-pay").value = st.pay;
+    paintBill();
+  });
+  $("#p-quick").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-tender]");
+    if (!b) return;
+    $("#p-tender").value = b.dataset.tender;
+    paintBill();
+    $("#p-tender").focus();
+  });
 
   function flash(id) {
     const c = el.querySelector(`[data-add="${CSS.escape(id)}"]`);
