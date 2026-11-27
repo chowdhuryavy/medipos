@@ -25,8 +25,9 @@ export async function loadEmailConfig() {
   }
   const minutes = Math.min(60, Math.max(1, Math.round(Number(g.otpExpiryMinutes) || DEFAULT_OTP_MINUTES)));
   return {
-    appName: b.shopName || b.appName || "MediPOS",
-    shopName: b.shopName || g.shopName || "My Pharmacy",
+    // The shop name from Settings is the app name. Settings comes first; the public branding copy is a fallback.
+    appName: g.shopName || b.appName || b.shopName || "MediPOS",
+    shopName: g.shopName || b.shopName || "My Pharmacy",
     hasLogo: !!b.logoUrl,
     brandColor: b.brandColor,
     emailFooter: g.emailFooter || DEFAULT_EMAIL_FOOTER,
