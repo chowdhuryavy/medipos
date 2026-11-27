@@ -279,76 +279,118 @@ async function viewVersions(body) {
 
 async function viewSettings(body) {
   const bSnap = await getDoc(doc(db, "branding", "public"));
-  let logoUrl = (bSnap.exists() && bSnap.data().logoUrl) || "";
-  let logoChanged = false;
+  const logoNow = (bSnap.exists() && bSnap.data().logoUrl) || "";
+  const GROUP_HELP = {
+    "Shop profile": "Name, address, phone and the footer text on receipts and emails.",
+    "Money & tax": "Currency, VAT rate, discount and credit rules.",
+    "Numbering": "Prefixes for invoice and purchase numbers.",
+    "Password reset": "How long a reset code stays valid.",
+    "Security": "Automatic sign-out after a period of inactivity.",
+  };
+  // Every section opens in its own window with its own save. The logo is one of them.
+  const GROUPS = [
+    { key: "logo", title: "Shop logo", help: "Shown on the sign-in page, the sidebar, receipts, every email and as the app icon." },
+    ...FIELDS.map(([title], i) => ({ key: `g${i}`, title, help: GROUP_HELP[title] || "" })),
+  ];
+
   body.innerHTML = `
-    <form id="sf" class="settings-form">
-      <section class="card">
-        <h3>Shop logo</h3>
-        <p class="muted small">Shown on the sign-in page, the sidebar, the top bar, the dashboard, every email and as the app icon.</p>
+    <section class="card">
+      <h3>Shop settings</h3>
+      <p class="muted small">Open a section to change it. Each section has its own window and its own save.</p>
+      <div class="list-index">${GROUPS.map((g) => `
+        <button type="button" class="list-row" data-group="${g.key}">
+          <span class="list-row-main"><strong>${esc(g.title)}</strong><small class="muted">${esc(g.help)}</small></span>
+          ${icon("edit")}
+        </button>`).join("")}</div>
+    </section>
+    <section class="card">
+      <h3>Restore defaults</h3>
+      <p class="muted small">Puts the shop settings back to the built-in defaults. Lists and payment methods are kept.</p>
+      <div class="form-actions"><button type="button" class="btn ghost" id="s-reset">${icon("sync")}<span>Restore defaults</span></button></div>
+    </section>`;
+
+  // Shop logo window: choose or remove, then save the logo only.
+  const openLogo = () => {
+    let logoUrl = logoNow;
+    let changed = false;
+    openModal("Shop logo", `
+      <form id="lg" class="settings-form">
+        <p class="muted small">PNG with a transparent background works best.</p>
         <div class="logo-editor">
           <div class="logo-preview" id="logo-preview">${logoUrl ? `<img src="${esc(logoUrl)}" alt="Current logo" />` : `<span class="muted small">No logo yet</span>`}</div>
           <div class="logo-actions">
             <label class="btn ghost sm file-btn">${icon("upload")}<span>Choose logo</span>
               <input type="file" id="logo-file" accept="image/*" hidden /></label>
             <button type="button" class="btn ghost sm" id="logo-remove">${icon("trash")}<span>Remove</span></button>
-            <small class="muted">PNG with a transparent background works best. Saved when you press Save settings.</small>
           </div>
         </div>
-      </section>
-      ${FIELDS.map(([title, fields]) => `
-        <section class="card">
-          <h3>${esc(title)}</h3>
-          <div class="form-grid">
-            ${fields.map(([k, label, type]) => type === "bool"
-              ? `<label class="check span-2"><input type="checkbox" name="${k}" ${settings[k] ? "checked" : ""} /> <span>${esc(label)}</span></label>`
-              : `<label class="${k === "receiptFooter" || k === "shopAddress" ? "span-2" : ""}">${esc(label)}
-                  <input name="${k}" type="${type}" ${type === "number" ? 'inputmode="decimal" step="any"' : ""} value="${esc(settings[k] ?? "")}" /></label>`).join("")}
-          </div>
-        </section>`).join("")}
-      <div class="sticky-actions">
-        <button type="button" class="btn ghost" id="s-reset">Restore defaults</button>
-        <button class="btn primary" type="submit">${icon("check")}<span>Save settings</span></button>
-      </div>
-    </form>`;
+        <div class="form-actions"><button class="btn primary" type="submit">${icon("check")}<span>Save logo</span></button></div>
+      </form>`, (host, close) => {
+        const lg = host.querySelector("#lg");
+        lg.querySelector("#logo-file").addEventListener("change", async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          try {
+            logoUrl = await readLogo(file);
+            changed = true;
+            lg.querySelector("#logo-preview").innerHTML = `<img src="${esc(logoUrl)}" alt="New logo" />`;
+          } catch (err) {
+            toast(err.message, "error");
+          }
+          e.target.value = "";
+        });
+        lg.querySelector("#logo-remove").addEventListener("click", () => {
+          logoUrl = "";
+          changed = true;
+          lg.querySelector("#logo-preview").innerHTML = `<span class="muted small">No logo (the default icon is used)</span>`;
+        });
+        onSubmit(lg, async (e) => {
+          e.preventDefault();
+          if (!changed) return close();
+          await setDoc(doc(db, "branding", "public"), { logoUrl, updatedAt: serverTimestamp() }, { merge: true });
+          await audit("branding.logo", { changed: true });
+          toast("Logo saved", "success");
+          close();
+          viewSettings(body);
+        });
+      });
+  };
 
+  // One group of settings: its fields, saved on their own.
+  const openGroup = (idx) => {
+    const [title, fields] = FIELDS[idx];
+    openModal(title, `
+      <form id="gf" class="settings-form">
+        <div class="form-grid">
+          ${fields.map(([k, label, type]) => type === "bool"
+            ? `<label class="check span-2"><input type="checkbox" name="${k}" ${settings[k] ? "checked" : ""} /> <span>${esc(label)}</span></label>`
+            : `<label class="${k === "receiptFooter" || k === "shopAddress" ? "span-2" : ""}">${esc(label)}
+                <input name="${k}" type="${type}" ${type === "number" ? 'inputmode="decimal" step="any"' : ""} value="${esc(settings[k] ?? "")}" /></label>`).join("")}
+        </div>
+        <div class="form-actions"><button class="btn primary" type="submit">${icon("check")}<span>Save ${esc(title)}</span></button></div>
+      </form>`, (host, close) => {
+        const gf = host.querySelector("#gf");
+        onSubmit(gf, async (e) => {
+          e.preventDefault();
+          const f = new FormData(gf);
+          const patch = {};
+          for (const [k, , type] of fields) {
+            if (type === "bool") patch[k] = f.get(k) === "on";
+            else if (type === "number") patch[k] = Number(f.get(k)) || 0;
+            else patch[k] = String(f.get(k) || "").trim();
+          }
+          if ("currency" in patch && !patch.currency) throw new Error("Currency code is required");
+          close();
+          await saveGeneral(patch, `${title} saved. Reloading to apply it.`);
+        });
+      });
+  };
 
-  body.querySelector("#logo-file").addEventListener("change", async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      logoUrl = await readLogo(file);
-      logoChanged = true;
-      body.querySelector("#logo-preview").innerHTML = `<img src="${esc(logoUrl)}" alt="New logo" />`;
-    } catch (err) {
-      toast(err.message, "error");
-    }
-    e.target.value = "";
-  });
-  body.querySelector("#logo-remove").addEventListener("click", () => {
-    logoUrl = "";
-    logoChanged = true;
-    body.querySelector("#logo-preview").innerHTML = `<span class="muted small">No logo (the default icon is used)</span>`;
-  });
-
-  onSubmit(body.querySelector("#sf"), async (e) => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    const patch = {};
-    for (const [, fields] of FIELDS) {
-      for (const [k, , type] of fields) {
-        if (type === "bool") patch[k] = f.get(k) === "on";
-        else if (type === "number") patch[k] = Number(f.get(k)) || 0;
-        else patch[k] = String(f.get(k) || "").trim();
-      }
-    }
-    if (!patch.currency) return toast("Currency code is required", "error");
-    if (logoChanged) {
-      await setDoc(doc(db, "branding", "public"), { logoUrl, updatedAt: serverTimestamp() }, { merge: true });
-      await audit("branding.logo", { changed: true });
-    }
-    await saveGeneral(patch, "Settings saved. Reloading to apply them.");
-  });
+  body.querySelectorAll("[data-group]").forEach((b) => b.addEventListener("click", () => {
+    const key = b.dataset.group;
+    if (key === "logo") return openLogo();
+    openGroup(Number(key.slice(1)));
+  }));
 
   onAction(body.querySelector("#s-reset"), async () => {
     if (!(await confirmBox("Restore the default shop settings? Your lists and payment methods are kept."))) return;
@@ -935,90 +977,100 @@ function viewRoles(body) {
 async function viewIntegrations(body) {
   const snap = await getDoc(doc(db, "settings", "integrations"));
   const cfg = snap.exists() ? snap.data() : {};
+  // Each connection opens in its own window with its own save.
+  const WINDOWS = [
+    { key: "sheets", title: "Google Sheets reporting", help: "A reporting copy of your sales, in a Google Sheet." },
+    { key: "email", title: "Email sending", help: "Provider, sender address and the keys used to send emails." },
+    { key: "coa", title: "Chart of accounts", help: "Adds any missing default ledger accounts." },
+  ];
   body.innerHTML = `
     <section class="card">
-      <h3>Google Sheets reporting</h3>
-      <p class="muted small">Sheets is a reporting copy, not the live database. Set up the Apps Script described in the README, then paste its web-app URL here. Sign-in is not needed: the shared secret protects the link.</p>
-      <form id="if" class="form-grid">
-        <label class="span-2">Apps Script web-app URL<input name="sheetsUrl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.sheetsUrl || "")}" /></label>
-        <label class="span-2">Shared secret<input name="sheetsSecret" type="password" autocomplete="off" placeholder="${cfg.sheetsSecret ? "Saved. Type a new secret to replace it." : "Paste the secret from the script"}" /></label>
-        <div class="form-actions span-2">
-          <button type="button" class="btn ghost" id="if-test">${icon("sync")}<span>Test connection</span></button>
-          <button class="btn primary" type="submit">${icon("check")}<span>Save</span></button>
-        </div>
-      </form>
-    </section>
-    <section class="card">
-      <h3>Email sending</h3>
-      <p class="muted small">Sends password reset codes, new staff logins and admin resets. Choose one provider and save. Secrets are stored for administrators only and are never shown again. Leave a secret field empty to keep the saved one.</p>
-      <form id="ef" class="form-grid">
-        <label class="span-2">Provider
-          <select name="emailProvider">
-            <option value="" ${!cfg.emailProvider ? "selected" : ""}>Automatic (saved key, else server settings)</option>
-            <option value="resend" ${cfg.emailProvider === "resend" ? "selected" : ""}>Resend (API)</option>
-            <option value="smtp" ${cfg.emailProvider === "smtp" ? "selected" : ""}>SMTP (Gmail or another mail server)</option>
-          </select></label>
-        <label class="span-2">Sender address (From)<input name="mailFrom" type="email" placeholder="noreply@yourdomain.com" value="${esc(cfg.mailFrom || "")}" /></label>
-        <p class="span-2 muted small">Resend: the sender must be on a domain you verified in Resend. Gmail SMTP: use your Gmail address with an app password.</p>
-        <fieldset class="span-2 packs-box">
-          <legend>Resend</legend>
-          <label class="span-2">API key<input name="resendApiKey" type="password" autocomplete="off" placeholder="${cfg.resendApiKey ? "Saved. Type a new key to replace it." : "re_…"}" /></label>
-        </fieldset>
-        <fieldset class="span-2 packs-box">
-          <legend>SMTP</legend>
-          <label>Host<input name="smtpHost" placeholder="smtp.gmail.com" value="${esc(cfg.smtpHost || "")}" /></label>
-          <label>Port<input name="smtpPort" type="number" inputmode="numeric" placeholder="465" value="${esc(cfg.smtpPort || "")}" /></label>
-          <label>Username<input name="smtpUser" autocomplete="off" value="${esc(cfg.smtpUser || "")}" /></label>
-          <label>Password<input name="smtpPass" type="password" autocomplete="new-password" placeholder="${cfg.smtpPass ? "Saved. Type a new one to replace it." : ""}" /></label>
-        </fieldset>
-        <div class="form-actions span-2">
-          <button type="button" class="btn ghost" id="ef-test">${icon("mail")}<span>Send test email to me</span></button>
-          <button class="btn primary" type="submit">${icon("check")}<span>Save email settings</span></button>
-        </div>
-      </form>
-    </section>
-    <section class="card">
-      <h3>Chart of accounts</h3>
-      <p class="muted small">Adds any missing default accounts. Existing accounts are not changed.</p>
-      <button class="btn ghost" id="coa">${icon("accounting")}<span>Add missing default accounts</span></button>
+      <h3>Connections</h3>
+      <p class="muted small">Open a connection to change it. Each one has its own window and its own save.</p>
+      <div class="list-index">${WINDOWS.map((w) => `
+        <button type="button" class="list-row" data-int="${w.key}">
+          <span class="list-row-main"><strong>${esc(w.title)}</strong><small class="muted">${esc(w.help)}</small></span>
+          ${icon("edit")}
+        </button>`).join("")}</div>
     </section>`;
 
-  onSubmit(body.querySelector("#if"), async (e) => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    await setDoc(doc(db, "settings", "integrations"), {
-      sheetsUrl: String(f.get("sheetsUrl") || "").trim(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    // The secret is only written when a new one is typed, so saving the form never blanks it.
-    if (String(f.get("sheetsSecret") || "")) {
-      await setDoc(doc(db, "settings", "integrations"), { sheetsSecret: String(f.get("sheetsSecret")), updatedAt: serverTimestamp() }, { merge: true });
-    }
-    await audit("integrations.update", { sheets: true });
-    toast("Saved", "success");
+  const openSheets = () => openModal("Google Sheets reporting", `
+    <p class="muted small">Sheets is a reporting copy, not the live database. Set up the Apps Script described in the README, then paste its web-app URL here. Sign-in is not needed: the shared secret protects the link.</p>
+    <form id="if" class="form-grid">
+      <label class="span-2">Apps Script web-app URL<input name="sheetsUrl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.sheetsUrl || "")}" /></label>
+      <label class="span-2">Shared secret<input name="sheetsSecret" type="password" autocomplete="off" placeholder="${cfg.sheetsSecret ? "Saved. Type a new secret to replace it." : "Paste the secret from the script"}" /></label>
+      <div class="form-actions span-2">
+        <button type="button" class="btn ghost" id="if-test">${icon("sync")}<span>Test connection</span></button>
+        <button class="btn primary" type="submit">${icon("check")}<span>Save</span></button>
+      </div>
+    </form>`, (host, close) => {
+    const form = host.querySelector("#if");
+    onSubmit(form, async (e) => {
+      e.preventDefault();
+      const f = new FormData(form);
+      await setDoc(doc(db, "settings", "integrations"), {
+        sheetsUrl: String(f.get("sheetsUrl") || "").trim(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      // The secret is only written when a new one is typed, so saving the form never blanks it.
+      if (String(f.get("sheetsSecret") || "")) {
+        await setDoc(doc(db, "settings", "integrations"), { sheetsSecret: String(f.get("sheetsSecret")), updatedAt: serverTimestamp() }, { merge: true });
+      }
+      await audit("integrations.update", { sheets: true });
+      toast("Google Sheets saved", "success");
+      close();
+    });
+    onAction(host.querySelector("#if-test"), async () => {
+      try {
+        await pushToSheets("Connection test", ["Check", "Time"], [["Connected", new Date().toLocaleString()]]);
+        toast("Connected. Check the “Connection test” tab.", "success");
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
   });
-  onAction(body.querySelector("#if-test"), async () => {
-    try {
-      await pushToSheets("Connection test", ["Check", "Time"], [["Connected", new Date().toLocaleString()]]);
-      toast("Connected. Check the “Connection test” tab.", "success");
-    } catch (err) {
-      toast(err.message, "error");
-    }
-  });
-  onSubmit(body.querySelector("#ef"), async (e) => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    const patch = {
-      emailProvider: String(f.get("emailProvider") || ""),
-      mailFrom: String(f.get("mailFrom") || "").trim(),
-      smtpHost: String(f.get("smtpHost") || "").trim(),
-      smtpPort: Number(f.get("smtpPort")) || 0,
-      smtpUser: String(f.get("smtpUser") || "").trim(),
-    };
-    // Email secrets go to settings/secrets, which no browser can read back. Only typed values are written.
-    const resendApiKey = String(f.get("resendApiKey") || "").trim();
-    const smtpPass = String(f.get("smtpPass") || "");
-    try {
+
+  const openEmail = () => openModal("Email sending", `
+    <p class="muted small">Sends password reset codes, sign-in codes, new staff logins, admin resets and scheduled reports. Choose one provider and save. Secrets are stored for administrators only and are never shown again. Leave a secret field empty to keep the saved one.</p>
+    <form id="ef" class="form-grid">
+      <label class="span-2">Provider
+        <select name="emailProvider">
+          <option value="" ${!cfg.emailProvider ? "selected" : ""}>Automatic (saved key, else server settings)</option>
+          <option value="resend" ${cfg.emailProvider === "resend" ? "selected" : ""}>Resend (API)</option>
+          <option value="smtp" ${cfg.emailProvider === "smtp" ? "selected" : ""}>SMTP (Gmail or another mail server)</option>
+        </select></label>
+      <label class="span-2">Sender address (From)<input name="mailFrom" type="email" placeholder="noreply@yourdomain.com" value="${esc(cfg.mailFrom || "")}" /></label>
+      <p class="span-2 muted small">Resend: the sender must be on a domain you verified in Resend. Gmail SMTP: use your Gmail address with an app password.</p>
+      <fieldset class="span-2 packs-box">
+        <legend>Resend</legend>
+        <label class="span-2">API key<input name="resendApiKey" type="password" autocomplete="off" placeholder="${cfg.resendApiKey ? "Saved. Type a new key to replace it." : "re_…"}" /></label>
+      </fieldset>
+      <fieldset class="span-2 packs-box">
+        <legend>SMTP</legend>
+        <label>Host<input name="smtpHost" placeholder="smtp.gmail.com" value="${esc(cfg.smtpHost || "")}" /></label>
+        <label>Port<input name="smtpPort" type="number" inputmode="numeric" placeholder="465" value="${esc(cfg.smtpPort || "")}" /></label>
+        <label>Username<input name="smtpUser" autocomplete="off" value="${esc(cfg.smtpUser || "")}" /></label>
+        <label>Password<input name="smtpPass" type="password" autocomplete="new-password" placeholder="${cfg.smtpPass ? "Saved. Type a new one to replace it." : ""}" /></label>
+      </fieldset>
+      <div class="form-actions span-2">
+        <button type="button" class="btn ghost" id="ef-test">${icon("mail")}<span>Send test email to me</span></button>
+        <button class="btn primary" type="submit">${icon("check")}<span>Save email settings</span></button>
+      </div>
+    </form>`, (host, close) => {
+    const form = host.querySelector("#ef");
+    onSubmit(form, async (e) => {
+      e.preventDefault();
+      const f = new FormData(form);
+      const patch = {
+        emailProvider: String(f.get("emailProvider") || ""),
+        mailFrom: String(f.get("mailFrom") || "").trim(),
+        smtpHost: String(f.get("smtpHost") || "").trim(),
+        smtpPort: Number(f.get("smtpPort")) || 0,
+        smtpUser: String(f.get("smtpUser") || "").trim(),
+      };
+      // Email secrets go to settings/secrets, which no browser can read back. Only typed values are written.
+      const resendApiKey = String(f.get("resendApiKey") || "").trim();
+      const smtpPass = String(f.get("smtpPass") || "");
       const secrets = {};
       if (resendApiKey) secrets.resendApiKey = resendApiKey;
       if (smtpPass) secrets.smtpPass = smtpPass;
@@ -1027,22 +1079,30 @@ async function viewIntegrations(body) {
       await setDoc(doc(db, "settings", "integrations"), { ...patch, resendApiKey: deleteField(), smtpPass: deleteField(), updatedAt: serverTimestamp() }, { merge: true });
       await audit("integrations.email", { provider: patch.emailProvider, from: patch.mailFrom });
       toast("Email settings saved", "success");
-    } catch (err) {
-      toast(err.message, "error");
-    }
+      close();
+    });
+    onAction(host.querySelector("#ef-test"), async () => {
+      try {
+        await post("/api/admin/mail", { action: "test" }, { secure: true });
+        toast("Test email sent. Check your inbox and spam folder.", "success");
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
   });
-  onAction(body.querySelector("#ef-test"), async () => {
-    try {
-      await post("/api/admin/mail", { action: "test" }, { secure: true });
-      toast("Test email sent. Check your inbox and spam folder.", "success");
-    } catch (err) {
-      toast(err.message, "error");
-    }
+
+  const openCoa = () => openModal("Chart of accounts", `
+    <p class="muted small">Adds any missing default accounts. Existing accounts are not changed.</p>
+    <div class="form-actions"><button class="btn primary" id="coa">${icon("accounting")}<span>Add missing default accounts</span></button></div>`, (host, close) => {
+    onAction(host.querySelector("#coa"), async () => {
+      await ensureChartOfAccounts();
+      toast("Chart of accounts is up to date", "success");
+      close();
+    });
   });
-  onAction(body.querySelector("#coa"), async () => {
-    await ensureChartOfAccounts();
-    toast("Chart of accounts is up to date", "success");
-  });
+
+  const OPEN = { sheets: openSheets, email: openEmail, coa: openCoa };
+  body.querySelectorAll("[data-int]").forEach((b) => b.addEventListener("click", () => OPEN[b.dataset.int]()));
 }
 
 /* ───────── Audit log ───────── */
