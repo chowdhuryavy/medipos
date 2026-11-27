@@ -10,7 +10,7 @@ export const DEFAULT_TEMPLATES = {
   otp: {
     label: "Password reset code",
     help: "Sent when someone asks to reset their password. The code is always shown in its own box after the label text. Keep “Your verification code is” so Gmail can detect the code.",
-    subject: "Your Password Reset Code – {{shopName}}",
+    subject: "Your verification code {{code}} – {{shopName}}",
     eyebrow: "Security",
     heading: "Password reset request",
     greeting: "Hello {{name}},",

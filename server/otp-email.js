@@ -9,7 +9,9 @@ export function renderOtpEmail(cfg, { name, code }) {
   const appName = cfg.appName || shopName;
   const vars = { name: name || "there", code: String(code), shopName, appName, minutes: cfg.otpExpiryMinutes };
 
-  const subject = fill(t.subject, vars);
+  // The code is always in the subject too, so mail apps such as Gmail can offer their Copy code button.
+  const filledSubject = fill(t.subject, vars);
+  const subject = filledSubject.includes(vars.code) ? filledSubject : `${vars.code} – ${filledSubject}`;
   const greeting = fill(t.greeting, vars, { html: true });
   const intro = fill(t.intro, vars, { html: true });
   const codeLabel = fill(t.codeLabel, vars, { html: true });
