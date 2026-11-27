@@ -10,6 +10,8 @@
  *  5. Deploy → New deployment → Type: Web app → Execute as: Me → Who has access: Anyone → Deploy.
  *     Copy the URL that ends in /exec.
  *  6. In MediPOS → Administration → Integrations: paste the URL and the SECRET, then save.
+ *  7. For bills: Project Settings → Script properties → add BILLS_FOLDER_ID = <ID of a private Google Drive folder>.
+ *     Bills are saved there, and a "Bills" tab in the sheet gets a row with the Drive link for each one.
  *
  * Each "Send to Google Sheets" from MediPOS replaces the Sales, Products, Stock and Expiry tabs.
  * Run setupMediPOS again at any time; it keeps the same secret and sheet.
@@ -18,6 +20,9 @@
 var SHEET_TITLE = "MediPOS Reports";
 var BRAND = { teal: "#0f766e", muted: "#64748b" };
 var TAB_ORDER = ["Start Here", "Dashboard", "Sales", "Products", "Stock", "Expiry"];
+var BILLS_TAB = "Bills";
+var BILL_HEADERS = ["Date", "JV number", "Kind", "Party", "Amount", "Uploaded by", "File", "Drive link"];
+var ALLOWED_BILL_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 
 // The tabs MediPOS writes to, with the headers MediPOS sends on each sync.
 var DATA_TABS = {
@@ -84,6 +89,8 @@ function doPost(e) {
     if (!secret || body.secret !== secret) {
       return jsonOut({ ok: false, error: "The shared secret does not match the one in this script." });
     }
+
+    if (body.action === "bill") return jsonOut(saveBill(body, props));
 
     var ss = openSpreadsheet(props);
     var name = String(body.sheet || "Data").replace(/[\[\]\*\?:\/\\]/g, "-").slice(0, 99);
@@ -210,6 +217,37 @@ function buildDashboard(ss) {
 }
 
 /* ───────── helpers ───────── */
+
+/* ───────── bills (photos and PDFs of expenses and purchases) ───────── */
+
+// Saves one bill to the Drive folder in BILLS_FOLDER_ID and adds a row to the Bills tab.
+function saveBill(body, props) {
+  var folderId = props.getProperty("BILLS_FOLDER_ID");
+  if (!folderId) throw new Error("Set BILLS_FOLDER_ID in Script properties (the Drive folder for bills) first.");
+  var bill = body.bill || {};
+  var meta = body.meta || {};
+  var m = String(bill.data || "").match(/^data:([^;,]+);base64,(.*)$/);
+  if (!m || ALLOWED_BILL_TYPES.indexOf(m[1]) < 0) throw new Error("Only photos (JPG, PNG, WebP) and PDFs can be saved.");
+
+  var base = String(bill.name || "bill").replace(/[\/\\:*?"<>|]/g, "-").slice(0, 120);
+  var prefix = [meta.date, meta.jv, meta.kind].filter(Boolean).join("_");
+  var blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], (prefix ? prefix + "_" : "") + base);
+  var file = DriveApp.getFolderById(folderId).createFile(blob);
+  file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+
+  var ss = openSpreadsheet(props);
+  var sh = ss.getSheetByName(BILLS_TAB) || ss.insertSheet(BILLS_TAB);
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, BILL_HEADERS.length).setValues([BILL_HEADERS]).setFontWeight("bold");
+    sh.setFrozenRows(1);
+  }
+  var amount = Number(meta.amount);
+  sh.appendRow([
+    safe(meta.date || ""), safe(meta.jv || ""), safe(meta.kind || ""), safe(meta.party || ""),
+    isNaN(amount) ? "" : amount, safe(meta.uploadedBy || ""), safe(base), file.getUrl(),
+  ]);
+  return { ok: true, file: base, url: file.getUrl() };
+}
 
 function openSpreadsheet(props) {
   var id = props.getProperty("SHEET_ID");

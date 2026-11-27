@@ -156,9 +156,10 @@ service cloud.firestore {
         allow read: if canPage('purchasing') || canPage('accounting') || canPage('reports');
         // A bill is a photo or PDF of at most about 900 KB, written once with the posting it belongs to.
         allow create: if canWrite('purchasing')
-          && request.resource.data.keys().hasOnly(['name', 'type', 'size', 'data', 'uploadedBy', 'uploadedByUid', 'uploadedAt'])
+          && request.resource.data.keys().hasOnly(['name', 'type', 'size', 'data', 'uploadedBy', 'uploadedByUid', 'uploadedAt', 'copied'])
           && request.resource.data.type in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
           && request.resource.data.data is string && request.resource.data.data.size() <= 900000
+          && request.resource.data.copied == false
           && request.resource.data.uploadedByUid == request.auth.uid;
         allow update, delete: if false;
       }
@@ -194,9 +195,10 @@ service cloud.firestore {
         allow read: if canPage('accounting');
         // A bill is a photo or PDF of at most about 900 KB, written once with the posting it belongs to.
         allow create: if canWrite('accounting')
-          && request.resource.data.keys().hasOnly(['name', 'type', 'size', 'data', 'uploadedBy', 'uploadedByUid', 'uploadedAt'])
+          && request.resource.data.keys().hasOnly(['name', 'type', 'size', 'data', 'uploadedBy', 'uploadedByUid', 'uploadedAt', 'copied'])
           && request.resource.data.type in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
           && request.resource.data.data is string && request.resource.data.data.size() <= 900000
+          && request.resource.data.copied == false
           && request.resource.data.uploadedByUid == request.auth.uid;
         allow update, delete: if false;
       }

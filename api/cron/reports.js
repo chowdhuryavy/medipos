@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { runDueSchedules } from "../../server/report-job.js";
 import { runDueBackup } from "../../server/backup-job.js";
+import { runBillCopies } from "../../server/bill-copy.js";
 
 // Called by Vercel Cron. Vercel sends "Authorization: Bearer <CRON_SECRET>", so nobody else can trigger it.
 export default async function handler(req, res) {
@@ -13,7 +14,8 @@ export default async function handler(req, res) {
   try {
     const results = await runDueSchedules(new Date());
     const backup = await runDueBackup(new Date());
-    return res.status(200).json({ ok: true, ran: results.length, results, backup });
+    const bills = await runBillCopies();
+    return res.status(200).json({ ok: true, ran: results.length, results, backup, bills });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Scheduled reports could not run. Check the server logs." });

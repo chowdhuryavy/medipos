@@ -73,7 +73,8 @@ export async function readBillFrom(file) {
 
 /** The document written to the bills subcollection. */
 export function billRecord(bill) {
-  return { ...bill, uploadedBy: session.name || "", uploadedByUid: session.uid || "", uploadedAt: serverTimestamp() };
+  // copied: false until the server copies the bill to Drive and Sheets, then it is set to true.
+  return { ...bill, copied: false, uploadedBy: session.name || "", uploadedByUid: session.uid || "", uploadedAt: serverTimestamp() };
 }
 
 function blobFromDataUrl(dataUrl) {
