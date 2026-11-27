@@ -1472,16 +1472,14 @@ async function viewBranding(body) {
         <h3>Loading screen</h3>
         <p class="muted small">Shown when the app opens and each time someone switches to another screen. Applies to everyone, including the sign-in page.</p>
         <div class="form-grid">
-          <div class="span-2 ls-styles">${Object.entries(LOADING_STYLES).map(([k, v]) => `
-            <label class="ls-card ${(brand.loadingStyle || "orbit") === k ? "on" : ""}">
-              <input type="radio" name="loadingStyle" value="${k}" ${(brand.loadingStyle || "orbit") === k ? "checked" : ""} aria-label="Use ${esc(v.name)}" />
-              <span class="ls-card-name">${esc(v.name)}</span>
-              <small>${esc(v.desc)}</small>
-              <button type="button" class="btn ghost sm" data-ls-preview="${k}">${icon("eye")}<span>Preview</span></button>
-            </label>`).join("")}</div>
+          <label class="span-2">Animation
+            <div class="ls-pick">
+              <select name="loadingStyle">${Object.entries(LOADING_STYLES).map(([k, v]) => `<option value="${k}" ${(brand.loadingStyle || "orbit") === k ? "selected" : ""}>${esc(v.name)}: ${esc(v.desc)}</option>`).join("")}</select>
+              <button type="button" class="btn ghost sm" id="ls-preview">${icon("eye")}<span>Preview</span></button>
+            </div>
+          </label>
           <label>Message<input name="loadingMessage" maxlength="60" placeholder="Loading…" value="${esc(brand.loadingMessage || "")}" /></label>
         </div>
-        <div class="form-actions"><button type="button" class="btn ghost sm" id="ls-preview">Preview loading screen</button></div>
       </section>
       <section class="card">
         <h3>Brand colour</h3>
@@ -1510,15 +1508,9 @@ async function viewBranding(body) {
       </div>
     </form>`;
 
-  body.querySelectorAll("[data-ls-preview]").forEach((b) => b.addEventListener("click", (e) => {
-    e.preventDefault();
-    const msg = body.querySelector('[name="loadingMessage"]').value.trim() || "Loading…";
-    const loader = showRouteLoader(msg, b.dataset.lsPreview);
-    setTimeout(() => hideRouteLoader(loader, 0), 2600);
-  }));
   body.querySelector("#ls-preview").addEventListener("click", () => {
     const msg = body.querySelector('[name="loadingMessage"]').value.trim() || "Loading…";
-    const style = body.querySelector('[name="loadingStyle"]:checked')?.value || "orbit";
+    const style = body.querySelector('[name="loadingStyle"]').value || "orbit";
     const loader = showRouteLoader(msg, style);
     setTimeout(() => hideRouteLoader(loader, 0), 2600);
   });
