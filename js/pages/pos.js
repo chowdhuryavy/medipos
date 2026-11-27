@@ -35,7 +35,7 @@ export async function render(el) {
   const allowChange = settings.allowPriceChange !== false;
 
   const st = {
-    cat: "All", tab: "1", q: "", disc: 0,
+    cat: "All", sub: "", tab: "1", q: "", disc: 0,
     pay: methods.find((m) => !m.credit)?.key || methods[0]?.key || "cash",
     customerId: "",
     cart: new Map(), // product lines: "productId|unitKey"; service lines: "svc|n"
@@ -45,6 +45,11 @@ export async function render(el) {
 
   el.innerHTML = `
     <div class="pos">
+      <header class="pos-strip">
+        <div class="strip-item">${icon("pos")}<span><b>Sale</b> · ${esc(session.name || "")}</span></div>
+        <div class="strip-item muted">${esc(todayISO())}</div>
+        <div class="strip-item muted">${icon("search")}<span>F2 search · F4 charge · F8 hold</span></div>
+      </header>
       <section class="card pos-catalog">
         <div class="search-bar">${icon("search")}<input id="p-search" type="search" inputmode="search" placeholder="Search name or SKU, or scan barcode" autocomplete="off" /><button type="button" class="btn ghost sm scan-btn" data-scan-into="#p-search" data-scan-enter>Scan</button></div>
         ${settings.posServiceButtons ? `<div class="service-bar" role="group" aria-label="Services">
@@ -53,6 +58,7 @@ export async function render(el) {
           <button class="svc-btn" data-svc="cashout">${icon("plus")}<span>Wallet cash-out</span></button>
         </div>` : ""}
         <div class="chips" id="p-cats" role="tablist"></div>
+        <div class="chips sub-chips" id="p-subs" aria-label="Sub-groups"></div>
         <div class="product-grid" id="p-grid"></div>
       </section>
 
@@ -148,10 +154,23 @@ export async function render(el) {
     $("#p-cats").innerHTML = cats.map((c) => `<button class="chip ${c === st.cat ? "active" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`).join("");
   }
 
+  // Sub-groups of the category (or button) in view. Shown only when there is more than one group to pick from.
+  function paintSubs() {
+    const inScope = products.filter((p) => tabsOn() ? inTab(p, Number(st.tab)) : (st.cat === "All" || (p.category || "General") === st.cat));
+    const subs = [...new Set(inScope.map((p) => p.subGroup).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    if (st.sub && !subs.includes(st.sub)) st.sub = "";
+    $("#p-subs").hidden = subs.length === 0;
+    $("#p-subs").innerHTML = subs.length
+      ? ["", ...subs].map((s) => `<button class="chip sub ${s === st.sub ? "active" : ""}" data-sub="${esc(s)}">${esc(s || "All groups")}</button>`).join("")
+      : "";
+  }
+
   function paintGrid() {
+    paintSubs();
     const q = st.q.trim().toLowerCase();
     const list = products.filter((p) =>
       (tabsOn() ? inTab(p, Number(st.tab)) : (st.cat === "All" || (p.category || "General") === st.cat)) &&
+      (!st.sub || p.subGroup === st.sub) &&
       (!q || [p.name, p.sku, p.barcode].some((v) => String(v || "").toLowerCase().includes(q))));
     $("#p-grid").innerHTML = list.map((p, i) => {
       const stock = Number(p.stock) || 0;
@@ -470,6 +489,7 @@ export async function render(el) {
     const t = e.target.closest("[data-tab]");
     if (t) {
       st.tab = t.dataset.tab;
+      st.sub = "";
       paintCats();
       paintGrid();
       return;
@@ -477,7 +497,14 @@ export async function render(el) {
     const b = e.target.closest("[data-cat]");
     if (!b) return;
     st.cat = b.dataset.cat;
+    st.sub = "";
     paintCats();
+    paintGrid();
+  });
+  $("#p-subs").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-sub]");
+    if (!b) return;
+    st.sub = b.dataset.sub;
     paintGrid();
   });
   el.querySelectorAll("[data-svc]").forEach((b) => b.addEventListener("click", () => openServiceForm(b.dataset.svc)));

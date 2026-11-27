@@ -1476,3 +1476,15 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 .quick-btn:hover { border-color: var(--brand); }
 .quick-btn:active { transform: scale(.95); }
 .quick-btn.exact { border-color: var(--brand); color: var(--brand); }
+
+/* Sale screen: header strip, sub-group chips, clearer product cards. */
+.pos-strip { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; padding: 10px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); }
+.strip-item { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.strip-item svg { width: 16px; height: 16px; color: var(--brand); }
+.sub-chips { margin-top: 8px; }
+.sub-chips[hidden] { display: none; }
+.chip.sub { font-size: 12px; padding: 5px 12px; }
+.chip.sub.active { background: var(--brand-soft, #ccfbf1); color: var(--brand); border-color: var(--brand); }
+.product-card .pc-sub { letter-spacing: .2px; }
+.product-card .pc-name { font-size: 15px; }
+@media (max-width: 900px) { .pos-strip { display: none; } }
