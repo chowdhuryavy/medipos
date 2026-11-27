@@ -52,12 +52,15 @@ export async function render(el) {
   async function load() {
     out.innerHTML = `<div class="skeleton"></div>`;
     const { from, to } = range();
-    const [salesSnap, retSnap, expSnap, prodSnap, batchSnap] = await Promise.all([
+    const [salesSnap, retSnap, expSnap, prodSnap, batchSnap, custSnap, purSnap, jrnSnap] = await Promise.all([
       getDocs(query(collection(db, "sales"), where("date", ">=", from), where("date", "<=", to))),
       getDocs(query(collection(db, "returns"), where("date", ">=", from), where("date", "<=", to))),
       getDocs(query(collection(db, "expenses"), where("date", ">=", from), where("date", "<=", to))),
       getDocs(collection(db, "products")),
       getDocs(collection(db, "batches")),
+      getDocs(collection(db, "customers")),
+      getDocs(collection(db, "purchases")),
+      getDocs(query(collection(db, "journal"), where("date", ">=", from), where("date", "<=", to))),
     ]);
     tables = buildReportTables({
       sales: salesSnap.docs.map((d) => d.data()),
@@ -65,6 +68,9 @@ export async function render(el) {
       expenses: expSnap.docs.map((d) => d.data()),
       products: prodSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
       batches: batchSnap.docs.map((d) => d.data()),
+      customers: custSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+      purchases: purSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+      journal: jrnSnap.docs.map((d) => d.data()),
     }, {
       from, to, today: todayISO(), soon: daysFromNowISO(Number(el.querySelector("#r-days").value)),
       group: el.querySelector("#r-group").value, money,

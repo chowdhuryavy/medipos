@@ -10,6 +10,12 @@ export const REPORTS = [
   ["pl", "Profit & loss"],
   ["expenses", "Expenses"],
   ["services", "Services & wallet"],
+  ["cashier", "Sales by cashier"],
+  ["payment", "Sales by payment method"],
+  ["returnsLog", "Returns & voids log"],
+  ["receivables", "Customer balances (owed to us)"],
+  ["payables", "Supplier balances (we owe)"],
+  ["cashbook", "Cash & bank movements"],
   ["productSummary", "Products sold"],
   ["stock", "Stock"],
   ["expiry", "Expiry"],
@@ -157,7 +163,32 @@ export function returnsAsSales(returns = []) {
  * data: { sales, expenses, products, batches }  (raw Firestore documents' data)
  * opts: { from, to, today, soon, group, money }
  */
-export function buildReportTables({ sales: soldSales = [], returns = [], expenses = [], products = [], batches = [] }, { from, to, today, soon, group = "month", money }) {
+// Groups sales (and refunds) by a field such as cashier or payment method.
+function groupSales(sales, keyOf, label, fmt) {
+  const m = new Map();
+  for (const s of sales) {
+    const k = keyOf(s) || "-";
+    const g = m.get(k) || { bills: 0, revenue: 0, refunds: 0 };
+    if (s.isReturn) g.refunds += s.total || 0;
+    else { g.bills += 1; g.revenue += s.total || 0; }
+    m.set(k, g);
+  }
+  const rows = [...m.entries()].sort((a, b) => b[1].revenue - a[1].revenue).map(([k, g]) => [
+    k, g.bills, round2(g.revenue), round2(g.refunds), round2(g.revenue - g.refunds), g.bills ? round2(g.revenue / g.bills) : 0,
+  ]);
+  const revenue = round2(rows.reduce((t, r) => t + r[2], 0));
+  return {
+    headers: [label, "Bills", "Sales", "Refunds", "Net", "Average bill"],
+    numeric: [1, 2, 3, 4, 5],
+    rows,
+    summary: [["Bills", rows.reduce((t, r) => t + r[1], 0)], ["Sales", fmt(revenue)]],
+  };
+}
+
+const CASH_ACCOUNTS = ["1000", "1010", "1020"]; // cash on hand, bank, mobile wallet float
+const supplierOf = (p) => p.supplier?.name || p.supplierName || "-";
+
+export function buildReportTables({ sales: soldSales = [], returns = [], expenses = [], products = [], batches = [], customers = [], purchases = [], journal = [] }, { from, to, today, soon, group = "month", money }) {
   const fmt = money || ((n) => (Number(n) || 0).toFixed(2));
   const sales = [...soldSales, ...returnsAsSales(returns)];
   const sorted = [...sales].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
@@ -238,6 +269,66 @@ export function buildReportTables({ sales: soldSales = [], returns = [], expense
         ["Expiring soon", expiryRows.filter((r) => r[6] !== "Expired").length],
       ],
     },
+    cashier: groupSales(sales, (s) => s.cashier, "Cashier", fmt),
+    payment: groupSales(sales, (s) => s.paymentLabel || s.payment, "Payment method", fmt),
+    returnsLog: {
+      headers: ["Date", "Invoice", "Type", "Customer", "Amount", "Reason", "Staff"],
+      numeric: [4],
+      rows: returns.map((r) => [r.date || "", r.invoiceNo || "", r.type === "void" ? "Void" : "Return", r.customerName || "Walk-in",
+        round2(r.total || 0), r.reason || "", r.staffName || r.approverName || "-"]).sort((a, b) => String(b[0]).localeCompare(String(a[0]))),
+      summary: [["Entries", returns.length], ["Amount", fmt(round2(returns.reduce((t, r) => t + (r.total || 0), 0)))]],
+    },
+    receivables: (() => {
+      const rows = customers.filter((c) => Math.abs(Number(c.balance) || 0) > 0.005)
+        .map((c) => [c.name || "", c.phone || "", round2(Number(c.balance) || 0)]).sort((a, b) => b[2] - a[2]);
+      return {
+        headers: ["Customer", "Phone", "Balance owed"],
+        numeric: [2],
+        rows,
+        summary: [["Customers owing", rows.length], ["Total owed", fmt(round2(rows.reduce((t, r) => t + r[2], 0)))]],
+      };
+    })(),
+    payables: (() => {
+      const m = new Map();
+      for (const p of purchases) {
+        const owed = (Number(p.total) || 0) - (Number(p.paid) || 0);
+        if (owed <= 0.005) continue;
+        const k = supplierOf(p);
+        const g = m.get(k) || { bills: 0, total: 0, paid: 0, owed: 0 };
+        g.bills += 1; g.total += Number(p.total) || 0; g.paid += Number(p.paid) || 0; g.owed += owed;
+        m.set(k, g);
+      }
+      const rows = [...m.entries()].sort((a, b) => b[1].owed - a[1].owed).map(([k, g]) => [k, g.bills, round2(g.total), round2(g.paid), round2(g.owed)]);
+      return {
+        headers: ["Supplier", "Open bills", "Bill total", "Paid", "Owed"],
+        numeric: [1, 2, 3, 4],
+        rows,
+        summary: [["Suppliers owed", rows.length], ["Total owed", fmt(round2(rows.reduce((t, r) => t + r[4], 0)))]],
+      };
+    })(),
+    cashbook: (() => {
+      const days = new Map();
+      for (const e of journal) {
+        for (const l of e.lines || []) {
+          if (!CASH_ACCOUNTS.includes(String(l.account))) continue;
+          const d = days.get(e.date) || { inflow: 0, outflow: 0 };
+          d.inflow += Number(l.debit) || 0;
+          d.outflow += Number(l.credit) || 0;
+          days.set(e.date, d);
+        }
+      }
+      let running = 0;
+      const rows = [...days.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0]))).map(([date, d]) => {
+        running += d.inflow - d.outflow;
+        return [date, round2(d.inflow), round2(d.outflow), round2(d.inflow - d.outflow), round2(running)];
+      });
+      return {
+        headers: ["Date", "Money in", "Money out", "Net", "Balance"],
+        numeric: [1, 2, 3, 4],
+        rows,
+        summary: [["Money in", fmt(round2(rows.reduce((t, r) => t + r[1], 0)))], ["Money out", fmt(round2(rows.reduce((t, r) => t + r[2], 0)))]],
+      };
+    })(),
     charts: { daily: [...dailyTotals.entries()].sort((a, b) => a[0].localeCompare(b[0])) },
   };
 }
