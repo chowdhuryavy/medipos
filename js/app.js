@@ -436,7 +436,6 @@ function buildShell() {
           <div class="grow"></div>
           <span class="clock" id="clock"></span>
           <button class="icon-btn bell-btn" id="bell-btn" type="button" aria-label="Notifications" title="Notifications">${icon("bell")}<span class="bell-count" id="bell-count" hidden></span></button>
-          <button class="icon-btn lang-btn" id="lang-btn" type="button" aria-label="${getLang() === "bn" ? "Switch to English" : "বাংলায় পরিবর্তন"}" title="Language">${getLang() === "bn" ? "EN" : "বাং"}</button>
           <button class="icon-btn" id="theme-btn" aria-label="Toggle dark mode">${icon(document.documentElement.dataset.theme === "dark" ? "sun" : "moon")}</button>
           <button class="avatar-top" id="avatar-top" type="button" aria-label="Your account" title="${esc(session.name || "Account")}">${esc((session.name || "?").charAt(0).toUpperCase())}</button>
         </header>
@@ -462,7 +461,6 @@ function buildShell() {
   scrim.addEventListener("click", () => setDrawer(false));
   sidebar.querySelectorAll(".nav-link").forEach((a) => a.addEventListener("click", () => setDrawer(false)));
   document.getElementById("theme-btn").addEventListener("click", toggleTheme);
-  document.getElementById("lang-btn").addEventListener("click", () => setLang(getLang() === "bn" ? "en" : "bn"));
   document.getElementById("bell-btn").addEventListener("click", toggleNotifications);
   const openAccount = () => openAccountMenu();
   document.getElementById("avatar-top").addEventListener("click", openAccount);

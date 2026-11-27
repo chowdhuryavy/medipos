@@ -686,19 +686,19 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
   background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; font-weight: 800; font-size: 16px; display: grid; place-items: center;
   box-shadow: 0 4px 12px rgba(15, 118, 110, .3); transition: transform .2s var(--ease), box-shadow .2s; }
 .avatar-top:hover, .avatar-top:focus-visible { transform: scale(1.07); box-shadow: 0 6px 18px rgba(15, 118, 110, .4); outline: none; }
-.avatar.lg { width: 56px; height: 56px; font-size: 22px; }
-.account-menu { display: grid; gap: 16px; }
-.account-who { display: flex; align-items: center; gap: 14px; }
-.account-who strong { display: block; font-size: 17px; }
+.avatar.lg { width: 40px; height: 40px; font-size: 16px; }
+.account-menu { display: grid; gap: 10px; }
+.account-who { display: flex; align-items: center; gap: 10px; }
+.account-who strong { display: block; font-size: 15px; }
 .account-who .avatar { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; }
-.account-actions { display: grid; gap: 10px; }
-.account-action { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px; border: 1px solid var(--line, #e5e7eb); border-radius: 14px;
+.account-actions { display: grid; gap: 6px; }
+.account-action { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border: 1px solid var(--line, #e5e7eb); border-radius: 12px;
   background: var(--surface, #fff); color: inherit; text-align: left; cursor: pointer; transition: transform .2s var(--ease), box-shadow .2s, border-color .2s; animation: fadeUp .4s var(--ease) both; }
 .account-action:nth-child(2) { animation-delay: .07s; }
 .account-action:hover, .account-action:focus-visible { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15, 118, 110, .14); border-color: var(--brand); outline: none; }
-.account-action .ico { width: 24px; height: 24px; flex: 0 0 auto; color: var(--brand); }
-.account-action strong { display: block; font-size: 15px; }
-.account-action small { display: block; opacity: .7; font-size: 13px; }
+.account-action .ico { width: 18px; height: 18px; flex: 0 0 auto; color: var(--brand); }
+.account-action strong { display: block; font-size: 14px; }
+.account-action small { display: block; opacity: .7; font-size: 12px; }
 .account-action.danger .ico { color: #dc2626; }
 .account-action.danger:hover { border-color: #dc2626; box-shadow: 0 8px 20px rgba(220, 38, 38, .14); }
 
@@ -1515,5 +1515,4 @@ body, button, input, select, textarea { font-family: var(--app-font); }
   @page thermal58 { size: 58mm auto; margin: 2mm; }
   .print-root.thermal.narrow58 { page: thermal58; width: 52mm; }
 }
-.lang-btn { font-weight: 700; font-size: 12px; min-width: 36px; }
 html[data-lang="bn"] body { line-height: 1.6; }
