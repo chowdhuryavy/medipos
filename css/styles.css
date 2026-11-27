@@ -1628,3 +1628,24 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .login-card, .login-card > *, .login-form > *, .login-card .brand-logo, .login-card .brand-mark, .login-screen .login-art .orb { animation: none !important; }
   .login-card .btn.xl:hover:not(:disabled) { transform: none; }
 }
+
+/* ───────── KPI cards: no overlap, readable on phones and when zoomed ───────── */
+.kpi-grid > *, .kpi > div:last-child { min-width: 0; }
+.kpi { min-width: 0; }
+.kpi small { overflow-wrap: anywhere; }
+.kpi strong { display: block; overflow-wrap: anywhere; line-height: 1.15; font-size: clamp(20px, 2.6vw, 24px); }
+.kpi-grid, .kpi-grid.five { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
+@media (max-width: 600px) {
+  .kpi-grid, .kpi-grid.five { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .kpi-grid.five > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .kpi { flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px; }
+  .kpi-ico { width: 38px; height: 38px; }
+  .kpi small { font-size: 12px; }
+  .kpi strong { font-size: 20px; }
+}
+@media (max-width: 380px) {
+  .kpi-grid, .kpi-grid.five { grid-template-columns: minmax(0, 1fr); }
+  .kpi-grid.five > :last-child:nth-child(odd) { grid-column: auto; }
+  .kpi { flex-direction: row; align-items: center; }
+  .kpi strong { font-size: 22px; }
+}
