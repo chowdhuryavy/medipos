@@ -49,39 +49,71 @@ async function shiftReport(s) {
   const invoices = sales.map((x) => x.invoiceNo).filter(Boolean).sort();
   const voids = returns.filter((r) => r.type === "void").length;
   const refunds = returns.filter((r) => r.type !== "void").length;
+  // One A4 page: two columns of compact tables, totals and signature lines. Styles are inline so the print sheet stays self-contained.
+  const totalBills = sales.length;
+  const totalAmount = sum(sales, (x) => num(x.collect ?? x.total));
+  const sec = (t) => `<div style="font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#0f766e;margin:0 0 4px">${t}</div>`;
+  const tbl = (rows) => `<table style="width:100%;border-collapse:collapse;font-size:11px">${rows}</table>`;
+  const head = (cells) => `<thead><tr>${cells.map((c, i) => `<th style="text-align:${i ? "right" : "left"};font-size:10px;text-transform:uppercase;color:#475569;padding:4px 6px;border-bottom:1px solid #cbd5e1">${c}</th>`).join("")}</tr></thead>`;
+  const line = (label, value, { bold = false, color = "", note = false } = {}) => `<tr>
+    <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;${bold ? "font-weight:700;" : ""}${note ? "color:#475569;" : ""}">${label}</td>
+    <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums;${bold ? "font-weight:700;" : ""}${color ? `color:${color};` : ""}">${value}</td></tr>`;
+  const diffColor = isOpen ? "" : (diff === 0 ? "#166534" : "#b91c1c");
+  const cashRows = [
+    line("Opening cash", money(num(s.openingCash))),
+    line("Add: cash sales", money(cashSales)),
+    line("Less: cash refunds", money(cashRefunds)),
+    line("Expected in drawer", money(expected), { bold: true }),
+    ...(isOpen ? [] : [
+      line("Counted cash", money(counted)),
+      line("Difference", money(diff), { bold: true, color: diffColor }),
+    ]),
+    ...(!isOpen && s.note ? [line("Note", esc(s.note), { note: true })] : []),
+  ].join("");
   const methodRows = [...byMethod.entries()].sort((a, b) => b[1].amount - a[1].amount)
-    .map(([k, g]) => `<tr><td>${esc(k)}</td><td class="r">${g.bills}</td><td class="r">${money(round2(g.amount))}</td></tr>`).join("")
-    || `<tr><td colspan="3" class="muted">No sales in this shift.</td></tr>`;
+    .map(([k, g]) => `<tr><td style="padding:4px 6px;border-bottom:1px solid #e5e7eb">${esc(k)}</td><td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:right">${g.bills}</td><td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:right;font-variant-numeric:tabular-nums">${money(round2(g.amount))}</td></tr>`).join("")
+    || `<tr><td colspan="3" style="padding:6px;color:#64748b">No sales in this shift.</td></tr>`;
+  const methodTotal = `<tr><td style="padding:4px 6px;font-weight:700">Total</td><td style="padding:4px 6px;text-align:right;font-weight:700">${totalBills}</td><td style="padding:4px 6px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${money(totalAmount)}</td></tr>`;
+  const billRows = [
+    line("Bills", totalBills),
+    line("Invoice range", invoices.length ? `${esc(invoices[0])} to ${esc(invoices[invoices.length - 1])}` : "-"),
+    line("Refunds", refunds),
+    line("Voids", voids),
+  ].join("");
+  const sig = (label) => `<div style="padding-top:26px"><div style="border-top:1px solid #111;padding-top:4px;font-size:10px;color:#334155">${label}</div></div>`;
   const html = `
-    <h2>${esc(settings.shopName || "Pharmacy")}</h2>
-    <h3>${isOpen ? "Shift report (so far)" : "Cash shift report"}</h3>
-    <table class="a4-table">
-      <tr><th>Opened by</th><td>${esc(s.openedBy || "")}</td><th>Opened</th><td>${esc(when(s.openedAt))}</td></tr>
-      <tr><th>Closed by</th><td>${esc(s.closedBy || (isOpen ? "Still open" : ""))}</td><th>Closed</th><td>${esc(isOpen ? "" : when(s.closedAt))}</td></tr>
-    </table>
-    <h4>Cash in the drawer</h4>
-    <table class="a4-table">
-      <tr><td>Opening cash</td><td class="r">${money(num(s.openingCash))}</td></tr>
-      <tr><td>Cash sales</td><td class="r">+ ${money(cashSales)}</td></tr>
-      <tr><td>Cash refunds</td><td class="r">− ${money(cashRefunds)}</td></tr>
-      <tr><th>Expected in drawer</th><th class="r">${money(expected)}</th></tr>
-      ${isOpen ? "" : `<tr><td>Counted cash</td><td class="r">${money(counted)}</td></tr>
-      <tr><th>Difference</th><th class="r">${money(diff)}</th></tr>
-      ${s.note ? `<tr><td>Note</td><td>${esc(s.note)}</td></tr>` : ""}`}
-    </table>
-    <h4>Sales by payment method</h4>
-    <table class="a4-table">
-      <thead><tr><th>Payment method</th><th class="r">Bills</th><th class="r">Amount</th></tr></thead>
-      <tbody>${methodRows}</tbody>
-    </table>
-    <h4>Bills</h4>
-    <table class="a4-table">
-      <tr><td>Bills</td><td class="r">${sales.length}</td></tr>
-      <tr><td>Invoice range</td><td class="r">${invoices.length ? `${esc(invoices[0])} to ${esc(invoices[invoices.length - 1])}` : "-"}</td></tr>
-      <tr><td>Refunds</td><td class="r">${refunds}</td></tr>
-      <tr><td>Voids</td><td class="r">${voids}</td></tr>
-    </table>
-    <p style="margin-top:40px">Cashier: ____________________ &nbsp;&nbsp;&nbsp; Checked by: ____________________</p>`;
+    <div style="display:grid;gap:14px;font-size:11px;color:#111">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+        <section>
+          ${sec("Shift")}
+          ${tbl([
+            line("Status", isOpen ? "Open (report so far)" : "Closed"),
+            line("Opened by", esc(s.openedBy || "-")),
+            line("Opened at", esc(when(s.openedAt))),
+            line("Closed by", esc(isOpen ? "-" : (s.closedBy || "-"))),
+            line("Closed at", esc(isOpen ? "-" : when(s.closedAt))),
+          ].join(""))}
+        </section>
+        <section>
+          ${sec("Cash drawer")}
+          ${tbl(cashRows)}
+        </section>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+        <section>
+          ${sec("Sales by payment method")}
+          <table style="width:100%;border-collapse:collapse;font-size:11px">${head(["Payment method", "Bills", "Amount"])}<tbody>${methodRows}${methodTotal}</tbody></table>
+        </section>
+        <section>
+          ${sec("Bills and adjustments")}
+          ${tbl(billRows)}
+        </section>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:22px">
+        ${sig("Cashier")}
+        ${sig("Checked by (supervisor)")}
+      </div>
+    </div>`;
   return { html, title: `${isOpen ? "Shift so far" : "Shift report"} ${when(s.openedAt)}` };
 }
 
