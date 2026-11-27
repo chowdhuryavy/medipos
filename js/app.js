@@ -647,6 +647,8 @@ async function handleAuthChange(user) {
       await signOut(auth);
       return;
     }
+    // Load the saved role list first, so roles the admin created (not only the built-in ones) are recognised.
+    await loadSettings().catch(() => { /* an inactive profile cannot read settings; the check below still applies */ });
     if (p.active !== true || !roles[p.role]) {
       pendingMessage = `Profile is inactive or has an unknown role ("${p.role ?? "none"}"). Check active = true and role = admin in Firestore.`;
       await signOut(auth);
