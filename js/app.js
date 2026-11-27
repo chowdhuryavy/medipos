@@ -553,7 +553,7 @@ function showSignInCode(user) {
         <p class="error-text" id="code-msg" role="status"></p>
         <div class="code-row">
           <button class="link-btn" type="button" id="code-resend">Send a new code</button>
-          <button class="link-btn" type="button" id="code-out">Sign out</button>
+          <button class="link-btn" type="button" id="code-out">Back to sign in</button>
         </div>
       </div>
     </section>`;
