@@ -1,4 +1,4 @@
-import { onSubmit, onAction, onDelegated, withBusy, APP_FONTS } from "../core.js";
+import { onSubmit, onAction, onDelegated, withBusy, APP_FONTS, reloadKeepingPage } from "../core.js";
 import { VERSION } from "../version.js";
 import { checkForUpdate } from "../updates.js";
 
@@ -25,16 +25,16 @@ import { DEFAULT_SERVICE_FEES, SERVICE_TYPES, floatKey } from "../services.js";
 import { REPORTS } from "../report-tables.js";
 
 const TABS = [
-  ["users", "Staff"],
-  ["settings", "Shop & rules"],
-  ["versions", "App version"],
-  ["lists", "Lists & payments"],
-  ["roles", "Role access"],
-  ["branding", "Branding & email"],
-  ["reports", "Scheduled reports"],
-  ["backup", "Daily backup"],
-  ["integrations", "Integrations"],
-  ["audit", "Activity log"],
+  ["users", "Staff", "userPlus"],
+  ["settings", "Shop & rules", "building"],
+  ["versions", "App version", "sync"],
+  ["lists", "Lists & payments", "accounting"],
+  ["roles", "Role access", "shield"],
+  ["branding", "Branding & email", "image"],
+  ["reports", "Scheduled reports", "reports"],
+  ["backup", "Daily backup", "download"],
+  ["integrations", "Integrations", "send"],
+  ["audit", "Activity log", "search"],
 ];
 const PAGE_NAMES = {
   dashboard: "Dashboard", pos: "Sell", inventory: "Inventory", purchasing: "Purchasing", partners: "Customers & suppliers",
@@ -44,7 +44,7 @@ const PAGE_NAMES = {
 export async function render(el) {
   el.innerHTML = `
     <div class="tabs" role="tablist">
-      ${TABS.map(([k, l], i) => `<button class="tab ${i === 0 ? "active" : ""}" data-tab="${k}" role="tab">${l}</button>`).join("")}
+      ${TABS.map(([k, l, ic], i) => `<button class="tab ${i === 0 ? "active" : ""}" data-tab="${k}" role="tab">${icon(ic)}<span>${l}</span></button>`).join("")}
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
@@ -421,7 +421,7 @@ async function saveGeneral(patch, message) {
   if (patch.shopName) await setDoc(doc(db, "branding", "public"), { shopName: patch.shopName, appName: patch.shopName }, { merge: true });
   await audit("settings.update", { keys: Object.keys(patch) });
   toast(message, "success");
-  setTimeout(() => location.reload(), 900);
+  reloadKeepingPage(900);
 }
 
 /* ───────── Lists & payment methods ───────── */
@@ -970,7 +970,7 @@ function viewRoles(body) {
     await setDoc(doc(db, "settings", "roles"), out);
     await audit("roles.update", { roles: Object.keys(out) });
     toast("Saved. Applying the new access…", "success");
-    setTimeout(() => location.reload(), 900);
+    reloadKeepingPage(900);
   }
 
   const deleteRole = async (key, btn) => {

@@ -1,4 +1,4 @@
-import { effectivePages, onSubmit, onAction, withBusy } from "./core.js";
+import { effectivePages, onSubmit, onAction, withBusy, reloadKeepingPage, takeReturnPage } from "./core.js";
 import { auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "./firebase.js";
 import { loadBranding, branding, logoHtml } from "./branding.js";
 import { passwordFields } from "./password-ui.js";
@@ -265,7 +265,7 @@ function showForcePasswordChange(user) {
     try {
       await updatePassword(user, fields.value());
       await updateDoc(doc(db, "users", user.uid), { mustChangePassword: false, passwordChangedAt: serverTimestamp() });
-      location.reload();
+      reloadKeepingPage(0);
     } catch (err) {
       btn.disabled = false;
       if (err.code === "auth/requires-recent-login") {
@@ -660,8 +660,9 @@ async function handleAuthChange(user) {
     Object.assign(session, { uid: user.uid, name: p.name || user.email, email: user.email, role: p.role, access: p.access || null });
     buildShell();
     startIdleLogout((message) => { pendingMessage = message; });
-    // Every sign-in opens the dashboard, not the page the address bar still had from before.
-    const home = can("dashboard") ? "dashboard" : effectivePages()[0];
+    // A reload returns to the same page. Any other sign-in opens the dashboard.
+    const back = takeReturnPage().replace(/^#\/?/, "");
+    const home = back && effectivePages().includes(back) ? back : (can("dashboard") ? "dashboard" : effectivePages()[0]);
     if (location.hash !== `#/${home}`) location.hash = `#/${home}`;
     else route();
   } catch (err) {

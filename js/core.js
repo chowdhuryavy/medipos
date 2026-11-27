@@ -61,6 +61,23 @@ export const APP_FONTS = {
   georgia: { label: "Georgia (serif)", stack: 'Georgia, "Times New Roman", serif' },
 };
 
+// A reload keeps the page the person is on: the address is remembered and the app returns to it after signing in again.
+const RETURN_KEY = "medipos.returnTo";
+export function reloadKeepingPage(delay = 0) {
+  try { sessionStorage.setItem(RETURN_KEY, location.hash); } catch { /* storage unavailable: the reload goes to the dashboard */ }
+  setTimeout(() => location.reload(), delay);
+}
+/** Returns the page to go back to after a reload, and forgets it. */
+export function takeReturnPage() {
+  try {
+    const h = sessionStorage.getItem(RETURN_KEY) || "";
+    sessionStorage.removeItem(RETURN_KEY);
+    return h;
+  } catch {
+    return "";
+  }
+}
+
 /** Sets the app font from the settings. Printed receipts and reports keep their own fonts. */
 export function applyAppFont() {
   const f = APP_FONTS[settings.appFont] || APP_FONTS.system;
