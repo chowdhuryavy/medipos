@@ -288,6 +288,21 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Prescription register: append-only. Sales users record; readers of reports, accounting and the sale screen can view.
+    match /prescriptions/{id} {
+      allow read: if canPage('pos') || canPage('reports') || canPage('accounting');
+      allow create: if canPage('pos') && request.resource.data.recordedByUid == request.auth.uid
+        && request.resource.data.items is list && request.resource.data.items.size() >= 1;
+      allow update, delete: if false;
+    }
+    // Doctors and clinics used on prescriptions. Sales users add; only administrators remove.
+    match /doctors/{id} {
+      allow read: if isActive();
+      allow create: if canPage('pos') && request.resource.data.createdByUid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
     match /audit/{id} {
       allow read: if isAdmin();
       // Entries must name the signed-in person, so nobody can write a log entry as someone else.

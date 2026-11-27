@@ -135,9 +135,14 @@ export async function loadSettings() {
         };
   }
   // The cash shift page goes with the sale screen, so anyone who can sell can open and close the shift.
+  // The same goes for the new screens: the import page follows stock access; prescriptions follow the sale screen.
   for (const key of Object.keys(roles)) {
     const pages = roles[key].pages || [];
-    if (pages.includes("pos") && !pages.includes("shift")) roles[key].pages = [...pages, "shift"];
+    const add = [];
+    if (pages.includes("pos") && !pages.includes("shift")) add.push("shift");
+    if (pages.includes("pos") && !pages.includes("prescriptions")) add.push("prescriptions");
+    if (pages.includes("inventory") && !pages.includes("import")) add.push("import");
+    if (add.length) roles[key].pages = [...pages, ...add];
   }
   fmtCache = null;
   return r.exists();

@@ -38,8 +38,8 @@ const TABS = [
   ["audit", "Activity log", "search"],
 ];
 const PAGE_NAMES = {
-  dashboard: "Dashboard", pos: "Sell", shift: "Cash shift", inventory: "Inventory", purchasing: "Purchasing", partners: "Customers & suppliers",
-  accounting: "Accounting", reports: "Reports", returns: "Returns & voids", admin: "Administration",
+  dashboard: "Dashboard", pos: "Sell", shift: "Cash shift", prescriptions: "Prescriptions & doctors", inventory: "Inventory", import: "Import products", purchasing: "Purchasing", partners: "Customers & suppliers",
+  accounting: "Accounting", reports: "Reports", returns: "Returns & voids", activity: "Staff activity", admin: "Administration",
 };
 
 export async function render(el) {
@@ -1171,8 +1171,8 @@ async function viewIntegrations(body) {
 /* ───────── Staff page: one person's profile, role and screens/areas they can use ───────── */
 
 const ACCESS_ICON = {
-  dashboard: "dashboard", pos: "cart", shift: "accounting", inventory: "inventory", purchasing: "purchase",
-  partners: "partners", accounting: "accounting", reports: "reports", admin: "admin",
+  dashboard: "dashboard", pos: "cart", shift: "accounting", prescriptions: "reports", inventory: "inventory", import: "inventory", purchasing: "purchase",
+  partners: "partners", accounting: "accounting", reports: "reports", activity: "partners", admin: "admin",
 };
 const AREA_ICON = { pos: "cart", inventory: "inventory", purchasing: "purchase", partners: "partners", accounting: "accounting" };
 

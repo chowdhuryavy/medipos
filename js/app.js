@@ -17,6 +17,9 @@ const PAGES = {
   dashboard: "Dashboard",
   pos: "Sell",
   shift: "Cash shift",
+  import: "Import products",
+  activity: "Staff activity",
+  prescriptions: "Prescriptions",
   inventory: "Inventory",
   purchasing: "Purchasing",
   partners: "Customers",
@@ -361,10 +364,10 @@ function navItems() {
 
 // Sidebar sections: pages are grouped by what people do with them. Pages not listed here go under "More".
 const NAV_GROUPS = [
-  ["Sell", ["dashboard", "pos", "shift"]],
-  ["Stock & parties", ["inventory", "purchasing", "partners"]],
+  ["Sell", ["dashboard", "pos", "shift", "prescriptions"]],
+  ["Stock & parties", ["inventory", "import", "purchasing", "partners"]],
   ["Money & reports", ["accounting", "reports"]],
-  ["Administration", ["admin"]],
+  ["Administration", ["activity", "admin"]],
 ];
 // Groups kept at the bottom of the sidebar, under the other pages.
 const PINNED_GROUPS = ["Administration"];
