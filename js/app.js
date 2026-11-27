@@ -91,11 +91,42 @@ function friendlyError(err) {
   return map[err?.code] || err?.message || "Sign-in failed.";
 }
 
+// Desktop side picture on the sign-in screen. Inline SVG, so no image file and no change to the Content-Security-Policy.
+const LOGIN_SIDE = `
+  <aside class="login-side" aria-hidden="true">
+    <svg viewBox="0 0 480 400" xmlns="http://www.w3.org/2000/svg">
+      <rect x="20" y="20" width="440" height="360" rx="36" fill="#ffffff" fill-opacity=".14" stroke="#ffffff" stroke-opacity=".3"/>
+      <circle cx="404" cy="92" r="11" fill="#f59e0b"/>
+      <circle cx="72" cy="112" r="7" fill="#a7f3d0"/>
+      <circle cx="418" cy="300" r="6" fill="#5eead4"/>
+      <g transform="translate(240 118)">
+        <path d="M0 -70 L56 -50 V0 C56 40 28 64 0 76 C-28 64 -56 40 -56 0 V-50 Z" fill="#ffffff"/>
+        <path d="M-12 -28 H12 V-12 H28 V12 H12 V28 H-12 V12 H-28 V-12 H-12 Z" fill="#0f766e"/>
+      </g>
+      <rect x="60" y="290" width="360" height="12" rx="6" fill="#ffffff" fill-opacity=".4"/>
+      <rect x="90" y="222" width="54" height="68" rx="10" fill="#f8fafc"/>
+      <rect x="90" y="202" width="54" height="24" rx="6" fill="#f59e0b"/>
+      <rect x="100" y="242" width="34" height="22" rx="4" fill="#5eead4"/>
+      <rect x="160" y="192" width="60" height="98" rx="12" fill="#f8fafc"/>
+      <rect x="160" y="170" width="60" height="28" rx="8" fill="#0f766e"/>
+      <rect x="172" y="236" width="36" height="28" rx="6" fill="#a7f3d0"/>
+      <rect x="240" y="236" width="48" height="52" rx="10" fill="#f8fafc"/>
+      <rect x="240" y="218" width="48" height="22" rx="6" fill="#f59e0b"/>
+      <g transform="translate(340 250) rotate(-30)">
+        <rect x="-34" y="-14" width="68" height="28" rx="14" fill="#5eead4"/>
+        <path d="M0 -14 H20 A14 14 0 0 1 20 14 H0 Z" fill="#f8fafc"/>
+      </g>
+    </svg>
+    <h2>Sell, stock and accounts in one place.</h2>
+    <p>Fast sales, clear stock and books you can trust.</p>
+  </aside>`;
+
 function showLogin(message = "", tone = "error") {
   setState("login");
   root.innerHTML = `
-    <section class="login-screen">
+    <section class="login-screen has-side">
       <div class="login-art" aria-hidden="true"><span class="orb o1"></span><span class="orb o2"></span><span class="orb o3"></span></div>
+      ${LOGIN_SIDE}
       <div class="login-card">
         ${logoHtml(icon("pos"))}
         <h1>${esc(branding.appName || APP_NAME)}</h1>
