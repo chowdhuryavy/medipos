@@ -423,9 +423,9 @@ const NAV_GROUPS = [
 ];
 // Groups kept at the bottom of the sidebar, under the other pages.
 const PINNED_GROUPS = ["Administration"];
-function navLinks(groups) {
+function navLinks(groups, withHeader = true) {
   return groups.map((g) => `
-    <p class="nav-group">${esc(g.label)}</p>
+    ${withHeader ? `<p class="nav-group">${esc(g.label)}</p>` : ""}
     ${g.items.map((p) => `
       <a class="nav-link" href="#/${p.key}" data-page="${p.key}">
         <span class="nav-ico">${icon(p.icon)}</span><span class="nav-text">${esc(PAGE_TITLE[p.key])}</span>
@@ -458,7 +458,7 @@ function buildShell() {
           ${navLinks(navGroups(items).filter((g) => !PINNED_GROUPS.includes(g.label)))}
         </nav>
         ${navGroups(items).some((g) => PINNED_GROUPS.includes(g.label)) ? `<nav class="nav nav-pinned" aria-label="Administration">
-          ${navLinks(navGroups(items).filter((g) => PINNED_GROUPS.includes(g.label)))}
+          ${navLinks(navGroups(items).filter((g) => PINNED_GROUPS.includes(g.label)), false)}
         </nav>` : ""}
         <div class="sidebar-foot avatar-trigger" id="avatar-side" role="button" tabindex="0" aria-label="Your account">
           <div class="avatar-ring"><div class="avatar">${esc((session.name || "?").charAt(0).toUpperCase())}</div></div>

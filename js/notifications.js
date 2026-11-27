@@ -11,7 +11,11 @@ let open = false;
 
 const ms = (t) => (t && t.toMillis ? t.toMillis() : t ? new Date(t).getTime() : Date.now());
 const isUnread = (n) => !(n.readBy || []).includes(session.uid);
-const unreadCount = () => items.filter(isUnread).length;
+// "Clear" hides everything created before this moment, for this person on this device.
+const clearedKey = () => `notif-cleared-${session.uid}`;
+const clearedAt = () => Number(localStorage.getItem(clearedKey()) || 0);
+const visible = () => items.filter((x) => ms(x.createdAt) > clearedAt());
+const unreadCount = () => visible().filter(isUnread).length;
 
 /** Roles that can open a page. Used to choose who a notification goes to. */
 export const rolesWith = (page) => Object.keys(roles).filter((k) => k === "admin" || roles[k]?.pages?.includes(page));
@@ -43,8 +47,11 @@ export function startNotifications() {
   const q = query(collection(db, "notifications"), where("roles", "array-contains", session.role), limit(200));
   unsub = onSnapshot(q, (snap) => {
     if (!document.getElementById("bell-btn")) { unsub(); unsub = null; return; }
-    const fresh = ready ? snap.docChanges().filter((c) => c.type === "added").map((c) => c.doc.id) : [];
+    // The first result can come from the local cache, which may be stale. Wait for the server before showing counts.
+    const fromCache = snap.metadata.fromCache;
+    const fresh = ready && !fromCache ? snap.docChanges().filter((c) => c.type === "added").map((c) => c.doc.id) : [];
     items = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => ms(b.createdAt) - ms(a.createdAt));
+    if (fromCache) return;
     ready = true;
     paintBadge();
     if (open) paintPanel();
@@ -79,8 +86,9 @@ function paintPanel() {
   const panel = document.getElementById("notif-panel");
   if (!panel) return;
   const n = unreadCount();
-  panel.querySelector(".np-list").innerHTML = items.length
-    ? items.slice(0, 80).map((x) => `
+  const list = visible();
+  panel.querySelector(".np-list").innerHTML = list.length
+    ? list.slice(0, 80).map((x) => `
       <button class="np-item ${isUnread(x) ? "unread" : ""}" data-id="${esc(x.id)}">
         <span class="np-ico kind-${esc(x.kind || "system")}">${icon(KIND_ICON[x.kind] || "alert")}</span>
         <span class="np-text"><strong>${esc(x.title)}</strong>${x.body ? `<small>${esc(x.body)}</small>` : ""}<em>${esc(ago(x.createdAt))}</em></span>
@@ -123,6 +131,7 @@ export function toggleNotifications() {
       <div><strong>Notifications</strong><small class="np-count"></small></div>
       <div class="np-actions">
         <button class="btn ghost sm" data-readall>${icon("check")}<span>Mark all read</span></button>
+        <button class="btn ghost sm" data-clear>${icon("trash")}<span>Clear</span></button>
         <button class="icon-btn sm" data-close aria-label="Close">${icon("x")}</button>
       </div>
     </header>
@@ -130,13 +139,29 @@ export function toggleNotifications() {
   document.body.appendChild(panel);
   paintPanel();
   // Opening the panel counts as having seen them, so the badge does not come back on the next load.
-  markRead(items.filter(isUnread).map((x) => x.id)).catch((err) => console.warn("Could not mark notifications read:", err.message));
+  markRead(visible().filter(isUnread).map((x) => x.id)).catch((err) => console.warn("Could not mark notifications read:", err.message));
   panel.querySelector("[data-close]").addEventListener("click", closePanel);
+  panel.querySelector("[data-clear]").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await markRead(visible().filter(isUnread).map((x) => x.id));
+      localStorage.setItem(clearedKey(), String(Date.now()));
+      items = items.filter((x) => ms(x.createdAt) > clearedAt());
+      paintBadge();
+      paintPanel();
+      toast("Notifications cleared", "success");
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
   panel.querySelector("[data-readall]").addEventListener("click", async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
     try {
-      await markRead(items.filter(isUnread).map((x) => x.id));
+      await markRead(visible().filter(isUnread).map((x) => x.id));
       toast("All notifications marked as read", "success");
     } catch (err) {
       toast(err.message, "error");
