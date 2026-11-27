@@ -219,6 +219,7 @@ const FIELDS = [
     ["allowPriceChange", "Let cashiers raise prices (lowest price is always enforced)", "bool"],
   ]],
   ["POS buttons", [
+    ["posServiceButtons", "Show the mobile recharge and wallet buttons on the sale screen", "bool"],
     ["posTab1Active", "Show the first sale-screen button", "bool"],
     ["posTab1Label", "First button name", "text"],
     ["posTab1Categories", "Product categories for the first button (comma separated, e.g. Medicine, Syrup)", "text"],

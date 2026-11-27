@@ -47,11 +47,11 @@ export async function render(el) {
     <div class="pos">
       <section class="card pos-catalog">
         <div class="search-bar">${icon("search")}<input id="p-search" type="search" inputmode="search" placeholder="Search name or SKU, or scan barcode" autocomplete="off" /><button type="button" class="btn ghost sm scan-btn" data-scan-into="#p-search" data-scan-enter>Scan</button></div>
-        <div class="service-bar" role="group" aria-label="Services">
+        ${settings.posServiceButtons ? `<div class="service-bar" role="group" aria-label="Services">
           <button class="svc-btn" data-svc="recharge">${icon("plus")}<span>Mobile recharge</span></button>
           <button class="svc-btn" data-svc="cashin">${icon("plus")}<span>Wallet cash-in</span></button>
           <button class="svc-btn" data-svc="cashout">${icon("plus")}<span>Wallet cash-out</span></button>
-        </div>
+        </div>` : ""}
         <div class="chips" id="p-cats" role="tablist"></div>
         <div class="product-grid" id="p-grid"></div>
       </section>

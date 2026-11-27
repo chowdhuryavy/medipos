@@ -26,6 +26,8 @@ export const DEFAULT_SETTINGS = {
   // App font: a key of APP_FONTS below. Only fonts already on the device are used, so nothing is downloaded.
   appFont: "times",
   menuStyle: "classic",
+  // Mobile recharge and wallet cash-in/out buttons on the sale screen. Off unless a shop turns them on.
+  posServiceButtons: false,
   // Two sale-screen buttons. They show only when both are on; each shows the products of its categories.
   posTab1Active: false, posTab1Label: "Medicine", posTab1Categories: "",
   posTab2Active: false, posTab2Label: "Others", posTab2Categories: "",
