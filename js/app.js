@@ -181,11 +181,6 @@ function openForgotPassword(prefillEmail = "") {
         <div class="reset-icon" aria-hidden="true">${icon("shield")}</div>
         <p class="muted small" id="fp-help">Enter your staff email. If an account exists, we'll send a 6-digit code.</p>
       </div>
-      <ol class="steps" aria-label="Progress">
-        <li class="step on" data-step="1"><span>1</span> Email</li>
-        <li class="step" data-step="2"><span>2</span> Code</li>
-        <li class="step" data-step="3"><span>3</span> New password</li>
-      </ol>
       <form id="fp-form" class="stack" novalidate>
         <div id="fp-step1">
           <label class="field"><span class="field-label">Email</span>
