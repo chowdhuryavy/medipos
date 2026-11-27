@@ -29,6 +29,7 @@ const TABS = [
   ["settings", "Shop & rules", "building"],
   ["versions", "App version", "sync"],
   ["health", "App health", "shield"],
+  ["emailtest", "Email test", "send"],
   ["lists", "Lists & payments", "accounting"],
   ["roles", "Role access", "shield"],
   ["branding", "Branding & email", "image"],
@@ -50,7 +51,7 @@ export async function render(el) {
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
-  const views = { users: viewUsers, settings: viewSettings, versions: viewVersions, health: viewHealth, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit, buttons: viewButtonStyle };
+  const views = { users: viewUsers, settings: viewSettings, versions: viewVersions, health: viewHealth, emailtest: viewEmailTest, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit, buttons: viewButtonStyle };
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
@@ -2012,4 +2013,41 @@ async function viewHealth(body) {
     btn.disabled = false;
   };
   body.querySelector("#hc-run").addEventListener("click", run);
+}
+
+/* ───────── Email test (temporary): sends three dummy-code formats to you, to see how Gmail shows them ───────── */
+
+async function viewEmailTest(body) {
+  body.innerHTML = `
+    <section class="card">
+      <header class="card-head"><h3>${icon("send")} Email test</h3>
+        <button class="btn primary" id="et-run" type="button">${icon("send")}<span>Send 3 test emails</span></button></header>
+      <p class="muted small">Sends three emails with a dummy code (123456) to your own address: A plain text, B minimal HTML, C the current branded template. Check how Gmail shows each one, then tell us which shows the Copy code button.</p>
+      <div id="et-out"></div>
+    </section>`;
+  const out = body.querySelector("#et-out");
+  body.querySelector("#et-run").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    out.innerHTML = `<div class="skeleton"></div>`;
+    try {
+      const { sentTo, results } = await post("/api/admin/mail", { action: "diagnostic" }, { secure: true });
+      out.innerHTML = `
+        <p class="muted small">Sent to ${esc(sentTo)}</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Format</th><th>Code in text</th><th>Code in HTML</th><th>Resend status</th><th>Resend email ID</th></tr></thead>
+          <tbody>${results.map((r) => `<tr>
+            <td data-label="Format"><strong>${esc(r.format)}</strong> ${esc(r.label)}</td>
+            <td data-label="Code in text">${r.textHasCode ? "Yes" : "No"}</td>
+            <td data-label="Code in HTML">${r.htmlHasCode === null ? "n/a" : r.htmlHasCode ? "Yes" : "No"}</td>
+            <td data-label="Resend status">${esc(String(r.status))}${r.error ? ` · ${esc(r.error)}` : ""}</td>
+            <td data-label="Resend email ID">${esc(r.resendId || "-")}</td>
+          </tr>`).join("")}</tbody>
+        </table></div>`;
+    } catch (err) {
+      out.innerHTML = `<p class="warn-text">${esc(err.message || "The test could not run")}</p>`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }
