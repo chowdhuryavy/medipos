@@ -875,7 +875,8 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .np-empty { display: grid; justify-items: center; gap: 6px; padding: 28px 12px; color: var(--muted); }
 .np-empty svg { width: 28px; height: 28px; color: var(--ok); }
 @media (max-width: 900px) {
-  .notif-panel { top: auto; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 8px); left: 8px; right: 8px; width: auto; max-height: 72vh; border-radius: 22px; }
+  /* On phones the panel drops down from the bell, under the top bar. */
+  .notif-panel { top: calc(env(safe-area-inset-top) + 72px); bottom: auto; left: 8px; right: 8px; width: auto; max-height: calc(100dvh - 88px - env(safe-area-inset-top)); border-radius: 22px; }
   .avatar-top { display: none; }
 }
 
