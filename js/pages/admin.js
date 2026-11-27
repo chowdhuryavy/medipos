@@ -1428,12 +1428,18 @@ async function viewBranding(body) {
   });
 
   const form = body.querySelector("#bf");
-  body.addEventListener("click", (e) => {
+  // Restore default text: fills one template's fields with its built-in text. Press Save to keep it.
+  form.noValidate = true;
+  form.addEventListener("click", (e) => {
     const b = e.target.closest("[data-default]");
     if (!b) return;
+    e.preventDefault();
     const k = b.dataset.default;
-    for (const f of tplFields(k)) form[`${k}__${f}`].value = DEFAULT_TEMPLATES[k][f] ?? "";
-    toast("Default text restored. Save to apply it.", "info");
+    for (const fld of tplFields(k)) {
+      const field = form.querySelector(`[name="${k}__${fld}"]`);
+      if (field) field.value = DEFAULT_TEMPLATES[k][fld] ?? "";
+    }
+    toast("Default text restored. Press Save branding & emails to keep it.", "info");
   });
 
   onSubmit(form, async (e) => {
@@ -1457,6 +1463,7 @@ async function viewBranding(body) {
       await setDoc(doc(db, "settings", "emails"), { ...emails, updatedAt: serverTimestamp() });
       await audit("branding.update", { appName, brandColor });
       toast("Branding and emails saved", "success");
+      await viewBranding(body); // show exactly what was saved
     } catch (err) {
       toast(err.message, "error");
     }

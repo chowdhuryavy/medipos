@@ -1160,3 +1160,8 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 .round-logo .brand-mark { width: 100%; height: 100%; border-radius: 50%; box-shadow: none; background: #fff; color: var(--brand); }
 .round-logo .brand-logo { width: 78%; height: auto; max-width: none; max-height: none; object-fit: contain; filter: none; }
 @keyframes roundPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+
+/* Phones: the Save bar sits above the bottom navigation, not under it (a later rule had moved it down). */
+@media (max-width: 900px) {
+  .sticky-actions { bottom: calc(var(--tabbar-h) + 8px); }
+}
