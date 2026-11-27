@@ -358,6 +358,9 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
   .login-side p { margin: 0; font-size: 16px; opacity: .85; }
 }
 
+/* Reset password: show only the current step. "hidden" must win over the stack/grid layout. */
+.reset [hidden] { display: none !important; }
+
 /* ───────── POS ───────── */
 .pos { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
 .pos-catalog { min-width: 0; }
