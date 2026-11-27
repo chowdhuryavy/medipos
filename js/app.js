@@ -403,7 +403,7 @@ function buildShell() {
         <header class="topbar">
           <button class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu">${icon("menu")}</button>
           ${branding.logoUrl ? `<img class="topbar-logo" src="${branding.logoUrl}" alt="${esc(settings.shopName || "")} logo" />` : ""}
-          <h2 id="page-title"></h2>
+          <div class="topbar-title"><strong class="topbar-shop">${esc(settings.shopName || "MediPOS")}</strong><small id="page-title"></small></div>
           <div class="grow"></div>
           <span class="clock" id="clock"></span>
           <button class="icon-btn bell-btn" id="bell-btn" type="button" aria-label="Notifications" title="Notifications">${icon("bell")}<span class="bell-count" id="bell-count" hidden></span></button>
