@@ -306,6 +306,9 @@ function openAccountMenu() {
         <div><strong>${esc(session.name || "")}</strong><small class="muted">${esc(email)}${email ? " · " : ""}${esc(roles[session.role]?.label || "")}</small></div>
       </div>
       <div class="account-actions">
+        <button class="account-action" type="button" data-act="lang">
+          ${icon("sync")}<span><strong>${getLang() === "bn" ? "ভাষা: বাংলা" : "Language: English"}</strong><small>${getLang() === "bn" ? "English-এ পরিবর্তন করুন" : "বাংলায় পরিবর্তন করুন"}</small></span>
+        </button>
         <button class="account-action" type="button" data-act="password">
           ${icon("key")}<span><strong>Change password</strong><small>Confirm your current password, then choose a new one</small></span>
         </button>
@@ -315,6 +318,11 @@ function openAccountMenu() {
       </div>
     </div>`, (body, close) => {
     body.querySelector('[data-act="password"]').addEventListener("click", () => { close(); openChangePassword(); });
+    body.querySelector('[data-act="lang"]').addEventListener("click", () => {
+      setLang(getLang() === "bn" ? "en" : "bn");
+      close();
+      openAccountMenu();
+    });
     body.querySelector('[data-act="signout"]').addEventListener("click", async () => {
       if (!(await confirmBox("Sign out of MediPOS on this device?"))) return;
       close();

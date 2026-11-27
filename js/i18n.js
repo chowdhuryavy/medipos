@@ -31,7 +31,7 @@ const DICT = {
   "Details": "বিবরণ", "Medicine": "ওষুধ", "Qty": "পরিমাণ", "Smallest unit": "ক্ষুদ্রতম একক", "Opening": "শুরু",
   "Expected": "প্রত্যাশিত", "Counted": "গোনা", "Difference": "পার্থক্য", "Opened": "খোলা হয়েছে", "By": "দ্বারা",
   "Closed by": "বন্ধকারী", "Shift open": "শিফট খোলা", "Note": "নোট", "Search…": "খুঁজুন…",
-  "Log in": "লগ ইন", "Sign in": "সাইন ইন", "Email": "ইমেইল", "Password": "পাসওয়ার্ড", "Users": "ব্যবহারকারী",
+  "Your account": "আপনার অ্যাকাউন্ট", "Change password": "পাসওয়ার্ড পরিবর্তন", "Log in": "লগ ইন", "Sign in": "সাইন ইন", "Email": "ইমেইল", "Password": "পাসওয়ার্ড", "Users": "ব্যবহারকারী",
   "Roles": "ভূমিকা", "Branding": "ব্র্যান্ডিং", "General": "সাধারণ", "Language": "ভাষা",
   "Balance": "ব্যালেন্স", "Items": "আইটেম", "Stock": "মজুদ", "Stock value": "মজুদের মূল্য", "Expiry": "মেয়াদ",
   "Low stock": "কম মজুদ", "Expiring soon": "শিগগিরই মেয়াদ শেষ", "Purchases": "ক্রয়", "Sales": "বিক্রয়",
@@ -73,7 +73,8 @@ function paintTextNodes(scope) {
   });
 }
 
-export function applyLang(scope = root) {
+// Translates the whole page by default, so dialogs and menus opened outside the app root change too.
+export function applyLang(scope = document.body) {
   if (!scope) return;
   paintTextNodes(scope);
 }
@@ -101,6 +102,6 @@ export function initLang(el) {
   document.documentElement.lang = getLang();
   document.documentElement.dataset.lang = getLang();
   if (getLang() === "bn") document.documentElement.style.setProperty("--app-font", BN_FONTS);
-  new MutationObserver(scheduleApply).observe(el, { childList: true, subtree: true });
+  new MutationObserver(scheduleApply).observe(document.body, { childList: true, subtree: true });
   applyLang();
 }
