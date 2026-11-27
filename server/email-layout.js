@@ -94,3 +94,14 @@ export function shell({ cfg, pal, subject, preheader, icon, eyebrow, heading, bo
 </body>
 </html>`;
 }
+
+// Spells out a small whole number, e.g. 10 -> "ten", 25 -> "twenty-five", so the OTP emails carry no digits near the code.
+const SPELLED_ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+const SPELLED_TENS = ["", "", "twenty", "thirty", "forty", "fifty"];
+export function spellNumber(n) {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v) || v < 0) return String(n);
+  if (v < 20) return SPELLED_ONES[v];
+  if (v < 60) return SPELLED_TENS[Math.floor(v / 10)] + (v % 10 ? `-${SPELLED_ONES[v % 10]}` : "");
+  return String(v);
+}

@@ -1,7 +1,7 @@
 import { adminDb } from "./firebase-admin.js";
 import { APP_URL } from "./mail.js";
 import { DEFAULT_TEMPLATES, DEFAULT_EMAIL_FOOTER, DEFAULT_OTP_MINUTES } from "../js/email-defaults.js";
-import { esc, fill, brandPalette, shell } from "./email-layout.js";
+import { esc, fill, brandPalette, shell, spellNumber } from "./email-layout.js";
 
 export { DEFAULT_TEMPLATES };
 
@@ -44,6 +44,9 @@ export function renderEmail(key, cfg, values) {
   const buttonUrl = key === "welcome" ? WELCOME_BUTTON_URL : APP_URL;
   const pal = brandPalette(cfg.brandColor);
   const vars = { appName: cfg.appName, shopName: cfg.shopName, loginUrl: APP_URL, minutes: cfg.otpExpiryMinutes, ...values };
+  vars.minutes = spellNumber(vars.minutes);
+  // Sign-in codes stay plain text (Gmail reads them better); the boxed style is kept for the other emails.
+  const boxed = key !== "login";
   const subject = fill(t.subject, vars);
   const text = fill(t.body, vars);
   const button = t.button ? fill(t.button, vars) : "";
@@ -52,7 +55,7 @@ export function renderEmail(key, cfg, values) {
 
   // Passwords get a highlighted card. Markers survive escaping, then become HTML.
   const marked = fill(t.body, Object.fromEntries(Object.entries(vars).map(([k, v]) =>
-    [k, ["password"].includes(k) && v ? `\u0001${k}\u0002${v}\u0003` : v])));
+    [k, boxed && k === "password" && v ? `\u0001${k}\u0002${v}\u0003` : v])));
   const paragraphs = esc(marked)
     .split(/\n{2,}/)
     .map((para) => `<p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.65">${para
@@ -68,7 +71,7 @@ export function renderEmail(key, cfg, values) {
   const footerText = esc(fill(cfg.emailFooter, vars)).replace(/\n/g, "<br/>");
   const html = shell({
     cfg, pal, subject,
-    preheader: (values?.password ? text.split(String(values.password)).join("") : text).replace(/\s+/g, " ").slice(0, 110),
+    preheader: (t.preheader ? fill(t.preheader, vars) : (values?.password ? text.split(String(values.password)).join("") : text)).replace(/\s+/g, " ").slice(0, 110),
     icon: ICONS[key] || DEFAULT_ICON,
     eyebrow, heading,
     bodyHtml: `${paragraphs}${btn}`,

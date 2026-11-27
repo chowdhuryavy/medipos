@@ -10,7 +10,7 @@ export const DEFAULT_TEMPLATES = {
   otp: {
     label: "Password reset code",
     help: "Sent when someone asks to reset their password. The code is always shown in its own box after the label text. Keep “Your verification code is” so Gmail can detect the code.",
-    subject: "Your verification code {{code}} – {{shopName}}",
+    subject: "Your {{appName}} verification code",
     eyebrow: "Security",
     heading: "Password reset request",
     greeting: "Hello {{name}},",
@@ -22,10 +22,11 @@ export const DEFAULT_TEMPLATES = {
   login: {
     label: "Sign-in code",
     help: "Sent at sign-in to staff whose account asks for a code every time. The code is shown in its own box.",
-    subject: "Your MediPos sign-in verification code",
+    subject: "Your {{appName}} verification code",
     eyebrow: "Security",
     heading: "Confirm it is you",
-    body: "Hello {{name}},\n\nYour verification code is:\n\n{{password}}\n\nUse it to finish signing in to {{appName}}. The code expires in {{minutes}} minutes. If this was not you, do not share the code and tell an administrator.",
+    body: "Hello {{name}},\n\nYour verification code is {{password}}\n\nUse it to finish signing in to {{appName}}. The code expires in {{minutes}} minutes. If this was not you, do not share the code and tell an administrator.",
+    preheader: "Your verification code is {{password}}",
   },
   welcome: {
     label: "New staff account",
