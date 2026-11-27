@@ -70,6 +70,7 @@ async function showSale(el, invoiceNo) {
         <label>Administrator email<input name="approverEmail" type="email" autocomplete="off" required /></label>
         <label>Administrator password<input name="approverPassword" type="password" autocomplete="new-password" required /></label>
         <div class="form-actions span-2">
+          <button class="btn ghost" type="button" id="rt-void-sel" ${hasService || voided ? "disabled" : ""}>${icon("x")}<span>Void selected items</span></button>
           <button class="btn ghost" type="button" id="rt-void" ${hasService || voided ? "disabled" : ""}>${icon("x")}<span>Void whole sale</span></button>
           <button class="btn primary" type="submit" ${hasService || voided ? "disabled" : ""}>${icon("check")}<span>Return selected items</span></button>
         </div>
@@ -100,16 +101,27 @@ async function showSale(el, invoiceNo) {
     }).catch((err) => toast(err.message, "error"));
   });
 
-  out.querySelector("#rt-void").addEventListener("click", async () => {
+  // Void the selected items, or the whole remaining sale. Both need a reason, a confirmation and the approver's password.
+  const selectedLines = () => [...out.querySelectorAll(".rt-q")]
+    .map((i) => ({ index: Number(i.dataset.q), qty: Number(i.value) || 0 }))
+    .filter((l) => l.qty > 0);
+  const runVoid = (btnId, wholeSale) => async () => {
+    const lines = wholeSale ? [] : selectedLines();
+    if (!wholeSale && !lines.length) return toast("Enter how many units to void.", "error");
     if (reasonOf().length < 3) return toast("Write the reason (at least 3 letters).", "error");
-    const ok = await confirmBox(`Void sale ${sale.invoiceNo}? All its items go back to stock and the full amount is refunded. This cannot be undone.`, { title: "Void this sale", confirmText: "Void sale", tone: "danger" });
+    const message = wholeSale
+      ? `Void sale ${sale.invoiceNo}? All its items go back to stock and the full amount is refunded. This cannot be undone.`
+      : `Void the selected items on ${sale.invoiceNo}? They go back to stock and their amount is refunded. This cannot be undone.`;
+    const ok = await confirmBox(message, { title: wholeSale ? "Void this sale" : "Void selected items", confirmText: "Void", tone: "danger" });
     if (!ok) return;
-    const btn = out.querySelector("#rt-void");
+    const btn = out.querySelector(btnId);
     withBusy(btn, async () => {
-      const r = await post("/api/till", { action: "return", kind: "void", saleId: sale.id, lines: [], reason: reasonOf(), ...approverOf() }, { secure: true });
+      const r = await post("/api/till", { action: "return", kind: "void", saleId: sale.id, lines, reason: reasonOf(), ...approverOf() }, { secure: true });
       await after(r, "Void");
     }).catch((err) => toast(err.message, "error"));
-  });
+  };
+  out.querySelector("#rt-void").addEventListener("click", runVoid("#rt-void", true));
+  out.querySelector("#rt-void-sel").addEventListener("click", runVoid("#rt-void-sel", false));
 }
 
 async function showRecent(el) {

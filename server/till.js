@@ -94,7 +94,9 @@ export async function processReturn(staff, body) {
 
     let want;
     if (kind === "void") {
-      want = (sale.items || []).map((it, i) => ({ index: i, qty: it.qty - (agg.items?.[i] || 0) })).filter((l) => l.qty > 0);
+      const picked = Array.isArray(body.lines) ? body.lines.filter((l) => Number(l.qty) > 0) : [];
+      // Selected items only, or the whole remaining sale when nothing is selected.
+      want = picked.length ? picked : (sale.items || []).map((it, i) => ({ index: i, qty: it.qty - (agg.items?.[i] || 0) })).filter((l) => l.qty > 0);
       if (!want.length) throw httpError(400, "Everything on this sale has already been returned.");
     } else {
       want = Array.isArray(body.lines) ? body.lines : [];
@@ -145,8 +147,10 @@ export async function processReturn(staff, body) {
     const jvNo = `JV-${String(nextJv).padStart(6, "0")}`;
     const memo = `${kind === "void" ? "Void" : "Return"} of ${sale.invoiceNo}${reason ? ` · ${reason}` : ""}`;
     const entry = returnJournal({ ...totals, paymentAccount, memo, ref: sale.invoiceNo });
-    const isFull = kind === "void" || fullyReturned(sale, nextAgg);
-    const newStatus = kind === "void" ? "voided" : isFull ? "returned" : "partly returned";
+    const isFull = fullyReturned(sale, nextAgg);
+    const newStatus = kind === "void"
+      ? (isFull ? "voided" : "partly voided")
+      : (isFull ? "returned" : "partly returned");
 
     for (const [pid, add] of Object.entries(productAdd)) {
       const cur = Number(productSnaps[pid].data().stock) || 0;
