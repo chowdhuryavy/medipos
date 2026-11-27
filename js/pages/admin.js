@@ -1511,23 +1511,17 @@ async function viewBranding(body) {
           <label>Brand colour<input type="color" name="brandColor" value="${esc(brand.brandColor || DEFAULT_BRAND_COLOR)}" /></label>
         </div>
       </section>
-      ${Object.keys(DEFAULT_TEMPLATES).map((k) => `
-        <section class="card">
-          <h3>${esc(DEFAULT_TEMPLATES[k].label)}</h3>
-          <p class="muted small">${esc(DEFAULT_TEMPLATES[k].help)} Placeholders: ${EMAIL_PLACEHOLDERS.map((p) => `<code>{{${p}}}</code>`).join(" ")}</p>
-          <div class="form-grid">
-            ${tplFields(k).map((fld) => {
-              const v = esc(tpl(k)[fld] ?? "");
-              const label = EMAIL_FIELD_LABELS[fld] || fld;
-              if (fld === "button") return `<label class="span-2">${esc(label)}<input name="${k}__${fld}" value="${v}" /></label>`;
-              if (MULTI_LINE.includes(fld)) return `<label class="span-2">${esc(label)}<textarea name="${k}__${fld}" rows="${fld === "body" ? 7 : 3}">${v}</textarea></label>`;
-              return `<label class="span-2">${esc(label)}<input name="${k}__${fld}" value="${v}" /></label>`;
-            }).join("")}
-          </div>
-          <div class="form-actions"><button type="button" class="btn ghost sm" data-default="${k}">Restore default text</button></div>
-        </section>`).join("")}
+      <section class="card">
+        <h3>Emails</h3>
+        <p class="muted small">Open an email to change its wording. Each email has its own window, with its own save.</p>
+        <div class="list-index">${Object.keys(DEFAULT_TEMPLATES).map((k) => `
+          <button type="button" class="list-row" data-tpl="${k}">
+            <span class="list-row-main"><strong>${esc(DEFAULT_TEMPLATES[k].label)}</strong><small class="muted">${esc(DEFAULT_TEMPLATES[k].help)}</small></span>
+            ${icon("edit")}
+          </button>`).join("")}</div>
+      </section>
       <div class="sticky-actions">
-        <button class="btn primary" type="submit">${icon("check")}<span>Save branding & emails</span></button>
+        <button class="btn primary" type="submit">${icon("check")}<span>Save branding</span></button>
       </div>
     </form>`;
 
@@ -1539,32 +1533,56 @@ async function viewBranding(body) {
   });
 
   const form = body.querySelector("#bf");
-  // Restore default text: fills one template's fields with its built-in text. Press Save to keep it.
   form.noValidate = true;
-  form.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-default]");
-    if (!b) return;
-    e.preventDefault();
-    const k = b.dataset.default;
-    for (const fld of tplFields(k)) {
-      const field = form.querySelector(`[name="${k}__${fld}"]`);
-      if (field) field.value = DEFAULT_TEMPLATES[k][fld] ?? "";
-    }
-    toast("Default text restored. Press Save branding & emails to keep it.", "info");
-  });
+
+  // One email at a time: its fields, Restore default text, and Save for that email only.
+  const openTemplate = (k) => {
+    const t = tpl(k);
+    openModal(DEFAULT_TEMPLATES[k].label, `
+      <form id="tf" class="settings-form">
+        <p class="muted small">${esc(DEFAULT_TEMPLATES[k].help)} Placeholders: ${EMAIL_PLACEHOLDERS.map((p) => `<code>{{${p}}}</code>`).join(" ")}</p>
+        <div class="form-grid">
+          ${tplFields(k).map((fld) => {
+            const val = esc(t[fld] ?? "");
+            const label = EMAIL_FIELD_LABELS[fld] || fld;
+            if (fld === "button") return `<label class="span-2">${esc(label)}<input name="${fld}" value="${val}" /></label>`;
+            if (MULTI_LINE.includes(fld)) return `<label class="span-2">${esc(label)}<textarea name="${fld}" rows="${fld === "body" ? 7 : 3}">${val}</textarea></label>`;
+            return `<label class="span-2">${esc(label)}<input name="${fld}" value="${val}" /></label>`;
+          }).join("")}
+        </div>
+        <div class="form-actions"><button type="button" class="btn ghost" data-default>Restore default text</button><button class="btn primary" type="submit">${icon("check")}<span>Save this email</span></button></div>
+      </form>`, (host, close) => {
+      const tf = host.querySelector("#tf");
+      tf.noValidate = true;
+      tf.querySelector("[data-default]").addEventListener("click", () => {
+        for (const fld of tplFields(k)) {
+          const el = tf.querySelector(`[name="${fld}"]`);
+          if (el) el.value = DEFAULT_TEMPLATES[k][fld] ?? "";
+        }
+        toast("Default text restored. Press Save this email to keep it.", "info");
+      });
+      onSubmit(tf, async (e) => {
+        e.preventDefault();
+        const fd = new FormData(tf);
+        const vals = {};
+        for (const fld of tplFields(k)) {
+          const val = String(fd.get(fld) || "").trim();
+          vals[fld] = fld === "button" ? val : (val || DEFAULT_TEMPLATES[k][fld]);
+        }
+        await setDoc(doc(db, "settings", "emails"), { [k]: vals, updatedAt: serverTimestamp() }, { merge: true });
+        stored[k] = vals;
+        await audit("emails.update", { template: k });
+        toast(`${DEFAULT_TEMPLATES[k].label} saved`, "success");
+        close();
+      });
+    });
+  };
+  body.querySelectorAll("[data-tpl]").forEach((b) => b.addEventListener("click", () => openTemplate(b.dataset.tpl)));
 
   onSubmit(form, async (e) => {
     e.preventDefault();
     const f = new FormData(form);
     const appName = settings.shopName || "MediPOS";
-    const emails = {};
-    for (const k of Object.keys(DEFAULT_TEMPLATES)) {
-      emails[k] = {};
-      for (const fld of tplFields(k)) {
-        const v = String(f.get(`${k}__${fld}`) || "").trim();
-        emails[k][fld] = fld === "button" ? v : (v || DEFAULT_TEMPLATES[k][fld]);
-      }
-    }
     const brandColor = /^#[0-9a-f]{6}$/i.test(String(f.get("brandColor") || "")) ? String(f.get("brandColor")) : DEFAULT_BRAND_COLOR;
     try {
       await setDoc(doc(db, "branding", "public"), {
@@ -1572,9 +1590,8 @@ async function viewBranding(body) {
         loadingMessage: String(f.get("loadingMessage") || "").trim().slice(0, 60),
         loadingStyle: LOADING_STYLES[f.get("loadingStyle")] ? String(f.get("loadingStyle")) : "orbit",
       }, { merge: true });
-      await setDoc(doc(db, "settings", "emails"), { ...emails, updatedAt: serverTimestamp() });
       await audit("branding.update", { appName, brandColor });
-      toast("Branding and emails saved", "success");
+      toast("Branding saved", "success");
       await viewBranding(body); // show exactly what was saved
     } catch (err) {
       toast(err.message, "error");
