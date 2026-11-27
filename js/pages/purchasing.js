@@ -82,14 +82,27 @@ export async function render(el) {
     const hint = el.querySelector("#pur-due-hint");
     const isCredit = f.get("payment") === "credit";
     due.disabled = !isCredit;
-    if (!isCredit) { due.value = ""; hint.textContent = ""; return; }
+    if (!isCredit) {
+      due.value = "";
+      hint.textContent = sup ? `Paid now: this bill is settled on the purchase date, not added to what we owe ${sup.name}.` : "";
+      return;
+    }
     if (!sup) { hint.textContent = "Choose a supplier to see the due date and credit limit."; return; }
     due.value = addDays(String(f.get("date") || todayISO()), sup.creditDays || 0);
     const left = sup.creditLimit ? ` Credit limit left: ${money(Math.max(0, sup.creditLimit - (Number(sup.balance) || 0)))}.` : " No credit limit.";
     hint.textContent = (sup.creditDays ? `Credit period ${sup.creditDays} days.` : "No credit period set, so the bill is due on the purchase date.") + left;
   };
   if (canPost) {
-    el.querySelector("#pur-form").addEventListener("change", (e) => { if (e.target.name !== "dueDate") updateDue(); });
+    el.querySelector("#pur-form").addEventListener("change", (e) => {
+      // Each supplier has its own default: suppliers with a credit period or limit start on credit, others start on instant payment.
+      // Staff can still change the payment on any single bill.
+      if (e.target.name === "supplierId") {
+        const chosen = suppliers.find((x) => x.id === e.target.value);
+        const pay = el.querySelector('[name="payment"]');
+        if (chosen && pay) pay.value = Number(chosen.creditDays) > 0 || Number(chosen.creditLimit) > 0 ? "credit" : "cash";
+      }
+      if (e.target.name !== "dueDate") updateDue();
+    });
     updateDue();
   }
 
