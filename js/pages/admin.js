@@ -441,6 +441,15 @@ async function viewSettings(body) {
             else patch[k] = String(f.get(k) || "").trim();
           }
           if ("currency" in patch && !patch.currency) throw new Error("Currency code is required");
+          // The code must be a 3-letter ISO code (BDT, QAR, USD). A symbol typed there (৳, $) moves to the symbol field.
+          if ("currency" in patch && !/^[A-Za-z]{3}$/.test(patch.currency)) {
+            if (!patch.currencySymbol) {
+              patch.currencySymbol = patch.currency;
+              patch.currency = settings.currency && /^[A-Za-z]{3}$/.test(settings.currency) ? settings.currency : "BDT";
+            } else {
+              throw new Error("Currency code must be 3 letters, such as BDT, QAR or USD. Type symbols like ৳ only in the Currency symbol field.");
+            }
+          }
           close();
           await saveGeneral(patch, `${title} saved. Reloading to apply it.`);
         });
