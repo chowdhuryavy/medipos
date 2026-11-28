@@ -1657,3 +1657,66 @@ html[data-lang="bn"] body { line-height: 1.6; }
 /* Loading screen: logo and text sit higher; "Designed by" and version stay at the bottom */
 .splash .splash-core { transform: translateY(-12vh); }
 @media (max-height: 640px) { .splash .splash-core { transform: translateY(-6vh); } }
+
+/* ───────── desktop sign-in: split screen with an animated brand panel ───────── */
+@media (min-width: 901px) {
+  .login-screen.has-side {
+    grid-template-columns: minmax(0, 1.2fr) minmax(440px, .8fr);
+    gap: 0; padding: 0; align-items: stretch; min-height: 100vh;
+    background:
+      radial-gradient(circle at 78% 28%, rgba(255, 255, 255, .14), transparent 42%),
+      linear-gradient(135deg, #0b4f4a, #0f766e 55%, #115e59);
+  }
+  .login-screen.has-side .login-card {
+    justify-self: center; align-self: center; width: min(420px, calc(100% - 64px)); margin: 40px 0;
+    padding: 40px 36px; gap: 16px; border-radius: 28px;
+    background: rgba(255, 255, 255, .97); box-shadow: 0 50px 90px -30px rgba(2, 44, 40, .65), inset 0 1px 0 rgba(255, 255, 255, .9);
+  }
+  .login-side {
+    position: relative; z-index: 1; overflow: hidden; max-width: none; justify-self: stretch;
+    display: flex; flex-direction: column; justify-content: center; gap: 20px;
+    padding: 72px clamp(48px, 6vw, 96px); color: #fff;
+    background: linear-gradient(160deg, rgba(255, 255, 255, .06), rgba(0, 0, 0, .14));
+    border-right: 1px solid rgba(255, 255, 255, .1);
+  }
+  /* a slow light sweep across the brand panel */
+  .login-side::before {
+    content: ""; position: absolute; inset: -30%; pointer-events: none;
+    background: conic-gradient(from 0deg, transparent 0deg, rgba(94, 234, 212, .18) 40deg, transparent 90deg);
+    animation: loginSweep 22s linear infinite;
+  }
+  .login-side > * { position: relative; }
+  .login-side svg { width: min(100%, 540px); height: auto; animation: float 9s ease-in-out infinite; }
+  .login-side h2 {
+    margin: 0; font-size: clamp(32px, 3.2vw, 46px); line-height: 1.12; letter-spacing: -.01em; text-align: left;
+    background: linear-gradient(90deg, #ffffff 0%, #a7f3d0 40%, #fde68a 60%, #ffffff 100%);
+    background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: loginShimmer 7s ease-in-out infinite, loginRise .8s .1s var(--ease) both;
+  }
+  .login-side p { margin: 0; font-size: 17px; opacity: .85; animation: loginRise .8s .25s var(--ease) both; }
+  .login-chips { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+  .login-chips li {
+    padding: 9px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: .3px;
+    background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .24); backdrop-filter: blur(8px);
+    animation: loginRise .6s var(--ease) both, loginBob 6s ease-in-out infinite;
+  }
+  .login-chips li:nth-child(1) { animation-delay: .35s, 0s; }
+  .login-chips li:nth-child(2) { animation-delay: .45s, -1.5s; }
+  .login-chips li:nth-child(3) { animation-delay: .55s, -3s; }
+  .login-chips li:nth-child(4) { animation-delay: .65s, -4.5s; }
+  .login-status { display: flex; align-items: center; gap: 10px; font-size: 13px; opacity: .8; animation: loginRise .8s .6s var(--ease) both; }
+  .status-dot { width: 9px; height: 9px; border-radius: 50%; background: #5eead4; box-shadow: 0 0 0 0 rgba(94, 234, 212, .7); animation: loginPing 2.2s ease-out infinite; }
+  .login-screen.has-side .login-card h1 { font-size: 28px; }
+  .login-screen.has-side .login-form .input-wrap input { font-size: 16px; }
+  .login-screen.has-side .login-card .btn.xl { margin-top: 6px; }
+}
+
+@keyframes loginSweep { to { transform: rotate(360deg); } }
+@keyframes loginShimmer { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+@keyframes loginRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes loginBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes loginPing { 0% { box-shadow: 0 0 0 0 rgba(94, 234, 212, .7); } 80%, 100% { box-shadow: 0 0 0 12px rgba(94, 234, 212, 0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .login-side::before, .login-side h2, .login-chips li, .status-dot { animation: none !important; }
+}

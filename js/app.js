@@ -128,6 +128,8 @@ const LOGIN_SIDE = `
     </svg>
     <h2>Sell, stock and accounts in one place.</h2>
     <p>Fast sales, clear stock and books you can trust.</p>
+    <ul class="login-chips"><li>Sales</li><li>Stock</li><li>Accounts</li><li>Reports</li></ul>
+    <div class="login-status"><span class="status-dot"></span>Secure staff sign-in</div>
   </aside>`;
 
 function showLogin(message = "", tone = "error") {
