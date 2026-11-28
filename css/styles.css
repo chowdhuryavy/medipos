@@ -1819,14 +1819,10 @@ html[data-lang="bn"] body { line-height: 1.6; }
 /* Login: copyright line under the version. */
 .login-rights { margin: 6px 0 0; font-size: 11.5px; color: #64748b; text-align: center; letter-spacing: .2px; }
 
-/* Desktop: the app name in the sidebar and top bar, and the tab labels, are a little larger. */
+/* Desktop: the shop name and the page name in the top bar are larger (the sidebar brand is unchanged). */
 @media (min-width: 901px) {
-  .brand-text strong { font-size: 19px; }
-  .brand-text small { font-size: 13.5px; }
-  .topbar-shop { font-size: 21px; }
-  .topbar-title small { font-size: 14px; }
-  .tab { font-size: 16px; font-weight: 600; padding: 12px 18px; }
-  .tab .ico { width: 20px; height: 20px; }
+  .topbar-shop { font-size: 22px; }
+  .topbar-title small { font-size: 16px; font-weight: 600; color: var(--text, inherit); opacity: .75; }
 }
 
 /* ───── Loading scenes: one medical picture per style, all upright and animated ───── */
