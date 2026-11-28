@@ -105,23 +105,23 @@ const LOGIN_SIDE = `
   <aside class="login-side" aria-hidden="true">
     <svg viewBox="0 0 480 400" xmlns="http://www.w3.org/2000/svg">
       <rect x="20" y="20" width="440" height="360" rx="36" fill="#ffffff" fill-opacity=".14" stroke="#ffffff" stroke-opacity=".3"/>
-      <circle cx="404" cy="92" r="11" fill="#f59e0b"/>
-      <circle cx="72" cy="112" r="7" fill="#a7f3d0"/>
-      <circle cx="418" cy="300" r="6" fill="#5eead4"/>
-      <g transform="translate(240 118)">
+      <circle cx="404" cy="92" r="11" fill="#f59e0b"><animate attributeName="r" values="11;15;11" dur="2.2s" repeatCount="indefinite"/></circle>
+      <circle cx="72" cy="112" r="7" fill="#a7f3d0"><animate attributeName="opacity" values="1;.25;1" dur="1.8s" repeatCount="indefinite"/></circle>
+      <circle cx="418" cy="300" r="6" fill="#5eead4"><animate attributeName="opacity" values=".3;1;.3" dur="2.6s" repeatCount="indefinite"/></circle>
+      <g transform="translate(240 118)"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -12;0 0" dur="3.2s" begin="0s" repeatCount="indefinite"/>
         <path d="M0 -70 L56 -50 V0 C56 40 28 64 0 76 C-28 64 -56 40 -56 0 V-50 Z" fill="#ffffff"/>
         <path d="M-12 -28 H12 V-12 H28 V12 H12 V28 H-12 V12 H-28 V-12 H-12 Z" fill="#0f766e"/>
       </g>
       <rect x="60" y="290" width="360" height="12" rx="6" fill="#ffffff" fill-opacity=".4"/>
-      <rect x="90" y="222" width="54" height="68" rx="10" fill="#f8fafc"/>
-      <rect x="90" y="202" width="54" height="24" rx="6" fill="#f59e0b"/>
-      <rect x="100" y="242" width="34" height="22" rx="4" fill="#5eead4"/>
-      <rect x="160" y="192" width="60" height="98" rx="12" fill="#f8fafc"/>
-      <rect x="160" y="170" width="60" height="28" rx="8" fill="#0f766e"/>
-      <rect x="172" y="236" width="36" height="28" rx="6" fill="#a7f3d0"/>
-      <rect x="240" y="236" width="48" height="52" rx="10" fill="#f8fafc"/>
-      <rect x="240" y="218" width="48" height="22" rx="6" fill="#f59e0b"/>
-      <g transform="translate(340 250) rotate(-30)">
+      <rect x="90" y="222" width="54" height="68" rx="10" fill="#f8fafc"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -8;0 0" dur="2.6s" begin="0s" repeatCount="indefinite"/></rect>
+      <rect x="90" y="202" width="54" height="24" rx="6" fill="#f59e0b"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -8;0 0" dur="2.6s" begin="0s" repeatCount="indefinite"/></rect>
+      <rect x="100" y="242" width="34" height="22" rx="4" fill="#5eead4"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -8;0 0" dur="2.6s" begin="0s" repeatCount="indefinite"/></rect>
+      <rect x="160" y="192" width="60" height="98" rx="12" fill="#f8fafc"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -8;0 0" dur="2.6s" begin="0.4s" repeatCount="indefinite"/></rect>
+      <rect x="160" y="170" width="60" height="28" rx="8" fill="#0f766e"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -8;0 0" dur="2.6s" begin="0.4s" repeatCount="indefinite"/></rect>
+      <rect x="172" y="236" width="36" height="28" rx="6" fill="#a7f3d0"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -8;0 0" dur="2.6s" begin="0.4s" repeatCount="indefinite"/></rect>
+      <rect x="240" y="236" width="48" height="52" rx="10" fill="#f8fafc"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -8;0 0" dur="2.6s" begin="0.8s" repeatCount="indefinite"/></rect>
+      <rect x="240" y="218" width="48" height="22" rx="6" fill="#f59e0b"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -8;0 0" dur="2.6s" begin="0.8s" repeatCount="indefinite"/></rect>
+      <g transform="translate(340 250) rotate(-30)"><animateTransform attributeName="transform" type="rotate" additive="sum" values="0;35;0" dur="2.4s" repeatCount="indefinite"/>
         <rect x="-34" y="-14" width="68" height="28" rx="14" fill="#5eead4"/>
         <path d="M0 -14 H20 A14 14 0 0 1 20 14 H0 Z" fill="#f8fafc"/>
       </g>
