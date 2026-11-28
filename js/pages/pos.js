@@ -72,35 +72,46 @@ export async function render(el) {
     svcSeq: 0,
   };
 
+  // Initials for the cashier chip and product monograms (hoisted so the template can use it).
+  function initialsFor(name) {
+    return String(name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0] || "").join("").toUpperCase();
+  }
   el.innerHTML = `
-    <div class="pos">
-      <header class="pos-top">
-        <div class="pos-id">
-          <span class="pos-outlet">${icon("building")}<b>${esc(settings.shopName || "Pharmacy")}</b></span>
-          <span class="pos-cashier">${esc(session.name || "")}<small>${esc(session.role || "")} · ${esc(todayISO())}</small></span>
+    <div class="pv">
+      <header class="pv-top">
+        <div class="pv-brand">
+          <span class="pv-logo">${icon("building")}</span>
+          <div><b>${esc(settings.shopName || "Pharmacy")}</b><small>Point of sale</small></div>
         </div>
-        <div class="pos-search">
+        <div class="pv-search">
           ${icon("search")}
           <input id="p-search" type="search" inputmode="search" placeholder="Search name, SKU or barcode" autocomplete="off" aria-label="Search products" />
+          <button type="button" class="pv-scan scan-btn" data-scan-into="#p-search" data-scan-enter>Scan</button>
           <kbd>F2</kbd>
-          <button type="button" class="btn ghost sm scan-btn" data-scan-into="#p-search" data-scan-enter>Scan</button>
         </div>
-        <div class="pos-status">
-          <span class="pos-clock" id="p-clock"></span>
+        <div class="pv-status">
+          <span class="pv-clock" id="p-clock"></span>
+          <span class="pv-cashier"><i>${esc(initialsFor(session.name))}</i><span>${esc(session.name || "")}<small>${esc(session.role || "")}</small></span></span>
           ${openShift ? `<span class="shift-pill ok">Shift open</span>` : `<a class="shift-pill warn" href="#/shift">No shift open · Open shift</a>`}
         </div>
       </header>
 
-      <div class="pos-main">
-        <section class="card pos-catalog">
-          <div class="chips" id="p-cats" role="tablist"></div>
+      <div class="pv-body">
+        <section class="pv-left" aria-label="Product catalogue">
+          <div class="pv-cats">
+            <div class="chips" id="p-cats" role="tablist"></div>
+            <div class="view-toggle" role="group" aria-label="View">
+              <button type="button" data-view="grid" aria-label="Grid view" title="Grid">${GRID_ICON}</button>
+              <button type="button" data-view="list" aria-label="List view" title="List">${LIST_ICON}</button>
+            </div>
+          </div>
           <div class="chips sub-chips" id="p-subs" aria-label="Sub-groups"></div>
           ${settings.posServiceButtons ? `<div class="service-bar" role="group" aria-label="Services">
             <button class="svc-btn" data-svc="recharge">${icon("plus")}<span>Mobile recharge</span></button>
             <button class="svc-btn" data-svc="cashin">${icon("plus")}<span>Wallet cash-in</span></button>
             <button class="svc-btn" data-svc="cashout">${icon("plus")}<span>Wallet cash-out</span></button>
           </div>` : ""}
-          <div class="cat-toolbar">
+          <div class="pv-toolbar">
             <span class="muted small" id="p-result"></span>
             <div class="cat-tools">
               <select id="p-filter" aria-label="Filter products">
@@ -115,87 +126,83 @@ export async function render(el) {
                 <option value="price-desc">Price: high to low</option>
                 <option value="stock">Stock: lowest first</option>
               </select>
-              <div class="view-toggle" role="group" aria-label="View">
-                <button type="button" data-view="grid" aria-label="Grid view" title="Grid">${GRID_ICON}</button>
-                <button type="button" data-view="list" aria-label="List view" title="List">${LIST_ICON}</button>
-              </div>
             </div>
           </div>
           <div class="product-grid" id="p-grid"></div>
           <div class="more-row" id="p-more-row" hidden><button type="button" class="btn ghost" id="p-more"></button></div>
+          <nav class="pv-dock" id="p-actions" aria-label="Quick actions">
+            <button type="button" class="qa" data-qa="search">${QA_ICONS.search}<span>Search</span><kbd>F2</kbd></button>
+            <button type="button" class="qa" data-qa="hold">${QA_ICONS.hold}<span>Open bill</span><kbd>F8</kbd></button>
+            <button type="button" class="qa" data-qa="bills">${QA_ICONS.bills}<span>Bills</span></button>
+            <button type="button" class="qa" data-qa="discount">${QA_ICONS.discount}<span>Discount</span><kbd>F6</kbd></button>
+            <button type="button" class="qa primary" data-qa="charge">${QA_ICONS.charge}<span>Pay</span><kbd>F4</kbd></button>
+          </nav>
         </section>
-        <nav class="pos-actions" id="p-actions" aria-label="Quick actions">
-          <button type="button" class="qa" data-qa="search">${QA_ICONS.search}<span>Search</span><kbd>F2</kbd></button>
-          <button type="button" class="qa" data-qa="hold">${QA_ICONS.hold}<span>Open bill</span><kbd>F8</kbd></button>
-          <button type="button" class="qa" data-qa="bills">${QA_ICONS.bills}<span>Bills</span></button>
-          <button type="button" class="qa" data-qa="discount">${QA_ICONS.discount}<span>Discount</span><kbd>F6</kbd></button>
-          <button type="button" class="qa primary" data-qa="charge">${QA_ICONS.charge}<span>Charge</span><kbd>F4</kbd></button>
-        </nav>
-      </div>
 
-      <aside class="card pos-bill" id="p-bill">
-        <header class="bill-head">
-          <div><h3>Current bill</h3><small class="muted" id="p-billno">New bill</small></div>
-          <span class="badge" id="p-count">0 items</span>
-        </header>
-        <div class="bill-customer">
-        <label>Customer
-          <select id="p-customer">
-            <option value="">Walk-in customer</option>
-            ${customers.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("")}
-          </select>
-        </label>
-          <small class="muted" id="p-custinfo"></small>
-          <button type="button" class="btn ghost sm" id="p-history">${icon("refresh")}<span>Purchase history</span></button>
-        </div>
-        <div class="bill-tools">
-          <button class="btn ghost sm" id="p-hold" title="Keep this bill open to finish later (F8)">${icon("pause")}<span>Open bill</span></button>
-          <button class="btn ghost sm" id="p-held" title="Open bills, closed bills and voids">${icon("refresh")}<span>Bills</span></button>
-          <button class="btn ghost sm" id="p-clear" title="Void this bill with a reason">${icon("x")}<span>Void</span></button>
-        </div>
-        <div class="bill-body">
-        ${openShift ? "" : `<div class="shift-note" role="alert">No cash shift is open. <a href="#/shift">Open a shift</a> before you take payment.</div>`}
-          <div class="bill-lines" id="p-lines"></div>
-        <p class="muted small price-rule">${allowChange
-          ? "You can raise a price. It can never go below the lowest price shown. Service fees can be changed."
-          : "Prices are fixed by the shop. Ask an administrator to change them."}</p>
-        </div>
-        <div class="bill-foot">
-        <div class="totals" id="p-totals"></div>
-        <div class="step-btns" id="p-steps">
-          <button type="button" class="btn ghost" id="p-discbtn">Discount<b id="p-discbadge"></b></button>
-          <button type="button" class="btn ghost" id="p-paybtn">Process payment<b id="p-paybadge"></b></button>
-        </div>
-        <div class="step-panel" id="p-discsec" hidden>
-          <div class="chip-row" id="p-discmode">
-            <button type="button" class="chip" data-dmode="bill">Bill discount</button>
-            <button type="button" class="chip" data-dmode="item">Item discount</button>
+        <aside class="card pv-bill" id="p-bill" aria-label="Current bill">
+          <header class="bill-head">
+            <div><h3>Current bill</h3><small class="muted" id="p-billno">New bill</small></div>
+            <span class="badge" id="p-count">0 items</span>
+          </header>
+          <div class="bill-customer">
+            <label class="bc-label">Customer
+              <select id="p-customer">
+                <option value="">Walk-in customer</option>
+                ${customers.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("")}
+              </select>
+            </label>
+            <small class="muted" id="p-custinfo"></small>
+            <button type="button" class="btn ghost sm" id="p-history">${icon("refresh")}<span>History</span></button>
           </div>
-          <div id="p-discbox"></div>
-          <div class="itemdisc-list" id="p-itemdisc" hidden></div>
-        </div>
-        <div class="step-panel" id="p-paysec" hidden>
-          <div class="split-head"><button type="button" class="btn ghost sm" id="p-splitbtn">Split payment</button></div>
-          <div class="split-box" id="p-split" hidden></div>
-          <div class="pay-field" hidden>
-            <span class="field-label">Paid by</span>
-            <div class="pay-seg" id="p-paychips" role="radiogroup" aria-label="Paid by"></div>
-            <select id="p-pay" hidden>
-              ${methods.filter((m) => !m.credit || creditOk).map((m) => `<option value="${esc(m.key)}" ${m.key === st.pay ? "selected" : ""}>${esc(m.label)}</option>`).join("")}
-            </select>
+          <div class="bill-tools">
+            <button class="btn ghost sm" id="p-hold" title="Keep this bill open to finish later (F8)">${icon("pause")}<span>Open bill</span></button>
+            <button class="btn ghost sm" id="p-held" title="Open bills, closed bills and voids">${icon("refresh")}<span>Bills</span></button>
+            <button class="btn ghost sm" id="p-clear" title="Void this bill with a reason">${icon("x")}<span>Void</span></button>
           </div>
-        <label id="p-cashrow" class="cash-row">Cash received
-          <input id="p-tender" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount given by customer" />
-        </label>
-        <div class="quick-cash" id="p-quick" hidden></div>
-        <div class="change-due" id="p-change" aria-live="polite"></div>
-        </div>
-        <div class="pay-tiles" id="p-tiles" role="group" aria-label="Payment"></div>
-        <button class="btn primary block xl pay-now" id="p-charge">${icon("check")}<span>Pay now</span><kbd>F4</kbd></button>
-        </div>
-      </aside>
+          ${openShift ? "" : `<div class="shift-note" role="alert">No cash shift is open. <a href="#/shift">Open a shift</a> before you take payment.</div>`}
+          <div class="bill-body">
+            <div class="bill-lines" id="p-lines"></div>
+            <p class="muted small price-rule">${allowChange
+              ? "You can raise a price. It can never go below the lowest price shown. Service fees can be changed."
+              : "Prices are fixed by the shop. Ask an administrator to change them."}</p>
+          </div>
+          <div class="bill-foot">
+            <div class="totals" id="p-totals"></div>
+            <div class="step-btns" id="p-steps">
+              <button type="button" class="btn ghost" id="p-discbtn">Discount<b id="p-discbadge"></b></button>
+              <button type="button" class="btn ghost" id="p-paybtn">Payment<b id="p-paybadge"></b></button>
+            </div>
+            <div class="step-panel" id="p-discsec" hidden>
+              <div class="chip-row" id="p-discmode">
+                <button type="button" class="chip" data-dmode="bill">Bill discount</button>
+                <button type="button" class="chip" data-dmode="item">Item discount</button>
+              </div>
+              <div id="p-discbox"></div>
+              <div class="itemdisc-list" id="p-itemdisc" hidden></div>
+            </div>
+            <div class="step-panel" id="p-paysec" hidden>
+              <div class="split-head"><button type="button" class="btn ghost sm" id="p-splitbtn">Split payment</button></div>
+              <div class="split-box" id="p-split" hidden></div>
+              <div class="pay-field" hidden>
+                <span class="field-label">Paid by</span>
+                <div class="pay-seg" id="p-paychips" role="radiogroup" aria-label="Paid by"></div>
+                <select id="p-pay" hidden>
+                  ${methods.filter((m) => !m.credit || creditOk).map((m) => `<option value="${esc(m.key)}" ${m.key === st.pay ? "selected" : ""}>${esc(m.label)}</option>`).join("")}
+                </select>
+              </div>
+              <label id="p-cashrow" class="cash-row">Cash received
+                <input id="p-tender" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount given by customer" />
+              </label>
+              <div class="quick-cash" id="p-quick" hidden></div>
+              <div class="change-due" id="p-change" aria-live="polite"></div>
+            </div>
+            <div class="pay-tiles" id="p-tiles" role="group" aria-label="Payment"></div>
+            <button class="btn primary block xl pay-now" id="p-charge">${icon("check")}<span>Pay now</span><kbd>F4</kbd></button>
+          </div>
+        </aside>
+      </div>
     </div>
-        <div class="mobile-charge" id="p-mobile"><span id="p-mobile-total"></span><button class="btn primary" id="p-mobile-btn">Review & charge</button></div>`;
+    <div class="mobile-charge" id="p-mobile"><span id="p-mobile-total"></span><button class="btn primary" id="p-mobile-btn">Review & charge</button></div>`;
 
   const $ = (s) => el.querySelector(s);
   const isService = (l) => l.kind === "service";
@@ -319,7 +326,7 @@ export async function render(el) {
     const grid = $("#p-grid");
     grid.classList.toggle("is-list", pageView.view === "list");
     grid.innerHTML = shown.length
-      ? (pageView.view === "list" ? `<div class="pl-head"><span>Product</span><span>Category</span><span>Price · Stock</span><span>Expiry</span></div>` : "") + shown.map(productCard).join("")
+      ? (pageView.view === "list" ? `<div class="pl-head"><span></span><span>Product</span><span>Category · SKU</span><span>Price · Stock</span><span>Expiry</span><span></span></div>` : "") + shown.map(productCard).join("")
       : `<div class="empty-state small">${icon("search")}<p>No products match your search or filter.</p>${can("inventory") ? `<a class="btn primary sm" href="#/inventory">${icon("plus")}<span>Add a new product</span></a>` : ""}</div>`;
     $("#p-result").textContent = `${list.length} product${list.length === 1 ? "" : "s"}`;
     const more = list.length - shown.length;
