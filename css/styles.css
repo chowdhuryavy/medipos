@@ -2128,3 +2128,9 @@ html[data-lang="bn"] body { line-height: 1.6; }
 .bar-col .bar { transform-origin: 50% 100%; animation: barGrow .9s var(--ease) both; }
 .rank-bar i, .rank-bar > span { transform-origin: 0 50%; animation: growX 1s var(--ease) both; }
 .health-bar i { animation: growX 1s var(--ease) both; transform-origin: 0 50%; }
+
+/* Desktop quick buttons: every button is the same size (equal columns, same height). */
+@media (min-width: 901px) {
+  .quick-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); overflow: visible; }
+  .quick-bar .quick-btn { width: 100%; min-width: 0; min-height: 76px; justify-content: flex-start; }
+}
