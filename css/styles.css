@@ -510,7 +510,8 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  /* The loading screen keeps its animation: it is the only feedback that the app is working. */
+  *:not(.splash):not(.splash *), *:not(.splash):not(.splash *)::before, *:not(.splash):not(.splash *)::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
 /* ───────── printing (receipts) ───────── */
@@ -631,9 +632,7 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes floatLogo { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 @keyframes barSlide { 0% { left: -45%; } 100% { left: 100%; } }
-@media (prefers-reduced-motion: reduce) {
-  .splash *, .splash { animation: none !important; }
-}
+
 
 /* ───────── forgot password screen (v3) ───────── */
 .reset { display: grid; gap: 16px; }
