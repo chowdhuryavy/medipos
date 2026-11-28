@@ -2140,3 +2140,12 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .topbar-shop { white-space: normal; overflow: visible; text-overflow: clip; font-size: 16px; line-height: 1.2; }
   .topbar .clock { font-size: 12px; padding: 5px 8px; }
 }
+
+/* Stock health legend: its dots sit beside the label (an older decorative dot rule was pulling them out of the line). */
+.health-legend .dot { position: static; flex: none; margin: 0; width: 10px; height: 10px; box-shadow: none; }
+
+/* Sidebar rows: equal height and clear group headings. The account card stays at the bottom. */
+.sidebar .nav-group { margin: 18px 10px 8px; font-size: 11px; letter-spacing: .14em; opacity: .85; }
+.sidebar .nav-link { min-height: 44px; padding: 8px 12px; margin: 3px 0; gap: 12px; font-size: 14.5px; border-radius: 13px; }
+.sidebar .nav-link .nav-ico { width: 34px; height: 34px; border-radius: 10px; flex: none; display: grid; place-items: center; }
+.sidebar .nav-link .nav-ico svg { width: 18px; height: 18px; }
