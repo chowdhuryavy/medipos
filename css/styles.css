@@ -1476,7 +1476,7 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 
 .sidebar .sidebar-foot { transition: background .25s, transform .2s var(--ease); }
 .sidebar .sidebar-foot:hover { transform: translateY(-1px); }
-.sidebar .sidebar-foot:hover .avatar-ring { animation: ringPulse 1.6s ease-out infinite; }
+.sidebar .sidebar-foot:hover .avatar-ring { animation: spin 7s linear infinite, ringPulse 1.6s ease-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar .brand-logo-wrap, .sidebar .nav-link:hover .nav-ico svg, .sidebar .sidebar-foot:hover .avatar-ring { animation: none; }
@@ -2098,7 +2098,7 @@ html[data-lang="bn"] body { line-height: 1.6; }
 .sidebar .nav-link:hover .nav-ico svg { animation: wiggle .6s ease-in-out; }
 .sidebar .nav-group::after { background: linear-gradient(90deg, rgba(94, 234, 212, .15), rgba(94, 234, 212, .8), rgba(94, 234, 212, .15)); background-size: 200% 100%; animation: sweepLine 3.5s linear infinite; }
 .sidebar .brand-logo-wrap { animation: icoGlow 2.6s ease-in-out infinite; }
-.sidebar .avatar-ring { animation: none; }
+.sidebar .avatar-ring { animation: spin 7s linear infinite; }
 .sidebar .sidebar-ver b { animation: pulseDot 2.6s ease-in-out infinite; }
 
 /* Every page: sections rise in, cards lift on hover, table rows slide in */

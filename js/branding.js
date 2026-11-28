@@ -10,6 +10,8 @@ try {
 } catch {
   /* storage unavailable or corrupt: use defaults */
 }
+// Show the cached shop name and logo on the tab straight away, before the network answers.
+document.title = branding.shopName || branding.appName || "MediPOS";
 
 export async function loadBranding() {
   try {
@@ -34,6 +36,8 @@ export async function loadBranding() {
 }
 
 /** The logo image, or the default icon tile when no logo has been uploaded. */
+applyBrandIcons();
+
 export const logoHtml = (fallbackIcon, cls = "brand-mark big") =>
   branding.logoUrl
     ? `<img class="brand-logo" src="${branding.logoUrl}" alt="${esc(branding.appName)} logo" />`
