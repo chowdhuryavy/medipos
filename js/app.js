@@ -82,7 +82,7 @@ function showSetup() {
 // Counts a wrong password on the server. After 5, the account is locked until an administrator unlocks it.
 async function countWrongPassword(email) {
   try {
-    const out = await post("/api/auth/login-failed", { email });
+    const out = await post("/api/auth/login-lock", { action: "failed", email });
     if (out.locked) return "This account is locked after too many wrong passwords. Ask an administrator to unlock it.";
   } catch { /* offline: show the normal message */ }
   return "Wrong email or password.";
@@ -744,7 +744,7 @@ async function handleAuthChange(user) {
       return;
     }
     // A correct sign-in clears any wrong-password count from earlier attempts.
-    if ((p.failedLogins || 0) > 0) post("/api/auth/login-ok", {}, { secure: true }).catch(() => { /* try again next sign-in */ });
+    if ((p.failedLogins || 0) > 0) post("/api/auth/login-lock", { action: "ok" }, { secure: true }).catch(() => { /* try again next sign-in */ });
     // Temporary password: nothing else is available until the user sets their own.
     if (p.mustChangePassword === true) {
       showForcePasswordChange(user);
