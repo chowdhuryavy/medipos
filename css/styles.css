@@ -2489,6 +2489,8 @@ kbd { font: 700 11px/1 var(--app-font, inherit); padding: 4px 6px; border-radius
 
 /* ===== Sell screen v3 (scoped to .pv): light pharmacy POS layout, one screen, no page scroll on desktop ===== */
 .pv {
+  /* Light theme inside the Sell screen, whatever the app theme is, so every panel and button reads clearly. */
+  --surface: #ffffff; --surface-2: #f1f5f9; --text: #0f172a; --muted: #64748b; --border: #e2e8f0; --brand: #0d9488;
   --pv-bg: #eef3f8; --pv-line: #e2e8f0; --pv-ink: #0f172a; --pv-muted: #64748b;
   --pv-navy: #1e3a8a; --pv-blue: #2563eb; --pv-teal: #0d9488; --pv-green: #16a34a; --pv-red: #dc2626;
   display: flex; flex-direction: column; gap: 10px;
