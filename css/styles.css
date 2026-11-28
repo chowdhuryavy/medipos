@@ -1720,3 +1720,10 @@ html[data-lang="bn"] body { line-height: 1.6; }
 @media (prefers-reduced-motion: reduce) {
   .login-side::before, .login-side h2, .login-chips li, .status-dot { animation: none !important; }
 }
+
+/* Desktop sign-in card is light: make the credit and version easy to read */
+@media (min-width: 901px) {
+  .login-screen.has-side .login-card .ver-stack { margin-top: 10px; padding-top: 14px; border-top: 1px solid #e2e8f0; }
+  .login-screen.has-side .login-card .ver-by { color: #0f766e; font-size: 15px; font-weight: 700; opacity: 1; }
+  .login-screen.has-side .login-card .ver-num { color: #475569; font-size: 13px; opacity: 1; }
+}
