@@ -1829,7 +1829,7 @@ html[data-lang="bn"] body { line-height: 1.6; }
 .splash .splash-core { justify-items: center; text-align: center; gap: 18px; }
 .splash .splash-text { display: grid; justify-items: center; gap: 6px; }
 .splash .splash-name { margin: 0; }
-.splash .hero { position: relative; display: grid; place-items: center; width: 170px; height: 170px; }
+.splash .scene { position: relative; display: grid; place-items: center; width: 170px; height: 170px; }
 .splash .logo-disc {
   position: relative; z-index: 1; width: 118px; height: 118px; border-radius: 50%; overflow: hidden;
   background: #fff; display: grid; place-items: center; box-shadow: 0 24px 50px -16px rgba(0, 0, 0, .45);
@@ -1942,7 +1942,7 @@ html[data-lang="bn"] body { line-height: 1.6; }
 
 /* Desktop: the scenes are larger. */
 @media (min-width: 901px) {
-  .splash .hero { zoom: 1.25; }
+  .splash .scene { zoom: 1.25; }
   .splash.style-dots .splash-core { min-width: 360px; }
 }
 
@@ -1960,3 +1960,34 @@ html[data-lang="bn"] body { line-height: 1.6; }
 /* Desktop account panel: anchored beside the sidebar (or under the top-bar avatar), not centred on screen. */
 .modal-backdrop.modal-anchored { display: block; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0; }
 .modal-backdrop.modal-anchored .modal { position: fixed; width: 300px; max-height: min(80vh, 560px); border-radius: 18px; animation: pop .25s var(--ease) both; }
+
+/* Clinic scene: doctor, stethoscope, medicine bottle and pills move together; positions are fixed so nothing overlaps. */
+.splash .scene-clinic { width: 300px; height: 210px; }
+.splash .scene-clinic > * { position: absolute; }
+.splash .cl-logo { left: 226px; top: 4px; width: 58px; height: 58px; border-radius: 50%; background: #fff; display: grid; place-items: center; box-shadow: 0 14px 26px -12px rgba(0, 0, 0, .45); animation: ldFloat 3s ease-in-out infinite; }
+.splash .cl-logo .brand-mark { width: 100%; height: 100%; border-radius: 50%; box-shadow: none; background: #fff; color: var(--brand); }
+.splash .cl-logo .brand-mark .ico { width: 50%; height: 50%; }
+.splash .cl-logo .brand-logo { width: 80%; height: auto; max-width: none; max-height: none; filter: none; object-fit: contain; }
+.splash .cl-doc { left: 90px; top: 14px; width: 120px; height: 130px; transform-origin: 50% 100%; animation: ldBreath 3s ease-in-out infinite; }
+.splash .cl-steth { left: 112px; top: 72px; width: 76px; height: 76px; transform-origin: 50% 0; animation: ldSwing 2.6s ease-in-out infinite; }
+.splash .cl-bottle { left: 226px; top: 92px; width: 56px; height: 70px; animation: ldFloat 3.4s ease-in-out infinite; }
+.splash .cl-bottle svg { width: 100%; height: 100%; }
+.splash .cl-pill { width: 36px; height: 18px; }
+.splash .cl-pill.p1 { left: 14px; top: 40px; animation: ldOrbitPill 4s ease-in-out infinite; }
+.splash .cl-pill.p2 { left: 10px; top: 156px; animation: ldTravel 4.5s linear infinite; }
+.splash .cl-ecg { left: 0; top: 184px; width: 300px; height: 26px; overflow: visible; }
+.splash .cl-ecg path { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 320; stroke-dashoffset: 320; filter: drop-shadow(0 0 6px #5eead4); animation: ldEcg 2.4s linear infinite; }
+@keyframes ldFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes ldBreath { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.025); } }
+@keyframes ldOrbitPill {
+  0%, 100% { transform: translate(0, 0) rotate(-12deg); }
+  50% { transform: translate(12px, -14px) rotate(12deg); }
+}
+@keyframes ldTravel {
+  0% { transform: translateX(0) rotate(0deg); opacity: 0; }
+  10%, 85% { opacity: 1; }
+  100% { transform: translateX(176px) rotate(360deg); opacity: 0; }
+}
+@media (min-width: 901px) {
+  .splash .scene-clinic { zoom: 1.2; }
+}

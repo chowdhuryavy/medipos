@@ -12,6 +12,7 @@ export const LOADING_STYLES = {
   dots: { name: "Stethoscope", desc: "A stethoscope sways on a glass card." },
   aurora: { name: "Doctor", desc: "A doctor bobs under a colour-shifting name." },
   bar: { name: "Medicine", desc: "A medicine bottle fills as the bar moves." },
+  clinic: { name: "Clinic", desc: "A doctor with a stethoscope, a medicine bottle and pills, all moving together." },
 };
 export const normalizeStyle = (s) => (LOADING_STYLES[s] ? s : "orbit");
 
@@ -19,22 +20,22 @@ const logoDisc = () => `<div class="logo-disc">${logoHtml(icon("pos"), "brand-ma
 
 /** The picture for each style. Everything is drawn upright; the name always sits below it. */
 const HERO = {
-  orbit: () => `<div class="hero hero-orbit">${logoDisc()}
+  orbit: () => `<div class="scene hero-orbit">${logoDisc()}
     <span class="cap-track" aria-hidden="true">
       <svg class="cap" viewBox="0 0 36 18"><rect width="36" height="18" rx="9" fill="#fff"/><path d="M18 0 H9 A9 9 0 0 0 9 18 H18 Z" fill="#14b8a6"/></svg>
       <svg class="cap cap2" viewBox="0 0 36 18"><rect width="36" height="18" rx="9" fill="#fff"/><path d="M18 0 H9 A9 9 0 0 0 9 18 H18 Z" fill="#f59e0b"/></svg>
     </span></div>`,
-  pulse: () => `<div class="hero hero-pulse"><div class="tile">${logoHtml(icon("pos"), "brand-mark big")}</div>
+  pulse: () => `<div class="scene hero-pulse"><div class="tile">${logoHtml(icon("pos"), "brand-mark big")}</div>
     <svg class="ecg" viewBox="0 0 240 64" aria-hidden="true"><path d="M0 34 H64 L74 34 L82 12 L92 56 L102 24 L110 34 H240"/></svg></div>`,
-  ripple: () => `<div class="hero hero-ripple"><span class="ripple"></span><span class="ripple r2"></span><span class="ripple r3"></span>${logoDisc()}</div>`,
-  flip: () => `<div class="hero hero-flip"><svg class="pill3d" viewBox="0 0 120 56" aria-hidden="true"><rect x="2" y="2" width="116" height="52" rx="26" fill="#fff"/><path d="M60 2 H28 A26 26 0 0 0 28 54 H60 Z" fill="#14b8a6"/></svg></div>`,
-  wave: () => `<div class="hero hero-drip"><svg class="drop" viewBox="0 0 80 100" aria-hidden="true"><path d="M40 6 C40 6 18 36 18 56 A22 22 0 0 0 62 56 C62 36 40 6 40 6 Z" fill="#5eead4"/></svg><span class="pool" aria-hidden="true"></span></div>`,
-  dots: () => `<div class="hero hero-steth"><svg class="steth" viewBox="0 0 80 80" aria-hidden="true">
+  ripple: () => `<div class="scene hero-ripple"><span class="ripple"></span><span class="ripple r2"></span><span class="ripple r3"></span>${logoDisc()}</div>`,
+  flip: () => `<div class="scene hero-flip"><svg class="pill3d" viewBox="0 0 120 56" aria-hidden="true"><rect x="2" y="2" width="116" height="52" rx="26" fill="#fff"/><path d="M60 2 H28 A26 26 0 0 0 28 54 H60 Z" fill="#14b8a6"/></svg></div>`,
+  wave: () => `<div class="scene hero-drip"><svg class="drop" viewBox="0 0 80 100" aria-hidden="true"><path d="M40 6 C40 6 18 36 18 56 A22 22 0 0 0 62 56 C62 36 40 6 40 6 Z" fill="#5eead4"/></svg><span class="pool" aria-hidden="true"></span></div>`,
+  dots: () => `<div class="scene hero-steth"><svg class="steth" viewBox="0 0 80 80" aria-hidden="true">
       <path d="M22 6 V34 A18 18 0 0 0 58 34 V6" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
       <circle cx="22" cy="6" r="4" fill="#fff"/><circle cx="58" cy="6" r="4" fill="#fff"/>
       <path d="M58 34 C58 56 78 56 78 41" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
       <circle cx="78" cy="34" r="7" fill="#5eead4" stroke="#fff" stroke-width="3"/></svg></div>`,
-  aurora: () => `<div class="hero hero-doctor"><svg class="doctor" viewBox="0 0 120 130" aria-hidden="true">
+  aurora: () => `<div class="scene hero-doctor"><svg class="doctor" viewBox="0 0 120 130" aria-hidden="true">
       <path d="M18 130 L22 84 Q24 72 40 68 L60 80 L80 68 Q96 72 98 84 L102 130 Z" fill="#fff"/>
       <path d="M60 80 L54 100 L60 130 L66 100 Z" fill="#14b8a6"/>
       <path d="M42 70 Q42 96 60 96 Q78 96 78 70" fill="none" stroke="#334155" stroke-width="3"/>
@@ -43,12 +44,21 @@ const HERO = {
       <path d="M38 36 Q40 14 60 14 Q80 14 82 36 Q74 26 60 26 Q46 26 38 36 Z" fill="#1f2937"/>
       <circle cx="52" cy="40" r="2.5" fill="#1f2937"/><circle cx="68" cy="40" r="2.5" fill="#1f2937"/>
       <path d="M52 50 Q60 56 68 50" fill="none" stroke="#1f2937" stroke-width="2.5" stroke-linecap="round"/></svg></div>`,
-  bar: () => `<div class="hero hero-bottle"><svg class="bottle" viewBox="0 0 80 100" aria-hidden="true">
+  bar: () => `<div class="scene hero-bottle"><svg class="bottle" viewBox="0 0 80 100" aria-hidden="true">
       <rect x="26" y="2" width="28" height="12" rx="3" fill="#0f766e"/>
       <rect x="14" y="14" width="52" height="82" rx="12" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="3"/>
       <rect class="liquid" x="18" y="40" width="44" height="52" rx="9" fill="#5eead4"/>
       <rect x="24" y="52" width="32" height="24" rx="4" fill="#fff"/>
       <path d="M40 56 V72 M32 64 H48" stroke="#0f766e" stroke-width="4" stroke-linecap="round"/></svg></div>`,
+  clinic: () => `<div class="scene scene-clinic" aria-hidden="true">
+      <div class="cl-logo">${logoHtml(icon("pos"), "brand-mark")}</div>
+      <svg class="cl-doc" viewBox="0 0 120 130"><path d="M18 130 L22 84 Q24 72 40 68 L60 80 L80 68 Q96 72 98 84 L102 130 Z" fill="#fff"/><path d="M60 80 L54 100 L60 130 L66 100 Z" fill="#14b8a6"/><circle cx="60" cy="40" r="22" fill="#fde4cf"/><path d="M38 36 Q40 14 60 14 Q80 14 82 36 Q74 26 60 26 Q46 26 38 36 Z" fill="#1f2937"/><circle cx="52" cy="40" r="2.5" fill="#1f2937"/><circle cx="68" cy="40" r="2.5" fill="#1f2937"/><path d="M52 50 Q60 56 68 50" fill="none" stroke="#1f2937" stroke-width="2.5" stroke-linecap="round"/></svg>
+      <svg class="cl-steth" viewBox="0 0 80 80"><path d="M22 6 V34 A18 18 0 0 0 58 34 V6" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><circle cx="22" cy="6" r="4" fill="#fff"/><circle cx="58" cy="6" r="4" fill="#fff"/><path d="M58 34 C58 56 78 56 78 41" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><circle cx="78" cy="34" r="7" fill="#5eead4" stroke="#fff" stroke-width="3"/></svg>
+      <div class="cl-bottle"><svg viewBox="0 0 80 100"><rect x="26" y="2" width="28" height="12" rx="3" fill="#0f766e"/><rect x="14" y="14" width="52" height="82" rx="12" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="3"/><rect class="liquid" x="18" y="40" width="44" height="52" rx="9" fill="#5eead4"/><rect x="24" y="52" width="32" height="24" rx="4" fill="#fff"/><path d="M40 56 V72 M32 64 H48" stroke="#0f766e" stroke-width="4" stroke-linecap="round"/></svg></div>
+      <svg class="cl-pill p1" viewBox="0 0 36 18"><rect width="36" height="18" rx="9" fill="#fff"/><path d="M18 0 H9 A9 9 0 0 0 9 18 H18 Z" fill="#14b8a6"/></svg>
+      <svg class="cl-pill p2" viewBox="0 0 36 18"><rect width="36" height="18" rx="9" fill="#fff"/><path d="M18 0 H9 A9 9 0 0 0 9 18 H18 Z" fill="#f59e0b"/></svg>
+      <svg class="cl-ecg" viewBox="0 0 300 30"><path d="M0 15 H90 L100 15 L108 3 L118 27 L128 9 L136 15 H300"/></svg>
+    </div>`,
 };
 
 /** The loading screen: a medical scene for the chosen style, with the shop name below it. */
