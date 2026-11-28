@@ -105,7 +105,7 @@ export function splashHtml(message, style) {
         </div>
         ${extra}
       </div>
-      <p class="splash-ver ver-stack"><span class="ver-by">Designed by Avy</span><span class="ver-num">Version ${esc(APP_VERSION)}</span></p>
+      <div class="app-credit"><span class="ac-by">Designed by Avy</span><span class="ac-ver">Version ${esc(APP_VERSION)}</span></div>
     </section>`;
 }
 

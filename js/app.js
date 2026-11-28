@@ -165,7 +165,7 @@ function showLogin(message = "", tone = "error") {
           <button class="btn primary block xl" type="submit" id="login-btn">${icon("key")}<span>Sign in</span></button>
         </form>
         <button class="link-btn" type="button" id="forgot-btn">Forgot password?</button>
-        <p class="version ver-stack"><span class="ver-by">Designed by Avy</span><span class="ver-num">Version ${esc(APP_VERSION)}</span></p>
+        <div class="app-credit"><span class="ac-by">Designed by Avy</span><span class="ac-ver">Version ${esc(APP_VERSION)}</span></div>
         <p class="login-rights">© ${new Date().getFullYear()} Perfection. All rights reserved.</p>
       </div>
     </section>`;
@@ -493,7 +493,7 @@ function buildShell() {
           <div class="who"><strong>${esc(session.name)}</strong><span class="role-pill">${esc(roles[session.role].label)}</span></div>
           <span class="foot-chev" aria-hidden="true">›</span>
         </div>
-        <p class="sidebar-ver"><span class="ver-by">Designed by Avy</span><b>v${esc(APP_VERSION)}</b></p>
+        <div class="app-credit"><span class="ac-by">Designed by Avy</span><span class="ac-ver">Version ${esc(APP_VERSION)}</span></div>
       </aside>
       <div class="main">
         <header class="topbar">
@@ -633,7 +633,7 @@ function showStartupError(err) {
         <p class="splash-msg">${esc(err?.message || String(err))}</p>
         <button class="btn primary" type="button" id="retry-btn">Try again</button>
       </div>
-      <p class="splash-ver ver-stack"><span class="ver-by">Designed by Avy</span><span class="ver-num">Version ${esc(APP_VERSION)}</span></p>
+      <div class="app-credit"><span class="ac-by">Designed by Avy</span><span class="ac-ver">Version ${esc(APP_VERSION)}</span></div>
     </section>`;
   document.getElementById("retry-btn")?.addEventListener("click", () => location.reload());
 }
