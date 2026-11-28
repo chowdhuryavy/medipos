@@ -1787,3 +1787,17 @@ html[data-lang="bn"] body { line-height: 1.6; }
 
 /* Sell screen: payment, Charge and Clear show only when the bill has items */
 #p-payrow[hidden], #p-charge[hidden], #p-clear[hidden] { display: none !important; }
+
+/* Desktop: tab names larger and the tab bar wraps, so no hidden scroll arrows */
+@media (min-width: 901px) {
+  .tabs { flex-wrap: wrap; overflow: visible; gap: 6px 4px; }
+  .tab { font-size: 15px; font-weight: 600; padding: 11px 16px; }
+  .tab .ico { width: 18px; height: 18px; }
+}
+
+/* Desktop cash shift: open-shift form on the left, recent shifts on the right, using the full width */
+@media (min-width: 901px) {
+  .shift-page { max-width: none; grid-template-columns: minmax(380px, 460px) minmax(0, 1fr); align-items: start; gap: 20px; }
+  .shift-page > .card:last-child { min-width: 0; overflow-x: auto; }
+  .shift-card .card-head h3 { font-size: 19px; }
+}
