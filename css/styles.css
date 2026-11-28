@@ -881,11 +881,12 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 
 /* ───────── Notifications bell and panel (1.1.27) ───────── */
 .bell-btn { position: relative; }
-.bell-btn.has-new svg { animation: bellRing 1.6s var(--ease) 1; transform-origin: 50% 0; }
+/* The bell only rings when a new notification arrives during this visit (class "ring"), not on page load or login. */
+.bell-btn.ring svg { animation: bellRing 1.6s var(--ease) 1; transform-origin: 50% 0; }
 @keyframes bellRing { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(14deg); } 30% { transform: rotate(-12deg); } 45% { transform: rotate(8deg); } 60% { transform: rotate(-4deg); } }
 .bell-count { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--surface); }
 .bell-count[hidden] { display: none; }
-@media (prefers-reduced-motion: reduce) { .bell-btn.has-new svg { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .bell-btn.ring svg { animation: none; } }
 
 .notif-panel { position: fixed; top: 66px; right: 16px; width: min(380px, calc(100vw - 32px)); max-height: min(70vh, 560px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); z-index: 60; overflow: hidden; animation: slideIn .25s var(--ease) both; }
 .np-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 8%, var(--surface)), var(--surface)); }

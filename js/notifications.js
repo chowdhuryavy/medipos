@@ -52,8 +52,10 @@ export function startNotifications() {
     const fresh = ready && !fromCache ? snap.docChanges().filter((c) => c.type === "added").map((c) => c.doc.id) : [];
     items = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => ms(b.createdAt) - ms(a.createdAt));
     if (fromCache) return;
+    const firstLoad = !ready;
     ready = true;
-    paintBadge();
+    // Ring only for notifications that arrive during this visit; the first load just shows the count.
+    paintBadge(!firstLoad && fresh.some((id) => items.find((x) => x.id === id && isUnread(x))));
     if (open) paintPanel();
     fresh.forEach((id) => {
       const n = items.find((x) => x.id === id);
@@ -62,14 +64,19 @@ export function startNotifications() {
   }, (err) => console.warn("Notifications unavailable:", err.message));
 }
 
-function paintBadge() {
+function paintBadge(ring = false) {
   const btn = document.getElementById("bell-btn");
   if (!btn) return;
   const n = unreadCount();
   const badge = document.getElementById("bell-count");
   badge.hidden = n === 0;
   badge.textContent = n > 99 ? "99+" : String(n);
-  btn.classList.toggle("has-new", n > 0);
+  if (ring) {
+    btn.classList.remove("ring");
+    void btn.offsetWidth; // restart the animation if it is already playing
+    btn.classList.add("ring");
+    setTimeout(() => btn.classList.remove("ring"), 1700);
+  }
   btn.setAttribute("aria-label", n ? `Notifications, ${n} unread` : "Notifications");
 }
 
