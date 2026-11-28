@@ -81,7 +81,11 @@ export function scanCode(onCode) {
           reader = new Html5Qrcode("scan-view", { verbose: false });
           await reader.start(
             { facingMode: "environment" },
-            { fps: 10, aspectRatio: 1.333 },
+            {
+              fps: 10,
+              // Higher resolution and continuous autofocus so small barcodes on the box are sharp enough to read.
+              videoConstraints: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 }, advanced: [{ focusMode: "continuous" }] },
+            },
             (text) => found(text),
             () => {}
           );
