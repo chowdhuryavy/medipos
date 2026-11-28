@@ -511,7 +511,8 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   /* The loading screen keeps its animation: it is the only feedback that the app is working. */
-  *:not(.splash):not(.splash *):not(.login-screen):not(.login-screen *), *:not(.splash):not(.splash *):not(.login-screen):not(.login-screen *)::before, *:not(.splash):not(.splash *):not(.login-screen):not(.login-screen *)::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  *:not(.splash):not(.splash *):not(.login-screen):not(.login-screen *):not(.avatar-ring):not(.avatar-ring *), *:not(.splash):not(.splash *):not(.login-screen):not(.login-screen *):not(.avatar-ring):not(.avatar-ring *)::before, *:not(.splash):not(.splash *):not(.login-screen):not(.login-screen *):not(.avatar-ring):not(.avatar-ring *)::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  /* The sidebar account letter keeps turning: the user asked for it, even with reduce-motion on. */
 }
 
 /* ───────── printing (receipts) ───────── */
@@ -1479,7 +1480,7 @@ body, button, input, select, textarea { font-family: var(--app-font); }
 .sidebar .sidebar-foot:hover .avatar-ring { animation: spin 7s linear infinite, ringPulse 1.6s ease-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar .brand-logo-wrap, .sidebar .nav-link:hover .nav-ico svg, .sidebar .sidebar-foot:hover .avatar-ring { animation: none; }
+  .sidebar .brand-logo-wrap, .sidebar .nav-link:hover .nav-ico svg { animation: none; }
   .sidebar .nav-link::before, .sidebar .nav-link .nav-text { transition: none; }
 }
 
