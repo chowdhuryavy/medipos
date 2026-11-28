@@ -8,9 +8,9 @@
   <meta name="description" content="MediPOS: pharmacy point of sale, inventory, purchasing and accounting" />
   <meta name="theme-color" content="#0f766e" />
   <link rel="manifest" href="/api/manifest" />
-  <title></title>
+  <title>Loading…</title>
   <script>
-    /* Tab name and icon come only from the saved branding; nothing is hardcoded here. */
+    /* Tab name and icon come from the saved branding. Until it is known, the tab says Loading instead of the address. */
     try {
       var b = JSON.parse(localStorage.getItem("medipos.branding") || "{}");
       var n = b.shopName;

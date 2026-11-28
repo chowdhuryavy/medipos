@@ -500,7 +500,6 @@ function buildShell() {
           <button class="menu-btn menu-style-${menuStyle}" id="menu-btn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
             <span class="menu-grid" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
           </button>
-          ${branding.logoUrl ? `<img class="topbar-logo" src="${branding.logoUrl}" alt="${esc(settings.shopName || "")} logo" />` : ""}
           <div class="topbar-title"><strong class="topbar-shop">${esc(settings.shopName || "MediPOS")}</strong><small id="page-title"></small></div>
           <div class="grow"></div>
           <span class="clock" id="clock"></span>
