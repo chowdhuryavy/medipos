@@ -2393,3 +2393,5 @@ kbd { font: 700 11px/1 var(--app-font, inherit); padding: 4px 6px; border-radius
 .pos-bill .pay-now { background: #16a34a; border-color: transparent; box-shadow: 0 10px 22px -12px rgba(22, 163, 74, .8); }
 .pos-bill .pay-now:hover:not(:disabled) { background: #15803d; }
 .pos-bill .pay-now kbd { background: rgba(255, 255, 255, .2); border-color: transparent; color: #fff; }
+.pay-tiles { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); }
+.pt.is-on { box-shadow: 0 0 0 3px #fff inset, 0 0 0 1px rgba(15, 23, 42, .35); }

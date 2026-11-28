@@ -128,8 +128,6 @@ export async function render(el) {
           <button type="button" class="qa" data-qa="hold">${QA_ICONS.hold}<span>Open bill</span><kbd>F8</kbd></button>
           <button type="button" class="qa" data-qa="bills">${QA_ICONS.bills}<span>Bills</span></button>
           <button type="button" class="qa" data-qa="discount">${QA_ICONS.discount}<span>Discount</span><kbd>F6</kbd></button>
-          <button type="button" class="qa" data-qa="cash">${QA_ICONS.cash}<span>Cash</span><kbd>F9</kbd></button>
-          <button type="button" class="qa" data-qa="card">${QA_ICONS.card}<span>Card</span><kbd>F10</kbd></button>
           <button type="button" class="qa primary" data-qa="charge">${QA_ICONS.charge}<span>Charge</span><kbd>F4</kbd></button>
         </nav>
       </div>
@@ -175,7 +173,7 @@ export async function render(el) {
           <div class="itemdisc-list" id="p-itemdisc" hidden></div>
         </div>
         <div class="step-panel" id="p-paysec" hidden>
-          <div class="pay-field">
+          <div class="pay-field" hidden>
             <span class="field-label">Paid by</span>
             <div class="pay-seg" id="p-paychips" role="radiogroup" aria-label="Paid by"></div>
             <select id="p-pay" hidden>
@@ -188,11 +186,7 @@ export async function render(el) {
         <div class="quick-cash" id="p-quick" hidden></div>
         <div class="change-due" id="p-change" aria-live="polite"></div>
         </div>
-        <div class="pay-tiles" id="p-tiles" role="group" aria-label="Payment">
-          <button type="button" class="pt pt-cash" data-tile="cash"><span>Cash</span><kbd>F9</kbd></button>
-          <button type="button" class="pt pt-card" data-tile="card"><span>Card</span><kbd>F10</kbd></button>
-          <button type="button" class="pt pt-alt" data-tile="alt"><span id="p-alt-label">Other</span></button>
-        </div>
+        <div class="pay-tiles" id="p-tiles" role="group" aria-label="Payment"></div>
         <button class="btn primary block xl pay-now" id="p-charge">${icon("check")}<span>Pay now</span><kbd>F4</kbd></button>
         </div>
       </aside>
@@ -377,9 +371,13 @@ export async function render(el) {
     const count = lines.reduce((s, l) => s + (isService(l) ? 1 : l.qty), 0);
     $("#p-count").textContent = `${count} item${count === 1 ? "" : "s"}`;
     $("#p-count").className = `badge ${count ? "ok" : ""}`;
-    const alt = methods.find((m) => !m.credit && m.key !== cashKey() && m.key !== cardKey());
-    $("#p-alt-label").textContent = alt ? alt.label : "Other";
-    $("#p-alt-label").closest("[data-tile]").disabled = !alt;
+    // One tile per payment method: cash and card keep their colours and shortcuts; the others share a teal tile.
+    $("#p-tiles").innerHTML = methods.filter((m) => !m.credit || creditOk).map((m) => {
+      const isCash = m.key === cashKey();
+      const isCard = !isCash && m.key === cardKey();
+      return `<button type="button" class="pt ${isCash ? "pt-cash" : isCard ? "pt-card" : "pt-alt"} ${m.key === st.pay ? "is-on" : ""}" data-pay="${esc(m.key)}" aria-pressed="${m.key === st.pay}">
+        <span>${esc(m.label)}</span>${isCash ? "<kbd>F9</kbd>" : isCard ? "<kbd>F10</kbd>" : ""}</button>`;
+    }).join("");
     $("#p-tiles").hidden = !lines.length;
     $("#p-billno").textContent = st.openId ? `Open bill · ${String(st.openId).slice(-6).toUpperCase()}` : "New bill";
     const cust = customers.find((c) => c.id === st.customerId);
@@ -958,7 +956,6 @@ export async function render(el) {
     st.pay = key; $("#p-pay").value = key; st.showPay = true; paintBill();
     if (key === cashKey()) $("#p-tender")?.focus();
   };
-  const altKey = () => methods.find((m) => !m.credit && m.key !== cashKey() && m.key !== cardKey())?.key;
   const openDiscount = () => { if (!st.showDisc) $("#p-discbtn").click(); };
   // Shortcuts press the same buttons on screen, so they respect each button's rules. F2 search, F4 charge, F6 discount,
   // F8 open bill, F9 cash, F10 card. F5, F11 and F12 are left to the browser (reload, full screen, developer tools).
@@ -974,10 +971,8 @@ export async function render(el) {
   document.addEventListener("keydown", onKey);
 
   $("#p-tiles").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-tile]");
-    if (!b) return;
-    const key = b.dataset.tile === "cash" ? cashKey() : b.dataset.tile === "card" ? cardKey() : altKey();
-    pickPay(key);
+    const b = e.target.closest("[data-pay]");
+    if (b) pickPay(b.dataset.pay);
   });
   $("#p-actions").addEventListener("click", (e) => {
     const b = e.target.closest("[data-qa]");
