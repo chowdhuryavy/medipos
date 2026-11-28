@@ -2395,3 +2395,74 @@ kbd { font: 700 11px/1 var(--app-font, inherit); padding: 4px 6px; border-radius
 .pos-bill .pay-now kbd { background: rgba(255, 255, 255, .2); border-color: transparent; color: #fff; }
 .pay-tiles { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); }
 .pt.is-on { box-shadow: 0 0 0 3px #fff inset, 0 0 0 1px rgba(15, 23, 42, .35); }
+
+/* ═════ Sell screen v2: full layout to match the reference ═════
+   Desktop: fixed-height workspace. The bill panel keeps its totals and payment buttons on screen;
+   only its item list scrolls. The catalogue scrolls inside its own area. */
+@media (min-width: 901px) {
+  .pos { grid-template-columns: minmax(0, 1fr) 440px; gap: 16px; height: calc(100vh - 118px); min-height: 600px; align-items: stretch; }
+  .pos-top { padding: 12px 16px; gap: 14px 20px; background: linear-gradient(115deg, color-mix(in srgb, var(--brand) 88%, #000), var(--brand)); border: 0; color: #fff; box-shadow: 0 14px 30px -20px var(--brand); }
+  .pos-top .pos-outlet, .pos-top .pos-cashier, .pos-top .pos-clock { color: #fff; }
+  .pos-top .pos-cashier small, .pos-top .pos-clock { color: rgba(255, 255, 255, .78); }
+  .pos-top .pos-outlet svg { color: #fff; }
+  .pos-top .shift-pill.ok { background: rgba(255, 255, 255, .2); color: #fff; }
+  .pos-top .shift-pill.warn { background: #fff; color: #b45309; }
+  .pos-top .pos-search { background: #fff; border-color: transparent; color: #0f172a; min-height: 46px; }
+  .pos-top .pos-search > svg { color: #64748b; }
+  .pos-top .pos-search input { color: #0f172a; }
+  .pos-top .pos-search kbd { background: #f1f5f9; color: #475569; }
+  .pos-top .pos-search .btn { background: var(--brand); color: #fff; border: 0; }
+
+  .pos-main { grid-template-rows: minmax(0, 1fr) auto; min-height: 0; height: 100%; gap: 12px; }
+  .pos-catalog { grid-template-rows: auto auto auto minmax(0, 1fr); min-height: 0; height: 100%; overflow: hidden; padding: 14px; gap: 12px; }
+  .pos-catalog .chips { flex-wrap: wrap; overflow: visible; padding: 0; gap: 8px; }
+  .pos-catalog .chip { padding: 8px 16px; font-weight: 600; }
+  .pos-catalog .chip.active { box-shadow: 0 8px 18px -10px var(--brand); }
+  .pos-catalog .sub-chips .chip.sub { padding: 5px 12px; font-size: 12px; }
+  .pos .product-grid { max-height: none; min-height: 0; overflow: auto; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 14px; padding: 4px 4px 12px; align-content: start; }
+  .pos .product-card { padding: 10px; gap: 8px; border-radius: 18px; background: var(--surface); box-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 10px 22px -18px rgba(0, 0, 0, .6); min-height: 0; }
+  .pos .product-card .pc-img { width: 100%; height: 108px; border-radius: 14px; background: linear-gradient(145deg, color-mix(in srgb, var(--brand) 22%, transparent), color-mix(in srgb, var(--brand) 6%, transparent)); }
+  .pos .product-card .pc-mono { font-size: 30px; font-weight: 800; letter-spacing: .5px; }
+  .pos .product-card .pc-name { font-size: 15px; font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.5em; }
+  .pos .product-card .pc-sub { font-size: 11.5px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .pos .product-card .pc-foot strong { font-size: 19px; }
+  .pos .product-card .pc-add { padding: 10px; border-radius: 12px; font-size: 14px; background: linear-gradient(135deg, var(--brand), color-mix(in srgb, var(--brand) 70%, #000)); }
+  .pos .product-card:hover:not(:disabled) .pc-add { filter: brightness(1.08); }
+  .pos .product-card .pc-incart { top: 12px; right: 12px; background: #16a34a; }
+  .pos-actions { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+  .qa { min-height: 64px; border-radius: 16px; }
+  .qa.primary { background: linear-gradient(135deg, #22c55e, #15803d); }
+
+  .pos-bill { display: flex; flex-direction: column; min-height: 0; height: 100%; overflow: hidden; padding: 0; gap: 0; border-radius: 20px; }
+  .pos-bill .bill-head { padding: 16px 16px 10px; }
+  .pos-bill .bill-customer { margin: 0 16px; }
+  .pos-bill .bill-tools { margin: 10px 16px 0; }
+  .pos-bill .bill-body { flex: 1 1 auto; min-height: 150px; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .pos-bill .bill-body > .bill-lines { flex: none; max-height: none; overflow: visible; }
+  .pos-bill .bill-foot { flex: none; display: grid; gap: 10px; padding: 12px 16px 16px; border-top: 1px solid var(--border); background: var(--surface); box-shadow: 0 -12px 22px -18px rgba(0, 0, 0, .55); }
+  .pos-bill .step-panel { max-height: 210px; overflow-y: auto; padding-right: 2px; }
+  .pos-bill .totals { gap: 4px; padding-top: 0; }
+  .pos-bill .totals > div { font-size: 13.5px; }
+  .pos-bill .totals .grand { font-size: 19px; padding: 12px 14px; border-radius: 14px; }
+  .pos-bill .totals .grand:last-of-type { font-size: 21px; }
+  .pos-bill .step-btns .btn { border-radius: 12px; min-height: 44px; }
+  .pos-bill .bill-line { grid-template-columns: auto minmax(0, 1fr) auto auto auto; padding: 8px; border-radius: 14px; background: var(--surface-2); }
+  .pos-bill .bl-thumb { width: 48px; height: 48px; border-radius: 12px; font-size: 15px; }
+  .pos-bill .bill-line .qty-btn { width: 32px; height: 32px; }
+  .pos-bill .bill-line .qty-input { width: 48px; height: 32px; }
+  .pos-bill .bill-line .bl-total { font-size: 15px; font-weight: 800; color: var(--brand); }
+  .pos-bill .pay-tiles { gap: 8px; }
+  .pos-bill .pt { min-height: 50px; border-radius: 14px; }
+  .pos-bill .pay-now { min-height: 58px; font-size: 17px; border-radius: 16px; }
+}
+
+@media (max-width: 900px) {
+  .pos { height: auto; }
+  .pos-top { background: linear-gradient(115deg, color-mix(in srgb, var(--brand) 88%, #000), var(--brand)); color: #fff; border: 0; }
+  .pos-top .pos-outlet, .pos-top .pos-cashier, .pos-top .pos-clock { color: #fff; }
+  .pos-top .pos-search { background: #fff; border-color: transparent; color: #0f172a; }
+  .pos-top .pos-search input { color: #0f172a; }
+  .pos .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pos .product-card .pc-img { height: 88px; }
+  .pos-bill .bill-body { min-height: 120px; }
+}
