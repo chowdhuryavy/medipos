@@ -2363,3 +2363,33 @@ kbd { font: 700 11px/1 var(--app-font, inherit); padding: 4px 6px; border-radius
 /* Sign-in footer: "Designed by Avy", the version and the copyright sit close together under the card's links. */
 .login-card .app-credit { margin: -6px 0 0; gap: 6px; }
 .login-card .login-rights { margin: -8px 0 0; }
+
+/* Sell screen, closer to the reference: icon buttons with shortcut keys, Add buttons on products,
+   bill lines with thumbnails and red remove, green discount, coloured payment tiles and a green Pay now. */
+.qa { grid-template-rows: auto auto auto; min-height: 66px; }
+.qa svg { width: 20px; height: 20px; color: var(--brand); }
+.qa.primary svg { color: #fff; }
+.qa kbd { justify-self: center; }
+.pos .product-card { padding: 12px; gap: 6px; }
+.pos .product-card .pc-add { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 4px; padding: 8px; border-radius: 10px; background: var(--brand); color: #fff; font-weight: 700; font-size: 13px; }
+.pos .product-card .pc-add svg { width: 15px; height: 15px; }
+.pos .product-card:disabled .pc-add { background: var(--muted); }
+.product-grid.is-list .product-card .pc-add { display: none; }
+.pos-bill .bill-line { grid-template-columns: auto minmax(0, 1fr) auto auto auto; }
+.bl-thumb { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; overflow: hidden; background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand); font-weight: 800; font-size: 14px; flex: none; }
+.bl-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.pos-bill .bill-line .bl-remove { color: #dc2626; }
+.pos-bill .bill-line .bl-remove:hover { background: rgba(220, 38, 38, .12); }
+.pos-bill .totals .disc-row > span:last-child { color: #16a34a; font-weight: 700; }
+.pos-bill .badge.ok { background: #16a34a; color: #fff; }
+.pay-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pt { min-height: 52px; display: grid; place-items: center; align-content: center; gap: 4px; border: 0; border-radius: 12px; color: #fff; font: inherit; font-weight: 800; font-size: 15px; cursor: pointer; transition: transform .15s, filter .15s; }
+.pt kbd { background: rgba(255, 255, 255, .2); border-color: transparent; color: #fff; font-size: 10px; }
+.pt:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+.pt:disabled { opacity: .45; cursor: not-allowed; }
+.pt-cash { background: #1e3a8a; }
+.pt-card { background: #2563eb; }
+.pt-alt { background: #0d9488; }
+.pos-bill .pay-now { background: #16a34a; border-color: transparent; box-shadow: 0 10px 22px -12px rgba(22, 163, 74, .8); }
+.pos-bill .pay-now:hover:not(:disabled) { background: #15803d; }
+.pos-bill .pay-now kbd { background: rgba(255, 255, 255, .2); border-color: transparent; color: #fff; }

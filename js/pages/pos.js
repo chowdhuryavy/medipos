@@ -12,6 +12,15 @@ import { notifyOnce, rolesWith } from "../notifications.js";
 import { SERVICE_TYPES, serviceProviders, serviceLine, serviceJournalLines, serviceBreakdown, floatKey, applyFloat, calcFee } from "../services.js";
 
 const GRID_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
+const QA_ICONS = {
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+  hold: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>',
+  bills: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15"/></svg>',
+  discount: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M19 5L5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
+  cash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>',
+  card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+  charge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>',
+};
 const LIST_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>';
 
 export async function render(el) {
@@ -115,13 +124,13 @@ export async function render(el) {
           <div class="more-row" id="p-more-row" hidden><button type="button" class="btn ghost" id="p-more"></button></div>
         </section>
         <nav class="pos-actions" id="p-actions" aria-label="Quick actions">
-          <button type="button" class="qa" data-qa="search"><kbd>F2</kbd><span>Search</span></button>
-          <button type="button" class="qa" data-qa="hold"><kbd>F8</kbd><span>Open bill</span></button>
-          <button type="button" class="qa" data-qa="bills"><span>Bills</span></button>
-          <button type="button" class="qa" data-qa="discount"><kbd>F6</kbd><span>Discount</span></button>
-          <button type="button" class="qa" data-qa="cash"><kbd>F9</kbd><span>Cash</span></button>
-          <button type="button" class="qa" data-qa="card"><kbd>F10</kbd><span>Card</span></button>
-          <button type="button" class="qa primary" data-qa="charge"><kbd>F4</kbd><span>Charge</span></button>
+          <button type="button" class="qa" data-qa="search">${QA_ICONS.search}<span>Search</span><kbd>F2</kbd></button>
+          <button type="button" class="qa" data-qa="hold">${QA_ICONS.hold}<span>Open bill</span><kbd>F8</kbd></button>
+          <button type="button" class="qa" data-qa="bills">${QA_ICONS.bills}<span>Bills</span></button>
+          <button type="button" class="qa" data-qa="discount">${QA_ICONS.discount}<span>Discount</span><kbd>F6</kbd></button>
+          <button type="button" class="qa" data-qa="cash">${QA_ICONS.cash}<span>Cash</span><kbd>F9</kbd></button>
+          <button type="button" class="qa" data-qa="card">${QA_ICONS.card}<span>Card</span><kbd>F10</kbd></button>
+          <button type="button" class="qa primary" data-qa="charge">${QA_ICONS.charge}<span>Charge</span><kbd>F4</kbd></button>
         </nav>
       </div>
 
@@ -179,7 +188,12 @@ export async function render(el) {
         <div class="quick-cash" id="p-quick" hidden></div>
         <div class="change-due" id="p-change" aria-live="polite"></div>
         </div>
-        <button class="btn primary block xl" id="p-charge">${icon("check")}<span>Charge</span></button>
+        <div class="pay-tiles" id="p-tiles" role="group" aria-label="Payment">
+          <button type="button" class="pt pt-cash" data-tile="cash"><span>Cash</span><kbd>F9</kbd></button>
+          <button type="button" class="pt pt-card" data-tile="card"><span>Card</span><kbd>F10</kbd></button>
+          <button type="button" class="pt pt-alt" data-tile="alt"><span id="p-alt-label">Other</span></button>
+        </div>
+        <button class="btn primary block xl pay-now" id="p-charge">${icon("check")}<span>Pay now</span><kbd>F4</kbd></button>
         </div>
       </aside>
     </div>
@@ -285,7 +299,7 @@ export async function render(el) {
     const low = !out && stock <= (Number(p.reorderLevel) || 0);
     const inBill = piecesInCart(p.id);
     const exp = nearest[p.id];
-    const monogram = String(p.name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0] || "").join("").toUpperCase();
+    const monogram = initialsOf(p.name);
     const unit = esc(baseName(p));
     return `<button type="button" class="product-card ${out ? "is-out" : ""} ${inBill ? "in-bill" : ""} ${low ? "is-low" : ""}" data-add="${esc(p.id)}" style="--i:${Math.min(i, 20)}" ${out ? "disabled" : ""}>
       ${inBill ? `<span class="pc-incart" aria-label="${inBill} in bill">${inBill}</span>` : ""}
@@ -294,6 +308,7 @@ export async function render(el) {
       <span class="pc-sub">${esc([p.sku, p.category || "General", p.subGroup].filter(Boolean).join(" · "))}</span>
       <span class="pc-foot"><strong>${money(p.salePrice)}</strong><span class="badge ${out ? "danger" : low ? "warn" : "ok"}">${out ? "Out of stock" : `${low ? "Low · " : ""}${stock} ${unit}`}</span></span>
       ${exp ? `<span class="pc-exp ${exp <= soonBy() ? "soon" : ""}">Exp ${esc(exp)}</span>` : ""}
+      <span class="pc-add">${icon("plus")}<span>Add</span></span>
     </button>`;
   }
 
@@ -336,11 +351,13 @@ export async function render(el) {
       </div>`;
   };
 
+  const initialsOf = (name) => String(name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0] || "").join("").toUpperCase();
   const billLine = (l) => {
     if (isService(l)) return serviceBillLine(l);
     const extra = round2(l.price - l.listPrice);
     return `
       <div class="bill-line">
+        <span class="bl-thumb">${byId[l.id]?.imageUrl ? `<img src="${esc(byId[l.id].imageUrl)}" alt="" loading="lazy" />` : esc(initialsOf(l.name))}</span>
         <div class="bl-info">
           <button type="button" class="bl-name" data-open="${esc(l.key)}" aria-label="Adjust ${esc(l.name)}">${esc(l.name)}</button>
           <small>${money(l.price)} / ${esc(l.unit || "")}${l.disc ? ` · <b class="extra">${esc(l.disc.name || "Discount")} ${esc(discountText(l.disc))}</b>` : ""}${extra > 0 ? ` · <b class="extra">+${money(extra)}</b>` : ""}</small>
@@ -351,7 +368,7 @@ export async function render(el) {
           <button type="button" class="qty-btn" data-inc="${esc(l.key)}" aria-label="Increase quantity">+</button>
         </div>
         <strong class="bl-total">${money(l.price * l.qty)}</strong>
-        <button type="button" class="icon-btn sm hover-danger" data-rm="${esc(l.key)}" aria-label="Remove ${esc(l.name)}">${icon("x")}</button>
+        <button type="button" class="icon-btn sm bl-remove" data-rm="${esc(l.key)}" aria-label="Remove ${esc(l.name)}">${icon("trash")}</button>
       </div>`;
   };
 
@@ -359,6 +376,11 @@ export async function render(el) {
     const lines = cartLines();
     const count = lines.reduce((s, l) => s + (isService(l) ? 1 : l.qty), 0);
     $("#p-count").textContent = `${count} item${count === 1 ? "" : "s"}`;
+    $("#p-count").className = `badge ${count ? "ok" : ""}`;
+    const alt = methods.find((m) => !m.credit && m.key !== cashKey() && m.key !== cardKey());
+    $("#p-alt-label").textContent = alt ? alt.label : "Other";
+    $("#p-alt-label").closest("[data-tile]").disabled = !alt;
+    $("#p-tiles").hidden = !lines.length;
     $("#p-billno").textContent = st.openId ? `Open bill · ${String(st.openId).slice(-6).toUpperCase()}` : "New bill";
     const cust = customers.find((c) => c.id === st.customerId);
     $("#p-custinfo").textContent = cust
@@ -370,7 +392,7 @@ export async function render(el) {
     const extra = round2(lines.filter((l) => !isService(l)).reduce((s, l) => s + Math.max(0, l.price - l.listPrice) * l.qty, 0));
     $("#p-totals").innerHTML = `
       <div><span>Subtotal</span><span>${money(t.goods.subtotal)}</span></div>
-      <div><span>Discount</span><span>− ${money(t.goods.discount)}</span></div>
+      <div class="disc-row"><span>Discount</span><span>− ${money(t.goods.discount)}</span></div>
       ${extra > 0 ? `<div class="extra-row"><span>Price increase</span><span>+ ${money(extra)}</span></div>` : ""}
       <div><span>VAT</span><span>${money(t.goods.vat)}</span></div>
       ${t.fees > 0 ? `<div><span>Service fees</span><span>+ ${money(t.fees)}</span></div>` : ""}
@@ -936,6 +958,7 @@ export async function render(el) {
     st.pay = key; $("#p-pay").value = key; st.showPay = true; paintBill();
     if (key === cashKey()) $("#p-tender")?.focus();
   };
+  const altKey = () => methods.find((m) => !m.credit && m.key !== cashKey() && m.key !== cardKey())?.key;
   const openDiscount = () => { if (!st.showDisc) $("#p-discbtn").click(); };
   // Shortcuts press the same buttons on screen, so they respect each button's rules. F2 search, F4 charge, F6 discount,
   // F8 open bill, F9 cash, F10 card. F5, F11 and F12 are left to the browser (reload, full screen, developer tools).
@@ -950,6 +973,12 @@ export async function render(el) {
   };
   document.addEventListener("keydown", onKey);
 
+  $("#p-tiles").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-tile]");
+    if (!b) return;
+    const key = b.dataset.tile === "cash" ? cashKey() : b.dataset.tile === "card" ? cardKey() : altKey();
+    pickPay(key);
+  });
   $("#p-actions").addEventListener("click", (e) => {
     const b = e.target.closest("[data-qa]");
     if (!b) return;
