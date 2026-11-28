@@ -352,8 +352,10 @@ async function syncPublicBranding() {
 
 /* ───────── account menu (tap the avatar) ───────── */
 
-function openAccountMenu() {
+function openAccountMenu(anchor) {
   const email = auth.currentUser?.email || "";
+  // On desktop the panel opens beside the sidebar or under the top-bar avatar; on phones it stays a bottom sheet.
+  const desktopAnchor = anchor && window.matchMedia("(min-width: 901px)").matches ? anchor : null;
   openModal("Your account", `
     <div class="account-menu">
       <div class="account-who">
@@ -383,7 +385,7 @@ function openAccountMenu() {
       close();
       await signOut(auth);
     });
-  });
+  }, desktopAnchor ? { anchor: desktopAnchor } : {});
 }
 
 function openChangePassword() {
@@ -517,11 +519,11 @@ function buildShell() {
   sidebar.querySelectorAll(".nav-link").forEach((a) => a.addEventListener("click", () => setDrawer(false)));
   document.getElementById("theme-btn").addEventListener("click", toggleTheme);
   document.getElementById("bell-btn").addEventListener("click", toggleNotifications);
-  const openAccount = () => openAccountMenu();
-  document.getElementById("avatar-top").addEventListener("click", openAccount);
+  const avatarTop = document.getElementById("avatar-top");
+  avatarTop.addEventListener("click", () => openAccountMenu(avatarTop));
   const side = document.getElementById("avatar-side");
-  side.addEventListener("click", openAccount);
-  side.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAccount(); } });
+  side.addEventListener("click", () => openAccountMenu(side));
+  side.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAccountMenu(side); } });
 
   const tick = () => {
     const el = document.getElementById("clock");

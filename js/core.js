@@ -334,6 +334,19 @@ export function openModal(title, html, onMount, opts = {}) {
     backdrop.classList.add("closing");
     setTimeout(() => { if (host.contains(backdrop)) host.innerHTML = ""; }, 180);
   };
+  // Anchored popover (desktop): the panel opens beside the control that called it, not in the middle of the screen.
+  if (opts.anchor && opts.anchor.isConnected) {
+    const r = opts.anchor.getBoundingClientRect();
+    const m = backdrop.querySelector(".modal");
+    backdrop.classList.add("modal-anchored");
+    if (opts.anchor.closest(".sidebar")) {
+      m.style.left = `${r.right + 10}px`;
+      m.style.bottom = `${window.innerHeight - r.bottom}px`;
+    } else {
+      m.style.right = `${Math.max(12, window.innerWidth - r.right)}px`;
+      m.style.top = `${r.bottom + 10}px`;
+    }
+  }
   host.querySelector("[data-close]").addEventListener("click", close);
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
   onMount?.(host.querySelector(".modal-body"), close);

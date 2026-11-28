@@ -1960,3 +1960,7 @@ html[data-lang="bn"] body { line-height: 1.6; }
 @media (max-width: 900px) {
   .topbar .clock { font-size: 13px; padding: 6px 9px; }
 }
+
+/* Desktop account panel: anchored beside the sidebar (or under the top-bar avatar), not centred on screen. */
+.modal-backdrop.modal-anchored { display: block; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0; }
+.modal-backdrop.modal-anchored .modal { position: fixed; width: 300px; max-height: min(80vh, 560px); border-radius: 18px; animation: pop .25s var(--ease) both; }
