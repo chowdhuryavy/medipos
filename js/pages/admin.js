@@ -545,7 +545,8 @@ async function viewDiscounts(body) {
   const valueText = (d) => (d.mode === "pct" ? `${d.value}%` : money(d.value));
   body.innerHTML = `
     <section class="card">
-      <header class="card-head"><h3>Discounts</h3><button class="btn primary sm" id="dc-new">New discount</button></header>
+      <header class="card-head"><h3>Discounts</h3>
+        <div class="row-actions"><button class="btn ghost sm" id="dc-many">Add several %</button><button class="btn primary sm" id="dc-new">New discount</button></div></header>
       <p class="muted small">Cashiers pick these on the Sell screen. A whole-bill discount applies to the bill; an item discount applies to one product line. A percentage or amount can be typed in on the screen too. Anything above the cashier limit in Shop &amp; rules still needs an administrator's approval.</p>
       <div class="table-wrap"><table class="table">
         <thead><tr><th>Name</th><th>Applies to</th><th>Type</th><th class="r">Value</th><th>Status</th><th></th></tr></thead>
@@ -590,7 +591,41 @@ async function viewDiscounts(body) {
     });
   });
   body.querySelector("#dc-new").addEventListener("click", () => edit(null));
+  // Several percentages at once: each one becomes its own discount, named for its percentage (for example 10%).
+  body.querySelector("#dc-many").addEventListener("click", () => openMany(body, list));
   body.querySelectorAll("[data-dc-edit]").forEach((b) => b.addEventListener("click", () => edit(list.find((x) => x.id === b.dataset.dcEdit))));
+}
+
+function openMany(body, existing) {
+  openModal("Add several percentages", `
+    <form id="dm-form" class="form-grid">
+      <label class="span-2">Percentages, separated by commas<input name="pcts" required placeholder="5, 10, 15, 20" /></label>
+      <label>Applies to<select name="scope"><option value="item">One item</option><option value="bill">Whole bill</option></select></label>
+      <label class="check"><input name="active" type="checkbox" checked /> Active</label>
+      <p class="muted small span-2">Each percentage is saved as its own discount, for example 10%. Any percentage already in the list for the same scope is skipped.</p>
+      <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">Add</button></div>
+    </form>`, (mb, close) => {
+    mb.querySelector("[data-cancel]").addEventListener("click", close);
+    onSubmit(mb.querySelector("#dm-form"), async (e) => {
+      const f = new FormData(e.target);
+      const scope = f.get("scope") === "bill" ? "bill" : "item";
+      const active = f.get("active") === "on";
+      const nums = [...new Set(String(f.get("pcts") || "").split(/[,\s]+/).filter(Boolean).map(Number))];
+      if (!nums.length || nums.some((n) => !(n > 0 && n <= 100))) return toast("Enter percentages between 0 and 100, separated by commas", "error");
+      const taken = new Set(existing.filter((d) => d.mode === "pct" && d.scope === scope).map((d) => Number(d.value)));
+      const fresh = nums.filter((n) => !taken.has(n));
+      if (!fresh.length) return toast("Those percentages already exist for this scope", "info");
+      const batch = writeBatch(db);
+      for (const n of fresh) {
+        batch.set(doc(collection(db, "discounts")), { name: `${n}%`, scope, mode: "pct", value: n, active, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      }
+      await batch.commit();
+      await audit("discount.create", { count: fresh.length, percentages: fresh, scope });
+      close();
+      toast(`${fresh.length} discount${fresh.length === 1 ? "" : "s"} added`, "success");
+      await viewDiscounts(body);
+    });
+  });
 }
 
 async function viewLists(body) {
