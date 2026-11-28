@@ -2239,3 +2239,15 @@ html[data-lang="bn"] body { line-height: 1.6; }
 .disc-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .disc-now { font-size: 13px; color: var(--muted); }
 .sec-title { margin: 6px 0 0; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+
+/* Sell screen: only the item list scrolls; the totals, discount and payment panels keep their place. */
+.chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.itemdisc-list { display: grid; gap: 8px; max-height: 40vh; overflow-y: auto; }
+.itemdisc-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--surface-2); }
+.itemdisc-row small { display: block; color: var(--muted); }
+@media (min-width: 901px) {
+  .pos-bill .bill-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px; }
+  .pos-bill .bill-body > * { flex: none; }
+  .pos-bill .bill-body > .bill-lines { flex: 1 1 auto; min-height: 90px; max-height: none; overflow-y: auto; }
+  .pos-bill .bill-body > .step-panel { max-height: 45vh; overflow-y: auto; }
+}

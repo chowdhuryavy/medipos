@@ -43,7 +43,7 @@ export async function render(el) {
   const allowChange = settings.allowPriceChange !== false;
 
   const st = {
-    cat: "All", sub: "", tab: "1", q: "", billDisc: null, showDisc: false, showPay: false,
+    cat: "All", sub: "", tab: "1", q: "", billDisc: null, discMode: "bill", showDisc: false, showPay: false,
     pay: methods.find((m) => !m.credit)?.key || methods[0]?.key || "cash",
     customerId: "",
     cart: new Map(), // product lines: "productId|unitKey"; service lines: "svc|n"
@@ -96,10 +96,15 @@ export async function render(el) {
         <div class="totals" id="p-totals"></div>
         <div class="step-btns" id="p-steps">
           <button type="button" class="btn ghost" id="p-discbtn">Discount<b id="p-discbadge"></b></button>
-          <button type="button" class="btn ghost" id="p-paybtn">Payment<b id="p-paybadge"></b></button>
+          <button type="button" class="btn ghost" id="p-paybtn">Process payment<b id="p-paybadge"></b></button>
         </div>
         <div class="step-panel" id="p-discsec" hidden>
+          <div class="chip-row" id="p-discmode">
+            <button type="button" class="chip" data-dmode="bill">Bill discount</button>
+            <button type="button" class="chip" data-dmode="item">Item discount</button>
+          </div>
           <div id="p-discbox"></div>
+          <div class="itemdisc-list" id="p-itemdisc" hidden></div>
         </div>
         <div class="step-panel" id="p-paysec" hidden>
           <div class="pay-field">
@@ -368,10 +373,26 @@ export async function render(el) {
       onSet({ name: "Open amount", mode: "amt", value: round2(v) });
     });
   }
+  // Item discounts: one row per product on the bill; each opens its own discount dialog.
+  function paintItemDiscounts() {
+    const list = $("#p-itemdisc");
+    const rows = cartLines().filter((l) => !isService(l));
+    list.innerHTML = rows.length ? rows.map((l) => `
+      <div class="itemdisc-row">
+        <div><strong>${esc(l.name)}</strong><small>${l.disc ? `${esc(l.disc.name || "Discount")} · ${esc(discountText(l.disc))}` : "No discount"}</small></div>
+        <button type="button" class="btn ghost sm" data-idisc="${esc(l.key)}">Discount</button>
+      </div>`).join("")
+      : `<p class="muted small">Add an item first, then give it a discount here.</p>`;
+  }
   // The whole-bill discount box, drawn again only when the discount changes so typing is not lost.
   function paintDiscountBox() {
     const box = $("#p-discbox");
     if (!box) return;
+    const isBill = st.discMode !== "item";
+    box.hidden = !isBill;
+    $("#p-itemdisc").hidden = isBill;
+    el.querySelectorAll("[data-dmode]").forEach((b) => b.classList.toggle("active", b.dataset.dmode === st.discMode));
+    if (!isBill) return paintItemDiscounts();
     const key = JSON.stringify(st.billDisc);
     if (box.dataset.key === key) return;
     box.dataset.key = key;
@@ -726,7 +747,17 @@ export async function render(el) {
     st.disc = Math.min(100, Math.max(0, Number(e.target.value) || 0));
     paintBill();
   });
-  $("#p-discbtn").addEventListener("click", () => { st.showDisc = !st.showDisc; paintBill(); if (st.showDisc) $("#p-disc").focus(); });
+  $("#p-discbtn").addEventListener("click", () => { st.showDisc = !st.showDisc; paintBill(); });
+  $("#p-discmode").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-dmode]");
+    if (!b) return;
+    st.discMode = b.dataset.dmode;
+    paintBill();
+  });
+  $("#p-itemdisc").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-idisc]");
+    if (b) openItem(b.dataset.idisc);
+  });
   $("#p-paybtn").addEventListener("click", () => { st.showPay = !st.showPay; paintBill(); });
   $("#p-pay").addEventListener("change", () => { st.pay = $("#p-pay").value; paintBill(); });
   $("#p-tender").addEventListener("input", paintBill);
