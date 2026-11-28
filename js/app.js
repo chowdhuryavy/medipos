@@ -537,13 +537,23 @@ function buildShell() {
   side.addEventListener("click", () => openAccountMenu(side));
   side.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAccountMenu(side); } });
 
+  // The clock follows the shop's time zone (Admin → Shop & rules). Without one, it uses the device's time zone.
+  const shopZone = (() => {
+    const z = String(settings.timezone || "").trim();
+    try { if (z) new Intl.DateTimeFormat([], { timeZone: z }); return z || undefined; } catch { return undefined; }
+  })();
+  const clockFmt = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: shopZone });
   const tick = () => {
     const el = document.getElementById("clock");
-    if (el) el.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (el) {
+      el.textContent = clockFmt.format(new Date());
+      el.title = shopZone || Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    }
   };
   clearInterval(clockTimer);
   tick();
-  clockTimer = setInterval(tick, 15000);
+  // Once a second, so the time is always live.
+  clockTimer = setInterval(tick, 1000);
   startNotifications();
   runStockChecks();
 }
