@@ -21,7 +21,15 @@ export async function render(el) {
     getDocs(collection(db, "discounts")).catch(() => ({ docs: [] })),
   ]);
   // Discounts the administrator has created: whole-bill or per-item, as a percentage or an amount.
-  const presets = discSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.active !== false)
+  let presets = [];
+  // Reads the discounts the administrator has made. Called when the discount section or an item dialog opens, so new ones show up at once.
+  async function loadPresets() {
+    const snap = await getDocs(collection(db, "discounts")).catch(() => null);
+    if (!snap) return;
+    presets = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.active !== false)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }
+  presets = discSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.active !== false)
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   // The cash shift must be open before any sale is charged.
   const latestShift = shiftSnap.docs[0];
@@ -401,7 +409,8 @@ export async function render(el) {
   }
 
   // Small dialog to change one product line: unit, quantity, price, or remove it.
-  function openItem(key) {
+  async function openItem(key) {
+    await loadPresets();
     if (!st.cart.has(key)) return;
     openModal("Adjust item", "", (body, close) => {
       let cur = key;
@@ -747,11 +756,17 @@ export async function render(el) {
     st.disc = Math.min(100, Math.max(0, Number(e.target.value) || 0));
     paintBill();
   });
-  $("#p-discbtn").addEventListener("click", () => { st.showDisc = !st.showDisc; paintBill(); });
-  $("#p-discmode").addEventListener("click", (e) => {
+  $("#p-discbtn").addEventListener("click", async () => {
+    st.showDisc = !st.showDisc;
+    paintBill();
+    if (st.showDisc) { await loadPresets(); paintBill(); }
+  });
+  $("#p-discmode").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-dmode]");
     if (!b) return;
     st.discMode = b.dataset.dmode;
+    paintBill();
+    await loadPresets();
     paintBill();
   });
   $("#p-itemdisc").addEventListener("click", (e) => {
@@ -1064,6 +1079,7 @@ async function completeSale({ lines, billDisc = null, method, customer, tendered
         price: l.price, listPrice: l.listPrice, priceExtra: round2(Math.max(0, l.price - l.listPrice) * l.qty),
         vatRate: l.vatRate, costPrice: l.costPrice, cogs: l.cogs, batches: l.batches || [],
         lineNet: l.lineNet, lineVat: l.lineVat, lineTotal: l.lineTotal, kind: "product",
+        gross: l.gross, itemDiscount: l.disc || null, itemDiscountAmount: l.itemDiscount || 0, billDiscountAmount: l.billDiscount || 0, lineDiscount: l.lineDisc || 0,
       })),
       ...services.map((v) => ({
         kind: "service", serviceType: v.serviceType, provider: v.provider, phone: v.phone, transfer: v.transfer,
