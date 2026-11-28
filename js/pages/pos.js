@@ -11,6 +11,9 @@ import { unitsOf, unitByKey, toPieces, unitOptions, baseName } from "../packs.js
 import { notifyOnce, rolesWith } from "../notifications.js";
 import { SERVICE_TYPES, serviceProviders, serviceLine, serviceJournalLines, serviceBreakdown, floatKey, applyFloat, calcFee } from "../services.js";
 
+const GRID_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
+const LIST_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>';
+
 export async function render(el) {
   const [prodSnap, custSnap, batchSnap, floatSnap, shiftSnap, discSnap] = await Promise.all([
     getDocs(collection(db, "products")),
@@ -61,41 +64,89 @@ export async function render(el) {
 
   el.innerHTML = `
     <div class="pos">
-      <header class="pos-strip">
-        <div class="strip-item">${icon("pos")}<span><b>Sale</b> · ${esc(session.name || "")}</span></div>
-        <div class="strip-item muted">${esc(todayISO())}</div>
-        <div class="strip-item muted">${icon("search")}<span>F2 search · F4 charge · F8 hold</span></div>
+      <header class="pos-top">
+        <div class="pos-id">
+          <span class="pos-outlet">${icon("building")}<b>${esc(settings.shopName || "Pharmacy")}</b></span>
+          <span class="pos-cashier">${esc(session.name || "")}<small>${esc(session.role || "")} · ${esc(todayISO())}</small></span>
+        </div>
+        <div class="pos-search">
+          ${icon("search")}
+          <input id="p-search" type="search" inputmode="search" placeholder="Search name, SKU or barcode" autocomplete="off" aria-label="Search products" />
+          <kbd>F2</kbd>
+          <button type="button" class="btn ghost sm scan-btn" data-scan-into="#p-search" data-scan-enter>Scan</button>
+        </div>
+        <div class="pos-status">
+          <span class="pos-clock" id="p-clock"></span>
+          ${openShift ? `<span class="shift-pill ok">Shift open</span>` : `<a class="shift-pill warn" href="#/shift">No shift open · Open shift</a>`}
+        </div>
       </header>
-      <section class="card pos-catalog">
-        <div class="search-bar">${icon("search")}<input id="p-search" type="search" inputmode="search" placeholder="Search name or SKU, or scan barcode" autocomplete="off" /><button type="button" class="btn ghost sm scan-btn" data-scan-into="#p-search" data-scan-enter>Scan</button></div>
-        ${settings.posServiceButtons ? `<div class="service-bar" role="group" aria-label="Services">
-          <button class="svc-btn" data-svc="recharge">${icon("plus")}<span>Mobile recharge</span></button>
-          <button class="svc-btn" data-svc="cashin">${icon("plus")}<span>Wallet cash-in</span></button>
-          <button class="svc-btn" data-svc="cashout">${icon("plus")}<span>Wallet cash-out</span></button>
-        </div>` : ""}
-        <div class="chips" id="p-cats" role="tablist"></div>
-        <div class="chips sub-chips" id="p-subs" aria-label="Sub-groups"></div>
-        <div class="product-grid" id="p-grid"></div>
-      </section>
+
+      <div class="pos-main">
+        <section class="card pos-catalog">
+          <div class="chips" id="p-cats" role="tablist"></div>
+          <div class="chips sub-chips" id="p-subs" aria-label="Sub-groups"></div>
+          ${settings.posServiceButtons ? `<div class="service-bar" role="group" aria-label="Services">
+            <button class="svc-btn" data-svc="recharge">${icon("plus")}<span>Mobile recharge</span></button>
+            <button class="svc-btn" data-svc="cashin">${icon("plus")}<span>Wallet cash-in</span></button>
+            <button class="svc-btn" data-svc="cashout">${icon("plus")}<span>Wallet cash-out</span></button>
+          </div>` : ""}
+          <div class="cat-toolbar">
+            <span class="muted small" id="p-result"></span>
+            <div class="cat-tools">
+              <select id="p-filter" aria-label="Filter products">
+                <option value="all">All products</option>
+                <option value="in">In stock</option>
+                <option value="low">Low stock</option>
+                <option value="out">Out of stock</option>
+              </select>
+              <select id="p-sort" aria-label="Sort products">
+                <option value="name">Name A–Z</option>
+                <option value="price-asc">Price: low to high</option>
+                <option value="price-desc">Price: high to low</option>
+                <option value="stock">Stock: lowest first</option>
+              </select>
+              <div class="view-toggle" role="group" aria-label="View">
+                <button type="button" data-view="grid" aria-label="Grid view" title="Grid">${GRID_ICON}</button>
+                <button type="button" data-view="list" aria-label="List view" title="List">${LIST_ICON}</button>
+              </div>
+            </div>
+          </div>
+          <div class="product-grid" id="p-grid"></div>
+          <div class="more-row" id="p-more-row" hidden><button type="button" class="btn ghost" id="p-more"></button></div>
+        </section>
+        <nav class="pos-actions" id="p-actions" aria-label="Quick actions">
+          <button type="button" class="qa" data-qa="search"><kbd>F2</kbd><span>Search</span></button>
+          <button type="button" class="qa" data-qa="hold"><kbd>F8</kbd><span>Open bill</span></button>
+          <button type="button" class="qa" data-qa="bills"><span>Bills</span></button>
+          <button type="button" class="qa" data-qa="discount"><kbd>F6</kbd><span>Discount</span></button>
+          <button type="button" class="qa" data-qa="cash"><kbd>F9</kbd><span>Cash</span></button>
+          <button type="button" class="qa" data-qa="card"><kbd>F10</kbd><span>Card</span></button>
+          <button type="button" class="qa primary" data-qa="charge"><kbd>F4</kbd><span>Charge</span></button>
+        </nav>
+      </div>
 
       <aside class="card pos-bill" id="p-bill">
-        <header class="card-head"><h3>${icon("cart")} Current bill</h3><span class="badge" id="p-count">0 items</span></header>
-        <p class="bill-meta muted small">${esc(session.name || "")} · ${esc(todayISO())}</p>
-        <div class="bill-actions">
-          <button class="btn ghost sm" id="p-hold" title="Keep this bill open to finish later (F8)">${icon("pause")}<span>Open bill</span></button>
-          <button class="btn ghost sm" id="p-held" title="Open bills, closed bills and voids">${icon("refresh")}<span>Bills</span></button>
-          <button class="btn ghost sm" id="p-clear" title="Void this bill with a reason">${icon("x")}<span>Void bill</span></button>
-          <span class="kbd-hint">F2 search · F4 charge · F8 hold</span>
-        </div>
-        <div class="bill-body">
+        <header class="bill-head">
+          <div><h3>Current bill</h3><small class="muted" id="p-billno">New bill</small></div>
+          <span class="badge" id="p-count">0 items</span>
+        </header>
+        <div class="bill-customer">
         <label>Customer
           <select id="p-customer">
             <option value="">Walk-in customer</option>
             ${customers.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("")}
           </select>
         </label>
+          <small class="muted" id="p-custinfo"></small>
+        </div>
+        <div class="bill-tools">
+          <button class="btn ghost sm" id="p-hold" title="Keep this bill open to finish later (F8)">${icon("pause")}<span>Open bill</span></button>
+          <button class="btn ghost sm" id="p-held" title="Open bills, closed bills and voids">${icon("refresh")}<span>Bills</span></button>
+          <button class="btn ghost sm" id="p-clear" title="Void this bill with a reason">${icon("x")}<span>Void</span></button>
+        </div>
+        <div class="bill-body">
         ${openShift ? "" : `<div class="shift-note" role="alert">No cash shift is open. <a href="#/shift">Open a shift</a> before you take payment.</div>`}
-        <div class="bill-lines" id="p-lines"></div>
+          <div class="bill-lines" id="p-lines"></div>
         <p class="muted small price-rule">${allowChange
           ? "You can raise a price. It can never go below the lowest price shown. Service fees can be changed."
           : "Prices are fixed by the shop. Ask an administrator to change them."}</p>
@@ -132,7 +183,7 @@ export async function render(el) {
         </div>
       </aside>
     </div>
-    <div class="mobile-charge" id="p-mobile"><span id="p-mobile-total"></span><button class="btn primary" id="p-mobile-btn">Review & charge</button></div>`;
+        <div class="mobile-charge" id="p-mobile"><span id="p-mobile-total"></span><button class="btn primary" id="p-mobile-btn">Review & charge</button></div>`;
 
   const $ = (s) => el.querySelector(s);
   const isService = (l) => l.kind === "service";
@@ -177,13 +228,44 @@ export async function render(el) {
     return mine.length ? mine.includes(cat) : !other.includes(cat);
   }
 
+  // Catalogue view: sort, stock filter, grid or list, and "show more" paging (48 at a time).
+  const pageView = { sort: "name", filter: "all", view: "grid", limit: 48, key: "" };
+  const soonBy = () => new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
+  function stockPass(p) {
+    const stock = Number(p.stock) || 0;
+    const low = stock > 0 && stock <= (Number(p.reorderLevel) || 0);
+    if (pageView.filter === "in") return stock > 0;
+    if (pageView.filter === "low") return low;
+    if (pageView.filter === "out") return stock <= 0;
+    return true;
+  }
+  function visibleProducts() {
+    const q = st.q.trim().toLowerCase();
+    const list = products.filter((p) =>
+      (tabsOn() ? inTab(p, Number(st.tab)) : (st.cat === "All" || (p.category || "General") === st.cat)) &&
+      (!st.sub || p.subGroup === st.sub) &&
+      (!q || [p.name, p.sku, p.barcode].some((v) => String(v || "").toLowerCase().includes(q))) &&
+      stockPass(p));
+    const price = (p) => Number(p.salePrice) || 0;
+    const sorters = {
+      name: (a, b) => a.name.localeCompare(b.name),
+      "price-asc": (a, b) => price(a) - price(b),
+      "price-desc": (a, b) => price(b) - price(a),
+      stock: (a, b) => (Number(a.stock) || 0) - (Number(b.stock) || 0),
+    };
+    return list.sort(sorters[pageView.sort] || sorters.name);
+  }
+
   function paintCats() {
     if (tabsOn()) {
       $("#p-cats").innerHTML = [1, 2].map((n) => `<button class="chip ${String(n) === st.tab ? "active" : ""}" data-tab="${n}">${esc(tabLabel(n))}</button>`).join("");
       return;
     }
     const cats = ["All", ...new Set(products.map((p) => p.category || "General"))];
-    $("#p-cats").innerHTML = cats.map((c) => `<button class="chip ${c === st.cat ? "active" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`).join("");
+    $("#p-cats").innerHTML = cats.map((c) => {
+      const n = c === "All" ? products.length : products.filter((p) => (p.category || "General") === c).length;
+      return `<button class="chip ${c === st.cat ? "active" : ""}" data-cat="${esc(c)}">${esc(c)}<small>${n}</small></button>`;
+    }).join("");
   }
 
   // Sub-groups of the category (or button) in view. Shown only when there is more than one group to pick from.
@@ -197,26 +279,40 @@ export async function render(el) {
       : "";
   }
 
+  function productCard(p, i) {
+    const stock = Number(p.stock) || 0;
+    const out = stock <= 0;
+    const low = !out && stock <= (Number(p.reorderLevel) || 0);
+    const inBill = piecesInCart(p.id);
+    const exp = nearest[p.id];
+    const monogram = String(p.name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0] || "").join("").toUpperCase();
+    const unit = esc(baseName(p));
+    return `<button type="button" class="product-card ${out ? "is-out" : ""} ${inBill ? "in-bill" : ""} ${low ? "is-low" : ""}" data-add="${esc(p.id)}" style="--i:${Math.min(i, 20)}" ${out ? "disabled" : ""}>
+      ${inBill ? `<span class="pc-incart" aria-label="${inBill} in bill">${inBill}</span>` : ""}
+      <span class="pc-img">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" loading="lazy" />` : `<span class="pc-mono">${esc(monogram)}</span>`}</span>
+      <span class="pc-name">${esc(p.name)}</span>
+      <span class="pc-sub">${esc([p.sku, p.category || "General", p.subGroup].filter(Boolean).join(" · "))}</span>
+      <span class="pc-foot"><strong>${money(p.salePrice)}</strong><span class="badge ${out ? "danger" : low ? "warn" : "ok"}">${out ? "Out of stock" : `${low ? "Low · " : ""}${stock} ${unit}`}</span></span>
+      ${exp ? `<span class="pc-exp ${exp <= soonBy() ? "soon" : ""}">Exp ${esc(exp)}</span>` : ""}
+    </button>`;
+  }
+
   function paintGrid() {
     paintSubs();
-    const q = st.q.trim().toLowerCase();
-    const list = products.filter((p) =>
-      (tabsOn() ? inTab(p, Number(st.tab)) : (st.cat === "All" || (p.category || "General") === st.cat)) &&
-      (!st.sub || p.subGroup === st.sub) &&
-      (!q || [p.name, p.sku, p.barcode].some((v) => String(v || "").toLowerCase().includes(q))));
-    $("#p-grid").innerHTML = list.map((p, i) => {
-      const stock = Number(p.stock) || 0;
-      const out = stock <= 0;
-      const low = !out && stock <= (Number(p.reorderLevel) || 0);
-      const inBill = piecesInCart(p.id);
-      return `<button class="product-card ${out ? "is-out" : ""} ${inBill ? "in-bill" : ""}" data-add="${esc(p.id)}" style="--i:${Math.min(i, 20)}" ${out ? "disabled" : ""}>
-        ${inBill ? `<span class="pc-incart" aria-label="${inBill} in bill">${inBill}</span>` : ""}
-        <span class="pc-name">${esc(p.name)}</span>
-        <span class="pc-sub">${esc([p.category || "General", p.subGroup].filter(Boolean).join(" › "))}</span>
-        <span class="pc-foot"><strong>${money(p.salePrice)}</strong><span class="badge ${out ? "danger" : low ? "warn" : "ok"}">${out ? "Out" : `${stock} ${esc(baseName(p))}`}</span></span>
-        ${nearest[p.id] ? `<span class="pc-exp">Exp ${esc(nearest[p.id])}</span>` : ""}
-      </button>`;
-    }).join("") || `<div class="empty-state small">${icon("search")}<p>No products match your search.</p>${can("inventory") ? `<a class="btn primary sm" href="#/inventory">${icon("plus")}<span>Add a new product</span></a>` : ""}</div>`;
+    const key = [st.cat, st.tab, st.sub, st.q, pageView.sort, pageView.filter].join("|");
+    if (key !== pageView.key) { pageView.key = key; pageView.limit = 48; }
+    const list = visibleProducts();
+    const shown = list.slice(0, pageView.limit);
+    const grid = $("#p-grid");
+    grid.classList.toggle("is-list", pageView.view === "list");
+    grid.innerHTML = shown.length
+      ? (pageView.view === "list" ? `<div class="pl-head"><span>Product</span><span>Category</span><span>Price · Stock</span><span>Expiry</span></div>` : "") + shown.map(productCard).join("")
+      : `<div class="empty-state small">${icon("search")}<p>No products match your search or filter.</p>${can("inventory") ? `<a class="btn primary sm" href="#/inventory">${icon("plus")}<span>Add a new product</span></a>` : ""}</div>`;
+    $("#p-result").textContent = `${list.length} product${list.length === 1 ? "" : "s"}`;
+    const more = list.length - shown.length;
+    $("#p-more-row").hidden = more <= 0;
+    $("#p-more").textContent = `Show more · ${more} left`;
+    el.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === pageView.view));
   }
 
   const serviceBillLine = (l) => {
@@ -242,15 +338,20 @@ export async function render(el) {
 
   const billLine = (l) => {
     if (isService(l)) return serviceBillLine(l);
-    const p = byId[l.id];
     const extra = round2(l.price - l.listPrice);
     return `
-      <div class="bill-line compact">
+      <div class="bill-line">
         <div class="bl-info">
           <button type="button" class="bl-name" data-open="${esc(l.key)}" aria-label="Adjust ${esc(l.name)}">${esc(l.name)}</button>
-          <small>${l.qty} ${esc(l.unit || "")} × ${money(l.price)}${l.disc ? ` · <b class="extra">${esc(l.disc.name || "Discount")} ${esc(discountText(l.disc))}</b>` : ""}${extra > 0 ? ` · <b class="extra">+${money(extra)} extra</b>` : ""}</small>
+          <small>${money(l.price)} / ${esc(l.unit || "")}${l.disc ? ` · <b class="extra">${esc(l.disc.name || "Discount")} ${esc(discountText(l.disc))}</b>` : ""}${extra > 0 ? ` · <b class="extra">+${money(extra)}</b>` : ""}</small>
+        </div>
+        <div class="qty">
+          <button type="button" class="qty-btn" data-dec="${esc(l.key)}" aria-label="Decrease quantity">−</button>
+          <input class="qty-input" data-qty="${esc(l.key)}" value="${l.qty}" inputmode="numeric" aria-label="Quantity" />
+          <button type="button" class="qty-btn" data-inc="${esc(l.key)}" aria-label="Increase quantity">+</button>
         </div>
         <strong class="bl-total">${money(l.price * l.qty)}</strong>
+        <button type="button" class="icon-btn sm hover-danger" data-rm="${esc(l.key)}" aria-label="Remove ${esc(l.name)}">${icon("x")}</button>
       </div>`;
   };
 
@@ -258,6 +359,11 @@ export async function render(el) {
     const lines = cartLines();
     const count = lines.reduce((s, l) => s + (isService(l) ? 1 : l.qty), 0);
     $("#p-count").textContent = `${count} item${count === 1 ? "" : "s"}`;
+    $("#p-billno").textContent = st.openId ? `Open bill · ${String(st.openId).slice(-6).toUpperCase()}` : "New bill";
+    const cust = customers.find((c) => c.id === st.customerId);
+    $("#p-custinfo").textContent = cust
+      ? [cust.phone, Number(cust.balance) ? `Balance ${money(cust.balance)}` : ""].filter(Boolean).join(" · ") || "Registered customer"
+      : "Walk-in sale";
     $("#p-lines").innerHTML = lines.length ? lines.map(billLine).join("")
       : `<div class="empty-state small">${icon("cart")}<p>Tap a product, or a service above, to add it to the bill.</p></div>`;
     const t = billTotals(lines);
@@ -268,7 +374,7 @@ export async function render(el) {
       ${extra > 0 ? `<div class="extra-row"><span>Price increase</span><span>+ ${money(extra)}</span></div>` : ""}
       <div><span>VAT</span><span>${money(t.goods.vat)}</span></div>
       ${t.fees > 0 ? `<div><span>Service fees</span><span>+ ${money(t.fees)}</span></div>` : ""}
-      <div class="grand"><span>Total sale</span><span class="count-up">${money(t.saleTotal)}</span></div>
+      <div class="grand"><span>Total payable</span><span class="count-up">${money(t.saleTotal)}</span></div>
       ${t.transfersIn ? `<div><span>Sent to wallets / operators</span><span>+ ${money(t.transfersIn)}</span></div>` : ""}
       ${t.transfersOut ? `<div><span>Cash-out paid to customer</span><span>− ${money(t.transfersOut)}</span></div>` : ""}
       ${t.transfersIn || t.transfersOut ? `<div class="grand"><span>${t.collect >= 0 ? "To collect" : "To pay customer"}</span><span>${money(Math.abs(t.collect))}</span></div>` : ""}`;
@@ -760,6 +866,13 @@ export async function render(el) {
   });
   $("#p-lines").addEventListener("change", (e) => {
     const t = e.target;
+    if (t.dataset.qty) {
+      const l = st.cart.get(t.dataset.qty);
+      const want = Math.floor(Number(t.value));
+      if (!l) return;
+      if (!(want > 0)) { toast("Enter a quantity of 1 or more, or use Remove", "error"); return paintBill(); }
+      return change(t.dataset.qty, want - l.qty);
+    }
     if (t.dataset.unit) setUnit(t.dataset.unit, t.value);
     else if (t.dataset.price) setPrice(t.dataset.price, t.value);
   });
@@ -779,7 +892,7 @@ export async function render(el) {
       toast(`No product has the code ${code}`, "error");
     }
   });
-  $("#p-customer").addEventListener("change", (e) => { st.customerId = e.target.value; });
+  $("#p-customer").addEventListener("change", (e) => { st.customerId = e.target.value; paintBill(); });
   $("#p-disc")?.addEventListener("input", (e) => {
     st.disc = Math.min(100, Math.max(0, Number(e.target.value) || 0));
     paintBill();
@@ -815,15 +928,52 @@ export async function render(el) {
     $("#p-bill").scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
-  // Keyboard: F2 search, F4 charge, F8 hold. Ignored while a dialog is open or this page is gone.
+  // Cash and card use the payment method with that name, and open the payment step.
+  const cashKey = () => methods.find((m) => m.key === "cash" || /cash/i.test(m.label))?.key;
+  const cardKey = () => (methods.find((m) => /card/i.test(`${m.key} ${m.label}`)) || methods.find((m) => !m.credit && m.key !== cashKey()))?.key;
+  const pickPay = (key) => {
+    if (!key) return toast("That payment method is not set up in Settings.", "error");
+    st.pay = key; $("#p-pay").value = key; st.showPay = true; paintBill();
+    if (key === cashKey()) $("#p-tender")?.focus();
+  };
+  const openDiscount = () => { if (!st.showDisc) $("#p-discbtn").click(); };
+  // Shortcuts press the same buttons on screen, so they respect each button's rules. F2 search, F4 charge, F6 discount,
+  // F8 open bill, F9 cash, F10 card. F5, F11 and F12 are left to the browser (reload, full screen, developer tools).
   const onKey = (e) => {
     if (!el.isConnected) return document.removeEventListener("keydown", onKey);
     if (document.getElementById("modal-root")?.children.length) return;
-    if (e.key === "F2") { e.preventDefault(); $("#p-search").focus(); }
-    else if (e.key === "F4") { e.preventDefault(); charge(); }
-    else if (e.key === "F8") { e.preventDefault(); hold(); }
+    const act = { F2: () => $("#p-search").focus(), F4: () => $("#p-charge").click(), F6: openDiscount,
+      F8: () => $("#p-hold").click(), F9: () => pickPay(cashKey()), F10: () => pickPay(cardKey()) }[e.key];
+    if (!act) return;
+    e.preventDefault();
+    act();
   };
   document.addEventListener("keydown", onKey);
+
+  $("#p-actions").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-qa]");
+    if (!b) return;
+    const act = { search: () => $("#p-search").focus(), hold: () => $("#p-hold").click(), bills: () => $("#p-held").click(),
+      discount: openDiscount, cash: () => pickPay(cashKey()), card: () => pickPay(cardKey()), charge: () => $("#p-charge").click() }[b.dataset.qa];
+    act?.();
+  });
+  $("#p-sort").addEventListener("change", (e) => { pageView.sort = e.target.value; paintGrid(); });
+  $("#p-filter").addEventListener("change", (e) => { pageView.filter = e.target.value; paintGrid(); });
+  $(".view-toggle").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-view]");
+    if (!b) return;
+    pageView.view = b.dataset.view;
+    paintGrid();
+  });
+  $("#p-more").addEventListener("click", () => { pageView.limit += 48; paintGrid(); });
+
+  // Live clock in the top bar; stops when the page is left.
+  const paintClock = () => {
+    const c = $("#p-clock");
+    if (c) c.textContent = new Date().toLocaleString([], { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  };
+  paintClock();
+  const clockTick = setInterval(() => { if (!el.isConnected) return clearInterval(clockTick); paintClock(); }, 15000);
 
   async function charge() {
     if (!openShift) return toast("Open a cash shift before you take payment.", "error");
