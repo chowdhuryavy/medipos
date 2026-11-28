@@ -12,13 +12,17 @@ import { notifyOnce, rolesWith } from "../notifications.js";
 import { SERVICE_TYPES, serviceProviders, serviceLine, serviceJournalLines, serviceBreakdown, floatKey, applyFloat, calcFee } from "../services.js";
 
 export async function render(el) {
-  const [prodSnap, custSnap, batchSnap, floatSnap, shiftSnap] = await Promise.all([
+  const [prodSnap, custSnap, batchSnap, floatSnap, shiftSnap, discSnap] = await Promise.all([
     getDocs(collection(db, "products")),
     getDocs(collection(db, "customers")),
     getDocs(query(collection(db, "batches"), where("remaining", ">", 0))),
     getDocs(collection(db, "floats")).catch(() => ({ docs: [] })),
     getDocs(query(collection(db, "shifts"), orderBy("openedAt", "desc"), limit(1))).catch(() => ({ docs: [] })),
+    getDocs(collection(db, "discounts")).catch(() => ({ docs: [] })),
   ]);
+  // Discounts the administrator has created: whole-bill or per-item, as a percentage or an amount.
+  const presets = discSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.active !== false)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   // The cash shift must be open before any sale is charged.
   const latestShift = shiftSnap.docs[0];
   const openShift = latestShift && latestShift.data().status === "open" ? { id: latestShift.id, ...latestShift.data() } : null;
@@ -39,7 +43,7 @@ export async function render(el) {
   const allowChange = settings.allowPriceChange !== false;
 
   const st = {
-    cat: "All", sub: "", tab: "1", q: "", disc: 0, showDisc: false, showPay: false,
+    cat: "All", sub: "", tab: "1", q: "", billDisc: null, showDisc: false, showPay: false,
     pay: methods.find((m) => !m.credit)?.key || methods[0]?.key || "cash",
     customerId: "",
     cart: new Map(), // product lines: "productId|unitKey"; service lines: "svc|n"
@@ -95,7 +99,7 @@ export async function render(el) {
           <button type="button" class="btn ghost" id="p-paybtn">Payment<b id="p-paybadge"></b></button>
         </div>
         <div class="step-panel" id="p-discsec" hidden>
-          <label>Discount % (whole bill)<input id="p-disc" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="0" /></label>
+          <div id="p-discbox"></div>
         </div>
         <div class="step-panel" id="p-paysec" hidden>
           <div class="pay-field">
@@ -139,7 +143,7 @@ export async function render(el) {
   // Totals: goods get the discount and VAT. Service fees are revenue. Transfers are cash that passes through,
   // so they are added to or taken from what the customer pays, but never counted as sales.
   function billTotals(lines) {
-    const goods = calcTotals(lines.filter((l) => !isService(l)), st.disc);
+    const goods = calcTotals(lines.filter((l) => !isService(l)), 0, st.billDisc);
     const fees = round2(lines.filter(isService).reduce((s, l) => s + l.price * l.qty, 0));
     const transfersIn = round2(lines.filter((l) => isService(l) && (l.serviceType === "cashin" || l.serviceType === "recharge"))
       .reduce((s, l) => s + l.transfer, 0));
@@ -231,7 +235,7 @@ export async function render(el) {
       <div class="bill-line compact">
         <div class="bl-info">
           <button type="button" class="bl-name" data-open="${esc(l.key)}" aria-label="Adjust ${esc(l.name)}">${esc(l.name)}</button>
-          <small>${l.qty} ${esc(l.unit || "")} × ${money(l.price)}${extra > 0 ? ` · <b class="extra">+${money(extra)} extra</b>` : ""}</small>
+          <small>${l.qty} ${esc(l.unit || "")} × ${money(l.price)}${l.disc ? ` · <b class="extra">${esc(l.disc.name || "Discount")} ${esc(discountText(l.disc))}</b>` : ""}${extra > 0 ? ` · <b class="extra">+${money(extra)} extra</b>` : ""}</small>
         </div>
         <strong class="bl-total">${money(l.price * l.qty)}</strong>
       </div>`;
@@ -263,7 +267,8 @@ export async function render(el) {
     $("#p-paysec").hidden = !(hasItems && st.showPay);
     $("#p-discbtn").classList.toggle("active", st.showDisc);
     $("#p-paybtn").classList.toggle("active", st.showPay);
-    $("#p-discbadge").textContent = st.disc ? `${st.disc}%` : "";
+    $("#p-discbadge").textContent = st.billDisc ? discountText(st.billDisc) : "";
+    paintDiscountBox();
     $("#p-paybadge").textContent = paymentMethod(st.pay)?.label || "";
     $("#p-charge").hidden = !hasItems;
     $("#p-clear").disabled = !hasItems;
@@ -329,6 +334,52 @@ export async function render(el) {
     c.classList.add("flash");
   }
 
+  // Discounts: the administrator's presets plus open % and open amount typed by the cashier.
+  const discountText = (d) => !d ? "" : d.mode === "pct" ? `${d.value}%` : money(d.value);
+  function discountControls(scope, current) {
+    const list = presets.filter((d) => d.scope === scope);
+    return `
+      <div class="disc-box">
+        <div class="disc-presets">${list.length ? list.map((d) => `<button type="button" class="chip ${current?.presetId === d.id ? "active" : ""}" data-preset="${esc(d.id)}">${esc(d.name)} · ${esc(discountText(d))}</button>`).join("")
+          : `<span class="muted small">No ${scope === "item" ? "item" : "bill"} discounts yet. The administrator creates them.</span>`}</div>
+        <div class="disc-open">
+          <label>Open %<input type="number" inputmode="decimal" min="0" max="100" step="0.5" data-open-pct placeholder="%" /></label>
+          <label>Open amount<input type="number" inputmode="decimal" min="0" step="0.01" data-open-amt placeholder="amount" /></label>
+        </div>
+        <div class="disc-actions">
+          <span class="disc-now">${current ? `Applied: ${esc(current.name || "Discount")} · ${esc(discountText(current))}` : "No discount"}</span>
+          <button type="button" class="btn ghost sm" data-disc-clear>Clear</button>
+        </div>
+      </div>`;
+  }
+  function bindDiscountControls(root, onSet) {
+    root.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
+      const d = presets.find((x) => x.id === b.dataset.preset);
+      if (d) onSet({ presetId: d.id, name: d.name, mode: d.mode, value: Number(d.value) });
+    }));
+    root.querySelector("[data-disc-clear]").addEventListener("click", () => onSet(null));
+    root.querySelector("[data-open-pct]").addEventListener("change", (e) => {
+      const v = Number(e.target.value);
+      if (!(v > 0 && v <= 100)) return toast("Enter a percentage between 0 and 100", "error");
+      onSet({ name: "Open %", mode: "pct", value: v });
+    });
+    root.querySelector("[data-open-amt]").addEventListener("change", (e) => {
+      const v = Number(e.target.value);
+      if (!(v > 0)) return toast("Enter an amount above 0", "error");
+      onSet({ name: "Open amount", mode: "amt", value: round2(v) });
+    });
+  }
+  // The whole-bill discount box, drawn again only when the discount changes so typing is not lost.
+  function paintDiscountBox() {
+    const box = $("#p-discbox");
+    if (!box) return;
+    const key = JSON.stringify(st.billDisc);
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
+    box.innerHTML = discountControls("bill", st.billDisc);
+    bindDiscountControls(box, (d) => { st.billDisc = d; paintBill(); });
+  }
+
   // Small dialog to change one product line: unit, quantity, price, or remove it.
   function openItem(key) {
     if (!st.cart.has(key)) return;
@@ -348,6 +399,8 @@ export async function render(el) {
             </div>
             <label>Price per unit<input id="ia-price" type="number" inputmode="decimal" step="0.01" min="${v.minPrice}" value="${v.price}" ${allowChange ? "" : "readonly"} /></label>
             <p class="muted small">List ${money(v.listPrice)} · lowest ${money(v.minPrice)}</p>
+            <h4 class="sec-title">Item discount</h4>
+            ${discountControls("item", line.disc)}
             <div class="form-actions">
               <button type="button" class="btn ghost" id="ia-remove">Remove</button>
               <button type="button" class="btn primary" id="ia-done">Done</button>
@@ -363,6 +416,7 @@ export async function render(el) {
         body.querySelector("#ia-dec").addEventListener("click", () => { change(cur, -1); paintBill(); draw(); });
         body.querySelector("#ia-inc").addEventListener("click", () => { change(cur, 1); paintBill(); draw(); });
         body.querySelector("#ia-price").addEventListener("change", (e) => { setPrice(cur, e.target.value); paintBill(); draw(); });
+        bindDiscountControls(body.querySelector(".disc-box"), (d) => { line.disc = d; paintBill(); draw(); });
         body.querySelector("#ia-remove").addEventListener("click", () => { removeLine(cur); close(); });
         body.querySelector("#ia-done").addEventListener("click", close);
       };
@@ -449,13 +503,13 @@ export async function render(el) {
 
   function hold() {
     if (!st.cart.size) return toast("Add products before holding a bill", "error");
-    st.holds.push({ cart: cloneCart(st.cart), disc: st.disc, customerId: st.customerId, pay: st.pay, at: new Date().toLocaleTimeString() });
+    st.holds.push({ cart: cloneCart(st.cart), billDisc: st.billDisc, customerId: st.customerId, pay: st.pay, at: new Date().toLocaleTimeString() });
     clearBill();
     toast(`Bill held (${st.holds.length} on hold)`, "success");
   }
 
   function clearBill() {
-    st.cart.clear(); st.disc = 0; st.customerId = ""; $("#p-disc").value = 0; $("#p-customer").value = ""; $("#p-tender").value = "";
+    st.cart.clear(); st.billDisc = null; st.customerId = ""; $("#p-customer").value = ""; $("#p-tender").value = "";
     paintBill();
   }
 
@@ -472,9 +526,9 @@ export async function render(el) {
       </div>`, (body, close) => {
       body.querySelectorAll("[data-resume]").forEach((b) => b.addEventListener("click", () => {
         const h = st.holds.splice(Number(b.dataset.resume), 1)[0];
-        if (st.cart.size) st.holds.push({ cart: cloneCart(st.cart), disc: st.disc, customerId: st.customerId, pay: st.pay, at: new Date().toLocaleTimeString() });
-        st.cart = cloneCart(h.cart); st.disc = h.disc; st.customerId = h.customerId; st.pay = h.pay;
-        $("#p-disc").value = st.disc; $("#p-customer").value = st.customerId; $("#p-pay").value = st.pay;
+        if (st.cart.size) st.holds.push({ cart: cloneCart(st.cart), billDisc: st.billDisc, customerId: st.customerId, pay: st.pay, at: new Date().toLocaleTimeString() });
+        st.cart = cloneCart(h.cart); st.billDisc = h.billDisc || null; st.customerId = h.customerId; st.pay = h.pay;
+        $("#p-customer").value = st.customerId; $("#p-pay").value = st.pay;
         paintBill(); close();
       }));
       body.querySelectorAll("[data-discard]").forEach((b) => b.addEventListener("click", () => {
@@ -608,7 +662,7 @@ export async function render(el) {
     }
   });
   $("#p-customer").addEventListener("change", (e) => { st.customerId = e.target.value; });
-  $("#p-disc").addEventListener("input", (e) => {
+  $("#p-disc")?.addEventListener("input", (e) => {
     st.disc = Math.min(100, Math.max(0, Number(e.target.value) || 0));
     paintBill();
   });
@@ -650,15 +704,16 @@ export async function render(el) {
     if (tendered !== null && tendered < 0) return toast("Cash received cannot be negative", "error");
     // A discount above the cashier limit needs an administrator to approve it first.
     let approvalId = null;
-    if (st.disc > settings.maxDiscountPct) {
-      try { approvalId = await askDiscountApproval(st.disc); } catch (err) { return toast(err.message, "error"); }
+    const storedPct = Math.ceil((t.goods.effectivePct || 0) * 100) / 100;
+    if (storedPct > settings.maxDiscountPct) {
+      try { approvalId = await askDiscountApproval(storedPct); } catch (err) { return toast(err.message, "error"); }
     }
     const btn = $("#p-charge");
     btn.disabled = true;
     btn.classList.add("loading");
     try {
       const customer = customers.find((c) => c.id === st.customerId) || null;
-      const sale = await postWithVoucher(() => completeSale({ lines, discountPct: st.disc, method, customer, tendered, approvalId }), (r) => r.jvNo);
+      const sale = await postWithVoucher(() => completeSale({ lines, billDisc: st.billDisc, method, customer, tendered, approvalId }), (r) => r.jvNo);
       await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: method.key, services: sale.serviceCount });
       for (const l of lines) if (!isService(l)) byId[l.id].stock = (Number(byId[l.id].stock) || 0) - l.pieces;
       Object.assign(floats, sale.floatBalances || {});
@@ -781,7 +836,7 @@ function askDiscountApproval(pct) {
 
 /* Runs the whole sale atomically: stock in pieces (FEFO batches), lowest-price check, service fees and transfers,
    invoice number, one balanced journal, customer balance. */
-async function completeSale({ lines, discountPct, method, customer, tendered = null, approvalId = null }) {
+async function completeSale({ lines, billDisc = null, method, customer, tendered = null, approvalId = null }) {
   const today = todayISO();
   const productLines = lines.filter((l) => l.kind !== "service");
   const serviceLines = lines.filter((l) => l.kind === "service");
@@ -836,8 +891,8 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
       productWrites.push({ ref: pRef, stock: (Number(p.stock) || 0) - pieces });
       priced.push({
         ...l, name: p.name, unit: u.name, size: u.size, pieces,
-        listPrice: u.price, price: l.price, vatRate: Number(p.vatRate) || 0,
-        costPrice: Number(p.costPrice) || 0, cogs: lineCogs, kind: "product",
+        listPrice: u.price, price: l.price, vatRate: Number(p.vatRate) || 0, minPrice: u.minPrice,
+        disc: l.disc || null, costPrice: Number(p.costPrice) || 0, cogs: lineCogs, kind: "product",
         batches: plan.map((step) => ({ id: step.id, pieces: step.take, cost: Number(batches.find((x) => x.id === step.id)?.cost) || 0 })),
       });
     }
@@ -864,7 +919,13 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
       v.floatKey = k;
     }
 
-    const goods = calcTotals(priced, discountPct);
+    const goods = calcTotals(priced, 0, billDisc);
+    // Each line's price after its own and the shared bill discount must still reach the lowest price.
+    for (const gl of goods.lines) {
+      if (gl.kind === "service") continue;
+      if (gl.lineNet < gl.minPrice * gl.qty - 0.01) throw new Error(`${gl.name} can not be sold below ${money(gl.minPrice)} per ${gl.unit} after the discount`);
+    }
+    const storedPct = Math.ceil((goods.effectivePct || 0) * 100) / 100;
     const feesTotal = round2(services.reduce((s, v) => s + v.fee, 0));
     const transfersIn = round2(services.filter((v) => v.serviceType === "cashin" || v.serviceType === "recharge").reduce((s, v) => s + v.transfer, 0));
     const transfersOut = round2(services.filter((v) => v.serviceType === "cashout").reduce((s, v) => s + v.transfer, 0));
@@ -919,7 +980,8 @@ async function completeSale({ lines, discountPct, method, customer, tendered = n
       customerId: customer?.id || null,
       customerName: customer?.name || "Walk-in",
       items,
-      subtotal: goods.subtotal, discount: goods.discount, discountPct: Number(discountPct) || 0,
+      subtotal: goods.subtotal, discount: goods.discount, discountPct: storedPct,
+      billDiscount: billDisc ? { name: billDisc.name || "", mode: billDisc.mode, value: Number(billDisc.value) || 0 } : null,
       net: saleNet, vat: goods.vat, total: saleTotal, cogs: cogsTotal, priceExtra,
       serviceFees: feesTotal, serviceCount: services.length, transfersIn, transfersOut, collect,
       payment: method.key, paymentLabel: method.label,

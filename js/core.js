@@ -418,19 +418,44 @@ export function downloadCSV(filename, rows) {
 /* ───────────────────────── business helpers ───────────────────────── */
 
 // Bill totals. Prices are VAT-exclusive; the bill-level discount % is spread across lines.
-export function calcTotals(lines, discountPct = 0) {
-  const pct = Math.min(100, Math.max(0, Number(discountPct) || 0));
-  let subtotal = 0, net = 0, vat = 0;
-  const out = lines.map((l) => {
+/**
+ * Totals for a bill. Each line may carry its own discount ({ mode: "pct" | "amt", value }), taken first.
+ * billDisc ({ mode, value }) is then taken off the whole bill and shared across the lines in proportion.
+ * A plain number as the second argument is still a whole-bill percentage, as before.
+ */
+export function calcTotals(lines, discountPct = 0, billDisc = null) {
+  const bill = billDisc || (Number(discountPct) > 0 ? { mode: "pct", value: Number(discountPct) } : null);
+  const lineDiscOf = (gross, d) => {
+    if (!d || !(Number(d.value) > 0)) return 0;
+    const v = Number(d.value);
+    return round2(d.mode === "amt" ? Math.min(v, gross) : gross * Math.min(100, v) / 100);
+  };
+  const base = lines.map((l) => {
     const gross = round2(l.price * l.qty);
-    const lineDisc = round2(gross * pct / 100);
-    const lineNet = round2(gross - lineDisc);
-    const lineVat = round2(lineNet * (l.vatRate || 0) / 100);
-    subtotal += gross; net += lineNet; vat += lineVat;
-    return { ...l, gross, lineDisc, lineNet, lineVat, lineTotal: round2(lineNet + lineVat) };
+    const itemDisc = Math.min(gross, lineDiscOf(gross, l.disc));
+    return { l, gross, itemDisc, afterItem: round2(gross - itemDisc) };
+  });
+  const afterItemSum = round2(base.reduce((s, b) => s + b.afterItem, 0));
+  const billAmt = bill ? Math.min(afterItemSum, lineDiscOf(afterItemSum, bill)) : 0;
+  let shared = 0;
+  let subtotal = 0, net = 0, vat = 0;
+  const out = base.map((b, i) => {
+    const isLast = i === base.length - 1;
+    // The last line takes the rounding difference, so the shares add up exactly to the bill discount.
+    const billShare = billAmt <= 0 || afterItemSum <= 0 ? 0
+      : isLast ? round2(billAmt - shared) : round2(billAmt * b.afterItem / afterItemSum);
+    shared = round2(shared + billShare);
+    const lineDisc = round2(b.itemDisc + billShare);
+    const lineNet = round2(b.gross - lineDisc);
+    const lineVat = round2(lineNet * (b.l.vatRate || 0) / 100);
+    subtotal += b.gross; net += lineNet; vat += lineVat;
+    return { ...b.l, gross: b.gross, itemDiscount: b.itemDisc, billDiscount: billShare, lineDisc, lineNet, lineVat, lineTotal: round2(lineNet + lineVat) };
   });
   subtotal = round2(subtotal); net = round2(net); vat = round2(vat);
-  return { lines: out, subtotal, discount: round2(subtotal - net), net, vat, total: round2(net + vat) };
+  const discount = round2(subtotal - net);
+  // Effective discount as a percentage of the subtotal: what the cashier limit is checked against.
+  const effectivePct = subtotal > 0 ? round2(discount / subtotal * 100) : 0;
+  return { lines: out, subtotal, discount, effectivePct, net, vat, total: round2(net + vat) };
 }
 
 // First-expired-first-out allocation. Expired batches are skipped unless includeExpired is set.

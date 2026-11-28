@@ -2231,3 +2231,11 @@ html[data-lang="bn"] body { line-height: 1.6; }
 .item-adjust { display: grid; gap: 12px; }
 .item-adjust .item-name { font-size: 16px; }
 .qty-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
+/* Discounts on the Sell screen: presets, open % and open amount. */
+.disc-box { display: grid; gap: 10px; }
+.disc-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.disc-open { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.disc-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.disc-now { font-size: 13px; color: var(--muted); }
+.sec-title { margin: 6px 0 0; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
