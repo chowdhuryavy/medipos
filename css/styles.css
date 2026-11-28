@@ -1727,3 +1727,14 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .login-screen.has-side .login-card .ver-by { color: #0f766e; background: none; -webkit-background-clip: border-box; background-clip: border-box; font-size: 15px; font-weight: 700; opacity: 1; }
   .login-screen.has-side .login-card .ver-num { color: #475569; font-size: 13px; opacity: 1; }
 }
+
+/* Loading screen on desktop: larger logo, ring and text so the screen is not empty */
+@media (min-width: 901px) {
+  .splash .round-stage { width: 240px; height: 240px; }
+  .splash .splash-name { font-size: clamp(34px, 3.4vw, 46px); margin-top: 36px; }
+  .splash .splash-sub { font-size: 17px; }
+  .splash .splash-msg { font-size: 16px; }
+  .splash .splash-bar { width: 280px; height: 7px; }
+  .splash .splash-core { gap: 18px; }
+  .splash .splash-ver { font-size: 14px; }
+}
