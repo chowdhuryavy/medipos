@@ -711,7 +711,7 @@ function askDiscountApproval(pct) {
       </form>`, (host, close) => {
       const form = host.querySelector("#da-form");
       host.querySelector("#da-cancel").addEventListener("click", () => { close(); reject(new Error("Discount cancelled.")); });
-      form.addEventListener("submit", async (e) => {
+      onSubmit(form, async (e) => {
         e.preventDefault();
         const f = new FormData(form);
         try {

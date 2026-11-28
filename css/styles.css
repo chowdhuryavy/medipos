@@ -2191,3 +2191,6 @@ html[data-lang="bn"] body { line-height: 1.6; }
 
 /* Required fields: a red star after the label, on every form. */
 .req-star { color: #dc2626; font-weight: 800; }
+
+/* Busy primary buttons (Create product, Save, Approve…) show the spinner. The shine on primary buttons must not replace it. */
+.btn.primary.loading::after { content: ""; position: static; left: auto; top: auto; bottom: auto; width: 14px; height: 14px; flex: none; background: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; }
