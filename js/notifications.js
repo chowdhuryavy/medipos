@@ -190,6 +190,9 @@ export function toggleNotifications() {
 export async function runStockChecks() {
   if (!rolesWith("inventory").includes(session.role) && session.role !== "admin") return;
   const today = new Date().toLocaleDateString("en-CA");
+  // Once a day per person and browser is enough: the checks read every product and batch, so do not repeat them on each sign-in.
+  const doneKey = `stock-checked-${session.uid}-${today}`;
+  if (localStorage.getItem(doneKey)) return;
   const soon = new Date(Date.now() + 30 * 86400000).toLocaleDateString("en-CA");
   try {
     const [prodSnap, batchSnap] = await Promise.all([
@@ -197,16 +200,19 @@ export async function runStockChecks() {
       getDocs(query(collection(db, "batches"), where("remaining", ">", 0))),
     ]);
     const inv = rolesWith("inventory");
+    // The alerts are written together, not one after another.
+    const jobs = [];
     for (const d of prodSnap.docs) {
       const p = d.data();
       if (p.active === false) continue;
       const stock = Number(p.stock) || 0;
       if (stock <= 0) {
-        await notifyOnce(`out-${d.id}-${today}`, { roleKeys: inv, kind: "stock", title: `Out of stock: ${p.name}`, body: "Reorder now.", link: "inventory" });
+        jobs.push(notifyOnce(`out-${d.id}-${today}`, { roleKeys: inv, kind: "stock", title: `Out of stock: ${p.name}`, body: "Reorder now.", link: "inventory" }));
       } else if ((Number(p.reorderLevel) || 0) > 0 && stock <= Number(p.reorderLevel)) {
-        await notifyOnce(`low-${d.id}-${today}`, { roleKeys: inv, kind: "stock", title: `Low stock: ${p.name}`, body: `${stock} left, reorder level ${p.reorderLevel}.`, link: "inventory" });
+        jobs.push(notifyOnce(`low-${d.id}-${today}`, { roleKeys: inv, kind: "stock", title: `Low stock: ${p.name}`, body: `${stock} left, reorder level ${p.reorderLevel}.`, link: "inventory" }));
       }
     }
+    await Promise.all(jobs);
     const expiring = batchSnap.docs.map((b) => b.data()).filter((b) => b.expiry && b.expiry <= soon);
     if (expiring.length) {
       const expired = expiring.filter((b) => b.expiry < today).length;
@@ -215,6 +221,7 @@ export async function runStockChecks() {
         body: expired ? `${expired} already expired. Check Reports → Expiry.` : "Check Reports → Expiry.", link: "reports",
       });
     }
+    localStorage.setItem(doneKey, "1");
   } catch (err) {
     console.warn("Stock checks skipped:", err.message);
   }
