@@ -2059,3 +2059,15 @@ html[data-lang="bn"] body { line-height: 1.6; }
 @media (min-width: 901px) {
   .modal-backdrop:not(.modal-anchored) .modal { zoom: 1.15; }
 }
+
+/* Desktop dialogs, wider and with larger text (applies to every dialog from the shared dialog code). */
+@media (min-width: 901px) {
+  .modal { width: min(680px, 100%); }
+  .modal.wide { width: min(1040px, 100%); }
+  .modal:has(.sa-modal) { width: min(1100px, 96vw); }
+  .modal-backdrop:not(.modal-anchored) .modal { zoom: 1.12; }
+  .modal header h3 { font-size: 21px; }
+  .modal-body { font-size: 16px; }
+  .modal-body input:not([type="checkbox"]):not([type="radio"]), .modal-body select, .modal-body textarea { font-size: 16px; min-height: 46px; }
+  .modal-body label, .modal-body .field-label { font-size: 14px; }
+}
