@@ -2172,3 +2172,15 @@ html[data-lang="bn"] body { line-height: 1.6; }
 
 /* Avatars are round everywhere (top bar, sidebar, account panel), like on phones. The card around the sidebar avatar keeps its rounded corners. */
 .avatar, .avatar-top, .avatar-ring, .avatar-ring .avatar { border-radius: 50% !important; aspect-ratio: 1 / 1; flex: none; }
+
+/* Toasts: small confirmations sit at the top right, under the top bar, and fade out by themselves. Errors stay until they time out too. */
+#toast-root { top: calc(env(safe-area-inset-top) + 76px); bottom: auto; left: auto; right: 16px; width: auto; max-width: calc(100vw - 32px); justify-items: end; gap: 8px; }
+.toast { width: auto; max-width: 340px; padding: 9px 14px 9px 12px; gap: 8px; font-size: 13px; font-weight: 600; border-radius: 12px; border-left-width: 3px; box-shadow: 0 8px 22px rgba(15, 23, 42, .14); animation: toastIn .28s var(--ease) both; }
+.toast .ico { width: 16px; height: 16px; flex: none; }
+.toast span { line-height: 1.35; }
+.toast.out { transform: translateX(14px); }
+@keyframes toastIn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+@media (max-width: 900px) {
+  #toast-root { left: 12px; right: 12px; justify-items: stretch; }
+  .toast { max-width: none; width: 100%; }
+}
