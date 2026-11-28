@@ -2024,3 +2024,8 @@ html[data-lang="bn"] body { line-height: 1.6; }
 @media (min-width: 901px) {
   .splash .scene-care { zoom: 1.15; }
 }
+
+/* Line tables (purchases, sales returns): inputs fill their cell, so the hint text under a product no longer spills into the next column. */
+.lines-table td { min-width: 0; vertical-align: top; }
+.lines-table td input, .lines-table td select { width: 100%; min-width: 0; box-sizing: border-box; }
+.lines-table td small { white-space: normal; overflow-wrap: anywhere; display: block; margin-top: 4px; line-height: 1.35; }
