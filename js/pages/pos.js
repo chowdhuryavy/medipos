@@ -72,6 +72,7 @@ export async function render(el) {
         <div class="bill-actions">
           <button class="btn ghost sm" id="p-hold" title="Hold this bill (F8)">${icon("pause")}<span>Hold</span></button>
           <button class="btn ghost sm" id="p-held" title="Resume a held bill">${icon("refresh")}<span>Held <b id="p-held-n">0</b></span></button>
+          <button class="btn ghost sm" id="p-clear" title="Empty this bill">${icon("x")}<span>Clear</span></button>
           <span class="kbd-hint">F2 search · F4 charge · F8 hold</span>
         </div>
         <label>Customer
@@ -102,7 +103,6 @@ export async function render(el) {
         <div class="quick-cash" id="p-quick" hidden></div>
         <div class="change-due" id="p-change" aria-live="polite"></div>
         <button class="btn primary block xl" id="p-charge">${icon("check")}<span>Charge</span></button>
-        <button class="btn ghost block" id="p-clear">Clear bill</button>
       </aside>
     </div>
     <div class="mobile-charge" id="p-mobile"><span id="p-mobile-total"></span><button class="btn primary" id="p-mobile-btn">Review & charge</button></div>`;
@@ -259,7 +259,8 @@ export async function render(el) {
     const hasItems = lines.length > 0;
     $("#p-payrow").hidden = !hasItems;
     $("#p-charge").hidden = !hasItems;
-    $("#p-clear").hidden = !hasItems;
+    $("#p-clear").disabled = !hasItems;
+    $("#p-hold").disabled = !hasItems;
     $("#p-mobile-total").textContent = `${count} · ${money(Math.abs(t.collect))}${t.collect < 0 ? " to customer" : ""}`;
     const chargeLabel = $("#p-charge span");
     if (chargeLabel && !$("#p-charge").classList.contains("loading")) {

@@ -1815,3 +1815,73 @@ html[data-lang="bn"] body { line-height: 1.6; }
   }
   .pos-bill #p-charge { min-height: 60px; font-size: 18px; font-weight: 800; letter-spacing: .2px; }
 }
+
+/* ───── Loading styles: each one has its own layout and motion ───── */
+.splash .splash-bar { display: none; }
+.splash.style-bar .splash-bar { display: block; width: 320px; height: 10px; }
+.splash.style-bar .round-stage { width: 120px; height: 120px; }
+.splash.style-bar .round-logo { width: 120px; height: 120px; animation: none; }
+.splash.style-bar .splash-core { transform: translateY(-16vh); }
+
+/* Orbit: logo centred inside a turning ring. */
+.splash.style-orbit .round-stage { width: 170px; height: 170px; }
+
+/* Pulse: a rounded tile that breathes with a soft halo, no ring. */
+.splash.style-pulse .round-ring, .splash.style-pulse .round-orbit { display: none; }
+.splash.style-pulse .round-stage { width: 160px; height: 160px; }
+.splash.style-pulse .round-logo { border-radius: 40px; animation: pulseHalo 2.2s ease-in-out infinite; }
+.splash.style-pulse .round-logo .brand-mark { border-radius: 40px; }
+@keyframes pulseHalo {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(94, 234, 212, .55), 0 24px 50px -16px rgba(0, 0, 0, .45); }
+  60% { box-shadow: 0 0 0 28px rgba(94, 234, 212, 0), 0 24px 50px -16px rgba(0, 0, 0, .45); }
+}
+
+/* Ripple: the text sits above, rings spread out from the logo below. */
+.splash.style-ripple .splash-core { display: flex; flex-direction: column-reverse; align-items: center; }
+.splash.style-ripple .round-ring, .splash.style-ripple .round-orbit { display: none; }
+.splash.style-ripple .round-stage { width: 150px; height: 150px; margin-top: 8px; }
+.splash.style-ripple .ripple { border-width: 3px; }
+
+/* Flip: a coin turning in 3D, with the text beside it in a row. */
+.splash.style-flip .splash-core { display: flex; flex-direction: row; align-items: center; gap: 26px; text-align: left; }
+.splash.style-flip .round-ring, .splash.style-flip .round-orbit { display: none; }
+.splash.style-flip .round-stage { width: 128px; height: 128px; flex: none; }
+.splash.style-flip .round-logo { width: 116px; height: 116px; }
+.splash.style-flip .splash-name { margin: 0; font-size: 30px; }
+.splash.style-flip .splash-sub, .splash.style-flip .splash-msg { text-align: left; }
+
+/* Wave: no logo; a row of bars rises and falls as the hero. */
+.splash.style-wave .round-stage { display: none; }
+.splash.style-wave .eq { display: flex; height: 120px; gap: 12px; margin-top: 0; }
+.splash.style-wave .eq i { width: 18px; border-radius: 12px; }
+.splash.style-wave .splash-name { margin-top: 18px; }
+
+/* Dots: the whole screen is a glass card, text left-aligned, dots at the foot. */
+.splash.style-dots .splash-core {
+  justify-items: start; text-align: left; gap: 8px; padding: 30px 34px; min-width: 300px;
+  background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: 28px; backdrop-filter: blur(10px); box-shadow: 0 30px 60px -24px rgba(0, 0, 0, .4);
+}
+.splash.style-dots .round-ring, .splash.style-dots .round-orbit { display: none; }
+.splash.style-dots .round-stage { width: 84px; height: 84px; }
+.splash.style-dots .round-logo { width: 84px; height: 84px; animation: none; }
+.splash.style-dots .splash-name { margin: 14px 0 0; font-size: 24px; }
+.splash.style-dots .splash-msg { text-align: left; }
+.splash.style-dots .dots3 { justify-content: flex-start; margin-top: 14px; }
+
+/* Aurora: no logo circle; the name is big and its colour drifts across. */
+.splash.style-aurora .round-stage { display: none; }
+.splash.style-aurora .splash-name {
+  margin: 0; font-size: 46px; letter-spacing: 6px; text-transform: uppercase;
+  background: linear-gradient(90deg, #ffffff, #5eead4, #fde68a, #ffffff); background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: auroraText 6s linear infinite;
+}
+@keyframes auroraText { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .splash.style-pulse .round-logo, .splash.style-aurora .splash-name { animation: none !important; }
+}
+
+/* Login: copyright line under the version. */
+.login-rights { margin: 6px 0 0; font-size: 11.5px; color: #64748b; text-align: center; letter-spacing: .2px; }

@@ -154,6 +154,7 @@ function showLogin(message = "", tone = "error") {
         </form>
         <button class="link-btn" type="button" id="forgot-btn">Forgot password?</button>
         <p class="version ver-stack"><span class="ver-by">Designed by Avy</span><span class="ver-num">Version ${esc(APP_VERSION)}</span></p>
+        <p class="login-rights">© ${new Date().getFullYear()} Perfection. All rights reserved.</p>
       </div>
     </section>`;
 
