@@ -1991,3 +1991,9 @@ html[data-lang="bn"] body { line-height: 1.6; }
 @media (min-width: 901px) {
   .splash .scene-clinic { zoom: 1.2; }
 }
+
+/* Desktop sidebar: wide enough for the full shop name; the name wraps to a second line rather than being cut off. */
+@media (min-width: 901px) {
+  .shell { grid-template-columns: 300px minmax(0, 1fr); }
+  .brand-text strong { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25; }
+}
