@@ -2029,3 +2029,6 @@ html[data-lang="bn"] body { line-height: 1.6; }
 .lines-table td { min-width: 0; vertical-align: top; }
 .lines-table td input, .lines-table td select { width: 100%; min-width: 0; box-sizing: border-box; }
 .lines-table td small { white-space: normal; overflow-wrap: anywhere; display: block; margin-top: 4px; line-height: 1.35; }
+
+/* Care Orbit: the medicines are placed on the circle (position is set here so their left/top apply). */
+.splash .scene-care .care-orbit > .care-item { position: absolute; }
