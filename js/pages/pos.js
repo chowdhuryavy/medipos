@@ -181,7 +181,9 @@ export async function render(el) {
       const stock = Number(p.stock) || 0;
       const out = stock <= 0;
       const low = !out && stock <= (Number(p.reorderLevel) || 0);
-      return `<button class="product-card ${out ? "is-out" : ""}" data-add="${esc(p.id)}" style="--i:${Math.min(i, 20)}" ${out ? "disabled" : ""}>
+      const inBill = piecesInCart(p.id);
+      return `<button class="product-card ${out ? "is-out" : ""} ${inBill ? "in-bill" : ""}" data-add="${esc(p.id)}" style="--i:${Math.min(i, 20)}" ${out ? "disabled" : ""}>
+        ${inBill ? `<span class="pc-incart" aria-label="${inBill} in bill">${inBill}</span>` : ""}
         <span class="pc-name">${esc(p.name)}</span>
         <span class="pc-sub">${esc([p.category || "General", p.subGroup].filter(Boolean).join(" › "))}</span>
         <span class="pc-foot"><strong>${money(p.salePrice)}</strong><span class="badge ${out ? "danger" : low ? "warn" : "ok"}">${out ? "Out" : `${stock} ${esc(baseName(p))}`}</span></span>
@@ -259,6 +261,10 @@ export async function render(el) {
     $("#p-charge").hidden = !hasItems;
     $("#p-clear").hidden = !hasItems;
     $("#p-mobile-total").textContent = `${count} · ${money(Math.abs(t.collect))}${t.collect < 0 ? " to customer" : ""}`;
+    const chargeLabel = $("#p-charge span");
+    if (chargeLabel && !$("#p-charge").classList.contains("loading")) {
+      chargeLabel.textContent = t.collect < 0 ? `Pay customer ${money(Math.abs(t.collect))}` : `Charge ${money(t.saleTotal)}`;
+    }
     const cash = paymentMethod(st.pay).key === "cash";
     const needsTender = cash && t.collect > 0;
     $("#p-cashrow").hidden = !needsTender;
