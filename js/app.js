@@ -126,6 +126,7 @@ const LOGIN_SIDE = `
         <path d="M0 -14 H20 A14 14 0 0 1 20 14 H0 Z" fill="#f8fafc"/>
       </g>
     </svg>
+    <p class="login-eyebrow">Pharmacy point of sale</p>
     <h2>Sell, stock and accounts in one place.</h2>
     <p>Fast sales, clear stock and books you can trust.</p>
     <ul class="login-chips"><li>Sales</li><li>Stock</li><li>Accounts</li><li>Reports</li></ul>

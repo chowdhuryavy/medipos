@@ -1738,3 +1738,15 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .splash .splash-core { gap: 18px; }
   .splash .splash-ver { font-size: 14px; }
 }
+
+/* Desktop sign-in: consistent brand details with the loading screen */
+@media (min-width: 901px) {
+  .login-side .login-eyebrow { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #99f6e4; opacity: 1; animation: loginRise .6s .05s var(--ease) both; }
+  .login-screen.has-side .login-card h1 { color: #0b4f4a; }
+  .login-screen.has-side .login-card .muted { color: #475569; letter-spacing: .3px; }
+  .login-screen.has-side .login-card .btn.primary.xl {
+    background: linear-gradient(135deg, #0f766e, #14b8a6); color: #fff; border: 0;
+  }
+  .login-screen.has-side .login-card .btn.primary.xl:hover:not(:disabled) { filter: brightness(1.05); }
+  .login-screen.has-side .login-card .link-btn { color: #0f766e; }
+}
