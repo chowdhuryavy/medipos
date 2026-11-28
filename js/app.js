@@ -544,11 +544,13 @@ function buildShell() {
   })();
   const clockFmt = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: shopZone });
   const tick = () => {
-    const el = document.getElementById("clock");
-    if (el) {
-      el.textContent = clockFmt.format(new Date());
-      el.title = shopZone || Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    }
+    const text = clockFmt.format(new Date());
+    const title = shopZone || Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    document.querySelectorAll(".clock-live").forEach((c) => { c.textContent = text; c.title = title; });
+    // On the Sell screen the clock sits in its header strip, so the top-bar copy is hidden there (phones hide the strip, so they keep the top-bar clock).
+    const top = document.getElementById("clock");
+    const strip = document.getElementById("strip-clock");
+    if (top) top.hidden = !!(strip && strip.offsetParent !== null);
   };
   clearInterval(clockTimer);
   tick();
