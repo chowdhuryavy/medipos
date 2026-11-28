@@ -1013,6 +1013,9 @@ export async function render(el) {
     const cashOnBill = method.key === "cash" && t.collect > 0;
     const tendered = cashOnBill && $("#p-tender").value !== "" ? Number($("#p-tender").value) : null;
     if (tendered !== null && tendered < 0) return toast("Cash received cannot be negative", "error");
+    // Cash sales need the amount the customer gave, and it must cover the total. Otherwise the till would be short.
+    if (cashOnBill && tendered === null) { $("#p-tender")?.focus(); return toast("Enter the cash received from the customer", "error"); }
+    if (cashOnBill && tendered < t.collect - 0.005) { $("#p-tender")?.focus(); return toast(`Cash received is ${money(tendered)}. The total is ${money(t.collect)}.`, "error"); }
     // A discount above the cashier limit needs an administrator to approve it first.
     let approvalId = null;
     const storedPct = Math.ceil((t.goods.effectivePct || 0) * 100) / 100;
