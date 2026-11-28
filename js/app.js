@@ -447,10 +447,10 @@ const NAV_GROUPS = [
   ["Sell", ["dashboard", "pos", "shift", "prescriptions"]],
   ["Stock & parties", ["inventory", "import", "purchasing", "partners"]],
   ["Money & reports", ["accounting", "reports"]],
-  ["Administration", ["activity", "admin"]],
 ];
+// Administration is not listed here, so it sits in "More" with Returns.
 // Groups kept at the bottom of the sidebar, under the other pages.
-const PINNED_GROUPS = ["Administration"];
+const PINNED_GROUPS = [];
 function navLinks(groups, withHeader = true) {
   return groups.map((g) => `
     ${withHeader ? `<p class="nav-group">${esc(g.label)}</p>` : ""}
