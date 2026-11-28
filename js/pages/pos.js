@@ -39,7 +39,7 @@ export async function render(el) {
   const allowChange = settings.allowPriceChange !== false;
 
   const st = {
-    cat: "All", sub: "", tab: "1", q: "", disc: 0,
+    cat: "All", sub: "", tab: "1", q: "", disc: 0, showDisc: false, showPay: false,
     pay: methods.find((m) => !m.credit)?.key || methods[0]?.key || "cash",
     customerId: "",
     cart: new Map(), // product lines: "productId|unitKey"; service lines: "svc|n"
@@ -90,8 +90,14 @@ export async function render(el) {
         </div>
         <div class="bill-foot">
         <div class="totals" id="p-totals"></div>
-        <div class="form-row" id="p-payrow">
-          <label>Discount %<input id="p-disc" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="0" /></label>
+        <div class="step-btns" id="p-steps">
+          <button type="button" class="btn ghost" id="p-discbtn">Discount<b id="p-discbadge"></b></button>
+          <button type="button" class="btn ghost" id="p-paybtn">Payment<b id="p-paybadge"></b></button>
+        </div>
+        <div class="step-panel" id="p-discsec" hidden>
+          <label>Discount % (whole bill)<input id="p-disc" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="0" /></label>
+        </div>
+        <div class="step-panel" id="p-paysec" hidden>
           <div class="pay-field">
             <span class="field-label">Paid by</span>
             <div class="pay-seg" id="p-paychips" role="radiogroup" aria-label="Paid by"></div>
@@ -99,12 +105,12 @@ export async function render(el) {
               ${methods.filter((m) => !m.credit || creditOk).map((m) => `<option value="${esc(m.key)}" ${m.key === st.pay ? "selected" : ""}>${esc(m.label)}</option>`).join("")}
             </select>
           </div>
-        </div>
         <label id="p-cashrow" class="cash-row">Cash received
           <input id="p-tender" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount given by customer" />
         </label>
         <div class="quick-cash" id="p-quick" hidden></div>
         <div class="change-due" id="p-change" aria-live="polite"></div>
+        </div>
         <button class="btn primary block xl" id="p-charge">${icon("check")}<span>Charge</span></button>
         </div>
       </aside>
@@ -222,22 +228,12 @@ export async function render(el) {
     const p = byId[l.id];
     const extra = round2(l.price - l.listPrice);
     return `
-      <div class="bill-line">
+      <div class="bill-line compact">
         <div class="bl-info">
-          <strong>${esc(l.name)}</strong>
-          <select class="unit-pick" data-unit="${esc(l.key)}" aria-label="Unit for ${esc(l.name)}">${unitOptions(p, l.unitKey)}</select>
-          <small>List ${money(l.listPrice)} · lowest ${money(l.minPrice)}${extra > 0 ? ` · <b class="extra">+${money(extra)} extra</b>` : ""}</small>
+          <button type="button" class="bl-name" data-open="${esc(l.key)}" aria-label="Adjust ${esc(l.name)}">${esc(l.name)}</button>
+          <small>${l.qty} ${esc(l.unit || "")} × ${money(l.price)}${extra > 0 ? ` · <b class="extra">+${money(extra)} extra</b>` : ""}</small>
         </div>
-        <div class="qty">
-          <button class="icon-btn sm" data-dec="${esc(l.key)}" aria-label="Decrease quantity">−</button>
-          <span>${l.qty}</span>
-          <button class="icon-btn sm" data-inc="${esc(l.key)}" aria-label="Increase quantity">+</button>
-        </div>
-        <label class="bl-price">Price
-          <input type="number" inputmode="decimal" step="0.01" min="${l.minPrice}" value="${l.price}" data-price="${esc(l.key)}" ${allowChange ? "" : "readonly"} aria-label="Unit price" />
-        </label>
         <strong class="bl-total">${money(l.price * l.qty)}</strong>
-        <button class="icon-btn sm hover-danger" data-rm="${esc(l.key)}" aria-label="Remove item">${icon("x")}</button>
       </div>`;
   };
 
@@ -261,7 +257,14 @@ export async function render(el) {
       ${t.transfersIn || t.transfersOut ? `<div class="grand"><span>${t.collect >= 0 ? "To collect" : "To pay customer"}</span><span>${money(Math.abs(t.collect))}</span></div>` : ""}`;
     // Discount, payment, Charge and Clear appear only once the bill has something in it.
     const hasItems = lines.length > 0;
-    $("#p-payrow").hidden = !hasItems;
+    $("#p-steps").hidden = !hasItems;
+    if (!hasItems) { st.showDisc = false; st.showPay = false; }
+    $("#p-discsec").hidden = !(hasItems && st.showDisc);
+    $("#p-paysec").hidden = !(hasItems && st.showPay);
+    $("#p-discbtn").classList.toggle("active", st.showDisc);
+    $("#p-paybtn").classList.toggle("active", st.showPay);
+    $("#p-discbadge").textContent = st.disc ? `${st.disc}%` : "";
+    $("#p-paybadge").textContent = paymentMethod(st.pay)?.label || "";
     $("#p-charge").hidden = !hasItems;
     $("#p-clear").disabled = !hasItems;
     $("#p-hold").disabled = !hasItems;
@@ -324,6 +327,47 @@ export async function render(el) {
     c.classList.remove("flash");
     void c.offsetWidth;
     c.classList.add("flash");
+  }
+
+  // Small dialog to change one product line: unit, quantity, price, or remove it.
+  function openItem(key) {
+    if (!st.cart.has(key)) return;
+    openModal("Adjust item", "", (body, close) => {
+      let cur = key;
+      const draw = () => {
+        const line = st.cart.get(cur);
+        if (!line) return close();
+        const v = lineView(line);
+        const p = byId[line.id];
+        body.innerHTML = `
+          <div class="item-adjust">
+            <strong class="item-name">${esc(v.name)}</strong>
+            <label>Unit<select id="ia-unit">${unitOptions(p, line.unitKey)}</select></label>
+            <div class="qty-row"><span>Quantity</span>
+              <div class="qty"><button type="button" class="icon-btn sm" id="ia-dec" aria-label="Decrease quantity">−</button><span>${line.qty}</span><button type="button" class="icon-btn sm" id="ia-inc" aria-label="Increase quantity">+</button></div>
+            </div>
+            <label>Price per unit<input id="ia-price" type="number" inputmode="decimal" step="0.01" min="${v.minPrice}" value="${v.price}" ${allowChange ? "" : "readonly"} /></label>
+            <p class="muted small">List ${money(v.listPrice)} · lowest ${money(v.minPrice)}</p>
+            <div class="form-actions">
+              <button type="button" class="btn ghost" id="ia-remove">Remove</button>
+              <button type="button" class="btn primary" id="ia-done">Done</button>
+            </div>
+          </div>`;
+        body.querySelector("#ia-unit").addEventListener("change", (e) => {
+          const before = cur;
+          setUnit(before, e.target.value);
+          cur = `${line.id}|${e.target.value}`;
+          if (!st.cart.has(cur)) cur = before;
+          paintBill(); draw();
+        });
+        body.querySelector("#ia-dec").addEventListener("click", () => { change(cur, -1); paintBill(); draw(); });
+        body.querySelector("#ia-inc").addEventListener("click", () => { change(cur, 1); paintBill(); draw(); });
+        body.querySelector("#ia-price").addEventListener("change", (e) => { setPrice(cur, e.target.value); paintBill(); draw(); });
+        body.querySelector("#ia-remove").addEventListener("click", () => { removeLine(cur); close(); });
+        body.querySelector("#ia-done").addEventListener("click", close);
+      };
+      draw();
+    });
   }
 
   function add(id, unitKey = "piece") {
@@ -534,6 +578,8 @@ export async function render(el) {
     if (b) add(b.dataset.add);
   });
   $("#p-lines").addEventListener("click", (e) => {
+    const o = e.target.closest("[data-open]");
+    if (o) return openItem(o.dataset.open);
     const t = e.target.closest("[data-inc],[data-dec],[data-rm]");
     if (!t) return;
     if (t.dataset.inc) change(t.dataset.inc, 1);
@@ -566,6 +612,8 @@ export async function render(el) {
     st.disc = Math.min(100, Math.max(0, Number(e.target.value) || 0));
     paintBill();
   });
+  $("#p-discbtn").addEventListener("click", () => { st.showDisc = !st.showDisc; paintBill(); if (st.showDisc) $("#p-disc").focus(); });
+  $("#p-paybtn").addEventListener("click", () => { st.showPay = !st.showPay; paintBill(); });
   $("#p-pay").addEventListener("change", () => { st.pay = $("#p-pay").value; paintBill(); });
   $("#p-tender").addEventListener("input", paintBill);
   $("#p-hold").addEventListener("click", hold);

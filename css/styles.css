@@ -2212,3 +2212,22 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .pos-bill .bill-foot { flex: none; padding-top: 10px; border-top: 1px dashed var(--border); background: var(--surface); }
   .pos-bill .bill-lines { max-height: none; }
 }
+
+/* Sell screen: wider bill; the panel itself never scrolls, only its item list does. */
+@media (min-width: 901px) {
+  .pos { grid-template-columns: minmax(0, 1fr) 440px; }
+  .pos-bill { overflow: hidden; }
+}
+.bill-line.compact { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.bill-line.compact > .bl-info { grid-column: 1; grid-row: 1; }
+.bill-line.compact > .bl-total { grid-column: 2; grid-row: 1; justify-self: end; white-space: nowrap; }
+.bl-name { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--text); text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; max-width: 100%; overflow-wrap: anywhere; }
+.bl-name:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
+.step-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.step-btns .btn { justify-content: space-between; }
+.step-btns b { margin-left: 6px; font-size: 12px; color: var(--brand); }
+.step-btns .btn.active { border-color: var(--brand); color: var(--brand); }
+.step-panel { display: grid; gap: 10px; }
+.item-adjust { display: grid; gap: 12px; }
+.item-adjust .item-name { font-size: 16px; }
+.qty-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
