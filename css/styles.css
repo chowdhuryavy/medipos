@@ -2359,3 +2359,7 @@ kbd { font: 700 11px/1 var(--app-font, inherit); padding: 4px 6px; border-radius
   .product-grid.is-list .product-card .pc-sub, .product-grid.is-list .product-card .pc-exp { display: none; }
   .pl-head { display: none; }
 }
+
+/* Sign-in footer: "Designed by Avy", the version and the copyright sit close together under the card's links. */
+.login-card .app-credit { margin: -6px 0 0; gap: 6px; }
+.login-card .login-rights { margin: -8px 0 0; }
