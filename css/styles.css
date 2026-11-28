@@ -2144,3 +2144,9 @@ html[data-lang="bn"] body { line-height: 1.6; }
 /* Sell screen header: the clock sits on the right, opposite the cashier name. */
 .pos-strip .strip-clock { margin-left: auto; font-size: 15px; font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; }
 .pos-strip .strip-clock::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 3px rgba(20, 184, 166, .2); }
+
+/* Dashboard greeting: the clock sits on the right, opposite the greeting. */
+.hero.hero-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.hero-clock { display: inline-flex; align-items: center; gap: 10px; font-size: 30px; font-weight: 800; color: var(--brand); letter-spacing: .5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hero-clock::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px rgba(20, 184, 166, .2); animation: pulseDot 1.6s ease-in-out infinite; }
+@media (max-width: 900px) { .hero-clock { font-size: 22px; } }

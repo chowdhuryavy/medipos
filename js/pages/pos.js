@@ -53,7 +53,7 @@ export async function render(el) {
         <div class="strip-item">${icon("pos")}<span><b>Sale</b> · ${esc(session.name || "")}</span></div>
         <div class="strip-item muted">${esc(todayISO())}</div>
         <div class="strip-item muted">${icon("search")}<span>F2 search · F4 charge · F8 hold</span></div>
-        <div class="strip-item strip-clock clock-live" id="strip-clock" title="Shop time"></div>
+        <div class="strip-item strip-clock clock-live clock-inline" id="strip-clock" title="Shop time"></div>
       </header>
       <section class="card pos-catalog">
         <div class="search-bar">${icon("search")}<input id="p-search" type="search" inputmode="search" placeholder="Search name or SKU, or scan barcode" autocomplete="off" /><button type="button" class="btn ghost sm scan-btn" data-scan-into="#p-search" data-scan-enter>Scan</button></div>

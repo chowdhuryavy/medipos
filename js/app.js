@@ -547,10 +547,11 @@ function buildShell() {
     const text = clockFmt.format(new Date());
     const title = shopZone || Intl.DateTimeFormat().resolvedOptions().timeZone || "";
     document.querySelectorAll(".clock-live").forEach((c) => { c.textContent = text; c.title = title; });
-    // On the Sell screen the clock sits in its header strip, so the top-bar copy is hidden there (phones hide the strip, so they keep the top-bar clock).
+    // On the Sell screen and the dashboard the clock sits inside the page, so the top-bar copy is hidden there.
+    // Where that copy is not visible (phones hide the Sell strip), the top bar keeps the clock.
     const top = document.getElementById("clock");
-    const strip = document.getElementById("strip-clock");
-    if (top) top.hidden = !!(strip && strip.offsetParent !== null);
+    const inPage = document.querySelector(".clock-inline");
+    if (top) top.hidden = !!(inPage && inPage.offsetParent !== null);
   };
   clearInterval(clockTimer);
   tick();
