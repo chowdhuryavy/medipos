@@ -2134,3 +2134,9 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .quick-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); overflow: visible; }
   .quick-bar .quick-btn { width: 100%; min-width: 0; min-height: 76px; justify-content: flex-start; }
 }
+
+/* Phones: the shop name wraps onto two lines instead of being cut off; the clock stays compact. */
+@media (max-width: 900px) {
+  .topbar-shop { white-space: normal; overflow: visible; text-overflow: clip; font-size: 16px; line-height: 1.2; }
+  .topbar .clock { font-size: 12px; padding: 5px 8px; }
+}
