@@ -230,7 +230,14 @@ export const statusLabel = (a) => (isPostable(a) ? "" : ACCOUNT_STATUSES.find(([
 /* ───────────────────────── formatting & dates ───────────────────────── */
 
 let fmtCache = null;
+// The symbol set in Settings wins. Otherwise the currency code is used (e.g. "BDT 1,250.00").
 export function money(n) {
+  const value = Number(n) || 0;
+  const symbol = String(settings.currencySymbol || "").trim();
+  if (symbol) {
+    const num = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value));
+    return `${value < 0 ? "-" : ""}${symbol} ${num}`;
+  }
   if (!fmtCache) {
     try {
       fmtCache = new Intl.NumberFormat(undefined, { style: "currency", currency: settings.currency, minimumFractionDigits: 2 });
@@ -238,7 +245,7 @@ export function money(n) {
       fmtCache = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2 });
     }
   }
-  return fmtCache.format(Number(n) || 0);
+  return fmtCache.format(value);
 }
 export const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);

@@ -254,7 +254,8 @@ const FIELDS = [
     ["emailFooter", "Footer line in emails", "text"],
   ]],
   ["Money & tax", [
-    ["currency", "Currency code (e.g. QAR, SAR, USD, AED)", "text"],
+    ["currency", "Currency code (e.g. QAR, SAR, USD, AED, BDT)", "text"],
+    ["currencySymbol", "Currency symbol shown on screens and receipts (e.g. ৳, ر.ق, $) — leave empty to use the code", "text"],
     ["defaultVatRate", "Default VAT %", "number"],
     ["maxDiscountPct", "Maximum discount % cashiers can give", "number"],
     ["allowCreditSales", "Allow sales on account (credit)", "bool"],
