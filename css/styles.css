@@ -2031,3 +2031,14 @@ html[data-lang="bn"] body { line-height: 1.6; }
 
 /* Care Orbit: the medicines are placed on the circle (position is set here so their left/top apply). */
 .splash .scene-care .care-orbit > .care-item { position: absolute; }
+
+/* Desktop sign-in: a little larger, both the card and the left panel. */
+@media (min-width: 901px) {
+  .login-screen.has-side { grid-template-columns: minmax(0, 1.2fr) minmax(500px, .8fr); }
+  .login-screen.has-side .login-card { width: min(480px, calc(100% - 64px)); padding: 46px 42px; gap: 18px; border-radius: 30px; }
+  .login-screen.has-side .login-card h1 { font-size: 32px; }
+  .login-screen.has-side .login-card .muted { font-size: 16px; }
+  .login-screen.has-side .login-form .input-wrap input { font-size: 17px; }
+  .login-screen.has-side .login-card .btn.xl { min-height: 56px; font-size: 17px; }
+  .login-side { zoom: 1.12; }
+}
