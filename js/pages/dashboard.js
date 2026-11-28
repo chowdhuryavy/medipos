@@ -123,13 +123,12 @@ export async function render(el) {
   const quick = QUICK.filter(([page]) => can(page));
 
   el.innerHTML = `
-    <section class="card hero hero-row">
+    <section class="card hero">
       <div>
         <p class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</p>
         <h1>Good ${greet}, ${esc(firstName)}</h1>
         <p class="muted">Here is how ${esc(settings.shopName)} is doing today.</p>
       </div>
-      <div class="hero-clock clock-live clock-inline" id="hero-clock" title="Shop time"></div>
     </section>
 
     <section class="quick-bar" aria-label="Quick actions">
