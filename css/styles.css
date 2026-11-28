@@ -2054,3 +2054,8 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .login-screen.has-side .login-card { zoom: 1.22; }
   .login-side { zoom: 1.3; }
 }
+
+/* Desktop dialogs (password reset, forms, confirmations): about 15% larger. The small account panel is left as it is. */
+@media (min-width: 901px) {
+  .modal-backdrop:not(.modal-anchored) .modal { zoom: 1.15; }
+}
