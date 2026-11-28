@@ -2048,3 +2048,9 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .login-screen.has-side .login-card .btn.primary.xl::after { content: ""; position: absolute; top: 0; bottom: 0; width: 40%; left: -60%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent); animation: btnSheen 2.6s ease-in-out infinite; }
   .login-side .login-chips li { animation: loginRise .6s var(--ease) both, loginFloat 4s ease-in-out infinite; }
 }
+
+/* Desktop sign-in, larger again: the card (modal) and the illustration box on the left. */
+@media (min-width: 901px) {
+  .login-screen.has-side .login-card { zoom: 1.22; }
+  .login-side { zoom: 1.3; }
+}
