@@ -124,7 +124,6 @@ export async function render(el) {
 
   el.innerHTML = `
     <section class="card hero">
-      ${branding.logoUrl ? `<img class="hero-logo" src="${branding.logoUrl}" alt="${esc(settings.shopName || "")} logo" />` : ""}
       <div>
         <p class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</p>
         <h1>Good ${greet}, ${esc(firstName)}</h1>
