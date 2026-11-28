@@ -1784,3 +1784,6 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .kpi small { font-size: 13px; }
   .kpi strong { font-size: clamp(20px, 1.9vw, 24px); }
 }
+
+/* Sell screen: payment, Charge and Clear show only when the bill has items */
+#p-payrow[hidden], #p-charge[hidden], #p-clear[hidden] { display: none !important; }

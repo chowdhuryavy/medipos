@@ -86,7 +86,7 @@ export async function render(el) {
           ? "You can raise a price. It can never go below the lowest price shown. Service fees can be changed."
           : "Prices are fixed by the shop. Ask an administrator to change them."}</p>
         <div class="totals" id="p-totals"></div>
-        <div class="form-row">
+        <div class="form-row" id="p-payrow">
           <label>Discount %<input id="p-disc" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="0" /></label>
           <div class="pay-field">
             <span class="field-label">Paid by</span>
@@ -253,6 +253,11 @@ export async function render(el) {
       ${t.transfersIn ? `<div><span>Sent to wallets / operators</span><span>+ ${money(t.transfersIn)}</span></div>` : ""}
       ${t.transfersOut ? `<div><span>Cash-out paid to customer</span><span>− ${money(t.transfersOut)}</span></div>` : ""}
       ${t.transfersIn || t.transfersOut ? `<div class="grand"><span>${t.collect >= 0 ? "To collect" : "To pay customer"}</span><span>${money(Math.abs(t.collect))}</span></div>` : ""}`;
+    // Discount, payment, Charge and Clear appear only once the bill has something in it.
+    const hasItems = lines.length > 0;
+    $("#p-payrow").hidden = !hasItems;
+    $("#p-charge").hidden = !hasItems;
+    $("#p-clear").hidden = !hasItems;
     $("#p-mobile-total").textContent = `${count} · ${money(Math.abs(t.collect))}${t.collect < 0 ? " to customer" : ""}`;
     const cash = paymentMethod(st.pay).key === "cash";
     const needsTender = cash && t.collect > 0;
