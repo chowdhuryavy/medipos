@@ -1,6 +1,7 @@
 // Bills: open bills (kept until they are closed or voided), closed bills (charged sales), and voids (every bill, item or sale voided, with its reason).
 import { db, collection, doc, getDocs, addDoc, deleteDoc, query, orderBy, limit, serverTimestamp } from "../firebase.js";
 import { esc, icon, toast, openModal, onSubmit, onDelegated, money, fmtDateTime, calcTotals, round2, audit, session } from "../core.js";
+import { printReceipt, saleForPrint } from "../print.js";
 
 const TABS = [["open", "Open bills", "pause"], ["closed", "Closed bills", "accounting"], ["void", "Void", "x"]];
 
@@ -96,13 +97,19 @@ async function closedTab(body) {
       <header class="card-head"><h3>Closed bills</h3><span class="badge">${sales.length}</span></header>
       <p class="muted small">Every bill that was charged, newest first. A bill voided later shows its status here and under Void.</p>
       <div class="table-wrap"><table class="table">
-        <thead><tr><th>Invoice</th><th>Date</th><th>Cashier</th><th>Payment</th><th class="r">Total</th><th>Status</th></tr></thead>
+        <thead><tr><th>Invoice</th><th>Date</th><th>Cashier</th><th>Payment</th><th class="r">Total</th><th>Status</th><th></th></tr></thead>
         <tbody>${sales.length ? sales.map((s) => `<tr>
           <td>${esc(s.invoiceNo || "")}</td><td>${fmtDateTime(s.createdAt)}</td><td>${esc(s.cashier || "")}</td>
-          <td>${esc(s.paymentLabel || s.payment || "")}</td><td class="r">${money(s.total)}</td><td>${statusText(s)}</td></tr>`).join("")
-          : `<tr><td colspan="6" class="muted">No closed bills yet.</td></tr>`}</tbody>
+          <td>${esc(s.paymentLabel || s.payment || "")}</td><td class="r">${money(s.total)}</td><td>${statusText(s)}</td>
+          <td class="r"><button type="button" class="btn ghost sm" data-reprint="${esc(s.id)}">${icon("print")}<span>Reprint</span></button></td></tr>`).join("")
+          : `<tr><td colspan="7" class="muted">No closed bills yet.</td></tr>`}</tbody>
       </table></div>
     </section>`;
+  body.querySelector("tbody")?.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-reprint]");
+    const s = b && sales.find((x) => x.id === b.dataset.reprint);
+    if (s) printReceipt(saleForPrint(s), "thermal");
+  });
 }
 
 async function voidTab(body) {

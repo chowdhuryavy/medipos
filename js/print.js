@@ -144,3 +144,13 @@ function a4Frame(title, period, body) {
       <footer class="a4-foot"><span>${esc(s.name)}</span><span>Printed by ${esc(session.name || "")}</span></footer>
     </div>`;
 }
+
+/** Turns a saved sale (items as stored) into the shape the receipt printer uses. */
+export function saleForPrint(sale) {
+  return {
+    ...sale,
+    lines: (sale.items || []).map((i) => ({
+      name: i.name, qty: i.qty, price: i.price, lineNet: i.lineNet, lineVat: i.lineVat, lineTotal: i.lineTotal, service: i.service || "",
+    })),
+  };
+}

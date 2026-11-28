@@ -2,10 +2,10 @@ import { reserveJv, writeVoucher, postWithVoucher } from "../journal.js";
 import { db, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, limit, runTransaction, serverTimestamp, increment } from "../firebase.js";
 import { post } from "../api.js";
 import { onAction, onSubmit, isPostable } from "../core.js";
-import { printReceipt } from "../print.js";
+import { printReceipt, saleForPrint } from "../print.js";
 import {
   session, settings, paymentMethod, money, esc, icon, toast, openModal, alertBox, todayISO, calcTotals,
-  buildJournal, allocateFEFO, audit, round2, ACCOUNTS, can,
+  buildJournal, allocateFEFO, audit, round2, ACCOUNTS, can, fmtDateTime,
 } from "../core.js";
 import { unitsOf, unitByKey, toPieces, unitOptions, baseName } from "../packs.js";
 import { notifyOnce, rolesWith } from "../notifications.js";
@@ -66,6 +66,7 @@ export async function render(el) {
     cat: "All", sub: "", tab: "1", q: "", billDisc: null, discMode: "bill", showDisc: false, showPay: false,
     pay: methods.find((m) => !m.credit)?.key || methods[0]?.key || "cash",
     customerId: "",
+    split: null, // split payment rows: [{ key, amount }] when split payment is on
     cart: new Map(), // product lines: "productId|unitKey"; service lines: "svc|n"
     openId: null, // the open bill this cart was loaded from, if any
     svcSeq: 0,
@@ -145,6 +146,7 @@ export async function render(el) {
           </select>
         </label>
           <small class="muted" id="p-custinfo"></small>
+          <button type="button" class="btn ghost sm" id="p-history">${icon("refresh")}<span>Purchase history</span></button>
         </div>
         <div class="bill-tools">
           <button class="btn ghost sm" id="p-hold" title="Keep this bill open to finish later (F8)">${icon("pause")}<span>Open bill</span></button>
@@ -173,6 +175,8 @@ export async function render(el) {
           <div class="itemdisc-list" id="p-itemdisc" hidden></div>
         </div>
         <div class="step-panel" id="p-paysec" hidden>
+          <div class="split-head"><button type="button" class="btn ghost sm" id="p-splitbtn">Split payment</button></div>
+          <div class="split-box" id="p-split" hidden></div>
           <div class="pay-field" hidden>
             <span class="field-label">Paid by</span>
             <div class="pay-seg" id="p-paychips" role="radiogroup" aria-label="Paid by"></div>
@@ -417,12 +421,16 @@ export async function render(el) {
     if (chargeLabel && !$("#p-charge").classList.contains("loading")) {
       chargeLabel.textContent = t.collect < 0 ? `Pay customer ${money(Math.abs(t.collect))}` : `Charge ${money(t.saleTotal)}`;
     }
-    const cash = paymentMethod(st.pay).key === "cash";
-    const needsTender = cash && t.collect > 0;
+    // Split payment: the cash part (if any) is what needs the cash-received box and change.
+    const splitCash = st.split ? round2(st.split.filter((r) => r.key === "cash").reduce((s, r) => s + (Number(r.amount) || 0), 0)) : 0;
+    const cashDueUi = st.split ? splitCash : t.collect;
+    const cash = st.split ? splitCash > 0 : paymentMethod(st.pay).key === "cash";
+    const needsTender = cash && cashDueUi > 0;
+    paintSplit(t);
     $("#p-cashrow").hidden = !needsTender;
     $("#p-change").hidden = !(cash && count);
     if (needsTender && $("#p-tender").value !== "") {
-      const diff = round2(Number($("#p-tender").value) - t.collect);
+      const diff = round2(Number($("#p-tender").value) - cashDueUi);
       $("#p-change").textContent = diff >= 0 ? `Change due: ${money(diff)}` : `Still to collect: ${money(-diff)}`;
       $("#p-change").className = `change-due ${diff >= 0 ? "ok" : "warn"}`;
     } else if (cash && t.collect < 0) {
@@ -439,7 +447,7 @@ export async function render(el) {
     // Quick cash: the exact amount, then the next few notes above it.
     const quick = $("#p-quick");
     if (needsTender) {
-      const exact = round2(t.collect);
+      const exact = round2(cashDueUi);
       const notes = [20, 50, 100, 200, 500, 1000, 2000].filter((n) => n > exact).slice(0, 3);
       quick.innerHTML = [`<button type="button" class="quick-btn exact" data-tender="${exact}">Exact ${money(exact)}</button>`,
         ...notes.map((n) => `<button type="button" class="quick-btn" data-tender="${n}">${money(n)}</button>`)].join("");
@@ -449,6 +457,75 @@ export async function render(el) {
     }
   }
 
+  // Split payment rows: each is a payment method and the amount paid with it. Shown only when split payment is on.
+  function paintSplit(t) {
+    const box = $("#p-split");
+    $("#p-splitbtn").textContent = st.split ? "Single payment" : "Split payment";
+    box.hidden = !st.split;
+    if (!st.split) return;
+    const used = round2(st.split.reduce((s, r) => s + (Number(r.amount) || 0), 0));
+    const left = round2(t.collect - used);
+    const opts = (key) => methods.filter((m) => !m.credit || creditOk)
+      .map((m) => `<option value="${esc(m.key)}" ${m.key === key ? "selected" : ""}>${esc(m.label)}</option>`).join("");
+    box.innerHTML = `
+      ${st.split.map((r, i) => `<div class="split-row">
+        <select data-split-key="${i}" aria-label="Payment method">${opts(r.key)}</select>
+        <input type="number" inputmode="decimal" min="0" step="0.01" value="${r.amount}" data-split-amt="${i}" aria-label="Amount" />
+        <button type="button" class="icon-btn sm" data-split-rm="${i}" aria-label="Remove payment">${icon("x")}</button>
+      </div>`).join("")}
+      <div class="split-foot">
+        <span class="${left === 0 ? "ok-text" : "warn-text"}">${left === 0 ? "Fully paid" : left > 0 ? `Still to pay ${money(left)}` : `Over by ${money(-left)}`}</span>
+        <button type="button" class="btn ghost sm" data-split-add>Add payment</button>
+      </div>`;
+  }
+  function addSplit(key) {
+    const t = billTotals(cartLines());
+    const used = round2((st.split || []).reduce((s, r) => s + (Number(r.amount) || 0), 0));
+    st.split = st.split || [];
+    st.split.push({ key: key || st.pay, amount: Math.max(0, round2(t.collect - used)) });
+    st.showPay = true;
+    paintBill();
+  }
+  $("#p-splitbtn").addEventListener("click", () => {
+    if (st.split) st.split = null;
+    else st.split = [];
+    if (st.split) addSplit(st.pay); else paintBill();
+  });
+  $("#p-split").addEventListener("change", (e) => {
+    const t = e.target;
+    if (!st.split) return;
+    if (t.dataset.splitKey !== undefined) st.split[Number(t.dataset.splitKey)].key = t.value;
+    if (t.dataset.splitAmt !== undefined) st.split[Number(t.dataset.splitAmt)].amount = Number(t.value) || 0;
+    paintBill();
+  });
+  $("#p-split").addEventListener("click", (e) => {
+    const rm = e.target.closest("[data-split-rm]");
+    if (rm) {
+      st.split.splice(Number(rm.dataset.splitRm), 1);
+      if (!st.split.length) st.split = null;
+      return paintBill();
+    }
+    if (e.target.closest("[data-split-add]")) addSplit(st.pay);
+  });
+  // Purchase history: the registered customer's last sales, each with a reprint.
+  async function openCustomerHistory() {
+    if (!st.customerId) return toast("Choose a registered customer first", "error");
+    const cust = customers.find((c) => c.id === st.customerId);
+    const snap = await getDocs(query(collection(db, "sales"), where("customerId", "==", st.customerId), limit(50))).catch(() => ({ docs: [] }));
+    const when = (s) => s.createdAt?.toMillis?.() || 0;
+    const sales = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => when(b) - when(a));
+    openModal(`${cust.name} · purchases`, `<div class="stack">${sales.length ? sales.map((s) => `
+      <div class="held-row"><div><strong>${esc(s.invoiceNo || "")}</strong><small>${fmtDateTime(s.createdAt)} · ${esc(s.paymentLabel || s.payment || "")}</small></div>
+      <div class="row-actions"><strong>${money(s.total)}</strong><button type="button" class="btn ghost sm" data-hist-print="${esc(s.id)}">${icon("print")}<span>Reprint</span></button></div></div>`).join("")
+      : `<p class="muted">No purchases yet.</p>`}</div>`, (body) => {
+      body.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-hist-print]");
+        const s = b && sales.find((x) => x.id === b.dataset.histPrint);
+        if (s) printReceipt(saleForPrint(s), "thermal");
+      });
+    });
+  }
+  $("#p-history").addEventListener("click", openCustomerHistory);
   $("#p-paychips").addEventListener("click", (e) => {
     const b = e.target.closest("[data-pay]");
     if (!b) return;
@@ -718,7 +795,7 @@ export async function render(el) {
   }
 
   function clearBill() {
-    st.cart.clear(); st.billDisc = null; st.customerId = ""; $("#p-customer").value = ""; $("#p-tender").value = "";
+    st.cart.clear(); st.billDisc = null; st.customerId = ""; st.split = null; $("#p-customer").value = ""; $("#p-tender").value = "";
     paintBill();
   }
 
@@ -953,6 +1030,7 @@ export async function render(el) {
   const cardKey = () => (methods.find((m) => /card/i.test(`${m.key} ${m.label}`)) || methods.find((m) => !m.credit && m.key !== cashKey()))?.key;
   const pickPay = (key) => {
     if (!key) return toast("That payment method is not set up in Settings.", "error");
+    if (st.split) return addSplit(key);
     st.pay = key; $("#p-pay").value = key; st.showPay = true; paintBill();
     if (key === cashKey()) $("#p-tender")?.focus();
   };
@@ -1005,17 +1083,29 @@ export async function render(el) {
     const method = paymentMethod(st.pay);
     const lines = cartLines();
     const hasServices = lines.some(isService);
-    if (method.credit && !st.customerId) return toast("Choose a customer for an on-account sale", "error");
+    const t = billTotals(lines);
+    // Split payment: one row per payment method. Only for sales with no wallet or recharge services.
+    let splits = null;
+    if (st.split) {
+      if (hasServices) return toast("Wallet and recharge services must be paid in one payment", "error");
+      if (t.collect <= 0) return toast("Split payment is for sales that collect money", "error");
+      splits = st.split.map((r) => ({ method: paymentMethod(r.key), amount: round2(Number(r.amount) || 0) })).filter((r) => r.amount > 0);
+      if (!splits.length) return toast("Enter the amount for each payment", "error");
+      const sum = round2(splits.reduce((s, r) => s + r.amount, 0));
+      if (Math.abs(sum - t.collect) > 0.005) return toast(`The payments add up to ${money(sum)}. The total is ${money(t.collect)}.`, "error");
+    }
+    const usesCredit = splits ? splits.some((r) => r.method.credit) : method.credit;
+    if (usesCredit && !st.customerId) return toast("Choose a customer for an on-account sale", "error");
     if (method.credit && hasServices) return toast("Recharge and wallet services must be paid now, not on account", "error");
     const low = lines.find((l) => !isService(l) && l.price < l.minPrice - 0.005);
     if (low) return toast(`${low.name} can not be sold below ${money(low.minPrice)} per ${low.unit}`, "error");
-    const t = billTotals(lines);
-    const cashOnBill = method.key === "cash" && t.collect > 0;
-    const tendered = cashOnBill && $("#p-tender").value !== "" ? Number($("#p-tender").value) : null;
+    // Cash: the whole bill when paid in cash, or the cash part of a split. The cash must cover it, so the till is never short.
+    const cashDue = splits ? round2(splits.filter((r) => r.method.key === "cash").reduce((s, r) => s + r.amount, 0))
+      : (method.key === "cash" && t.collect > 0 ? t.collect : 0);
+    const tendered = cashDue > 0 && $("#p-tender").value !== "" ? Number($("#p-tender").value) : null;
     if (tendered !== null && tendered < 0) return toast("Cash received cannot be negative", "error");
-    // Cash sales need the amount the customer gave, and it must cover the total. Otherwise the till would be short.
-    if (cashOnBill && tendered === null) { $("#p-tender")?.focus(); return toast("Enter the cash received from the customer", "error"); }
-    if (cashOnBill && tendered < t.collect - 0.005) { $("#p-tender")?.focus(); return toast(`Cash received is ${money(tendered)}. The total is ${money(t.collect)}.`, "error"); }
+    if (cashDue > 0 && tendered === null) { $("#p-tender")?.focus(); return toast("Enter the cash received from the customer", "error"); }
+    if (cashDue > 0 && tendered < cashDue - 0.005) { $("#p-tender")?.focus(); return toast(`Cash received is ${money(tendered)}. The cash due is ${money(cashDue)}.`, "error"); }
     // A discount above the cashier limit needs an administrator to approve it first.
     let approvalId = null;
     const storedPct = Math.ceil((t.goods.effectivePct || 0) * 100) / 100;
@@ -1027,8 +1117,8 @@ export async function render(el) {
     btn.classList.add("loading");
     try {
       const customer = customers.find((c) => c.id === st.customerId) || null;
-      const sale = await postWithVoucher(() => completeSale({ lines, billDisc: st.billDisc, method, customer, tendered, approvalId }), (r) => r.jvNo);
-      await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: method.key, services: sale.serviceCount });
+      const sale = await postWithVoucher(() => completeSale({ lines, billDisc: st.billDisc, method, customer, tendered, approvalId, splits }), (r) => r.jvNo);
+      await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: splits ? "split" : method.key, services: sale.serviceCount });
       for (const l of lines) if (!isService(l)) byId[l.id].stock = (Number(byId[l.id].stock) || 0) - l.pieces;
       Object.assign(floats, sale.floatBalances || {});
       if (st.openId) { await deleteDoc(doc(db, "openBills", st.openId)).catch(() => {}); st.openId = null; }
@@ -1153,7 +1243,7 @@ function askDiscountApproval(pct) {
 
 /* Runs the whole sale atomically: stock in pieces (FEFO batches), lowest-price check, service fees and transfers,
    invoice number, one balanced journal, customer balance. */
-async function completeSale({ lines, billDisc = null, method, customer, tendered = null, approvalId = null }) {
+async function completeSale({ lines, billDisc = null, method, customer, tendered = null, approvalId = null, splits = null }) {
   const today = todayISO();
   const productLines = lines.filter((l) => l.kind !== "service");
   const serviceLines = lines.filter((l) => l.kind === "service");
@@ -1171,6 +1261,11 @@ async function completeSale({ lines, billDisc = null, method, customer, tendered
     const counter = await tx.get(counterRef);
     const payAcc = await tx.get(doc(db, "accounts", method.account));
     if (payAcc.exists() && !isPostable(payAcc.data())) throw new Error(`The payment account for ${method.label} is ${payAcc.data().status}. Make it active in Chart of accounts first.`);
+    // A split payment posts each method to its own account; every account must be active.
+    for (const r of splits || []) {
+      const a = await tx.get(doc(db, "accounts", r.method.account));
+      if (a.exists() && !isPostable(a.data())) throw new Error(`The payment account for ${r.method.label} is ${a.data().status}. Make it active in Chart of accounts first.`);
+    }
     const seq = ((counter.exists() && counter.data().sale) || 0) + 1;
 
     const priced = [];
@@ -1252,11 +1347,13 @@ async function completeSale({ lines, billDisc = null, method, customer, tendered
     const cogsTotal = round2(cogs);
     const priceExtra = round2(priced.reduce((s, l) => s + Math.max(0, l.price - l.listPrice) * l.qty, 0));
     const invoiceNo = `${settings.invoicePrefix || "INV"}-${String(seq).padStart(6, "0")}`;
+    // Change is worked out from the cash part only (the whole bill when paid in cash).
+    const changeBase = splits ? round2(splits.filter((r) => r.method.key === "cash").reduce((s, r) => s + r.amount, 0)) : collect;
     const paid = collect >= 0 ? tendered : null;
 
     // Goods part of the entry, then each service's own balanced entry, all on the same bill.
     const journalLines = [
-      { account: method.account, debit: goods.total },
+      ...(splits ? splits.map((r) => ({ account: r.method.account, debit: r.amount })) : [{ account: method.account, debit: goods.total }]),
       { account: ACCOUNTS.SALES, credit: goods.net },
       { account: ACCOUNTS.VAT_PAYABLE, credit: goods.vat },
       { account: ACCOUNTS.COGS, debit: cogsTotal },
@@ -1275,7 +1372,8 @@ async function completeSale({ lines, billDisc = null, method, customer, tendered
     Object.entries(floatBalances).forEach(([k, b]) => tx.set(doc(db, "floats", k), { balance: b, updatedAt: serverTimestamp() }, { merge: true }));
     productWrites.forEach((w) => tx.update(w.ref, { stock: w.stock, updatedAt: serverTimestamp() }));
     batchWrites.forEach((w) => tx.update(w.ref, { remaining: w.remaining }));
-    if (method.credit) tx.update(doc(db, "customers", customer.id), { balance: increment(saleTotal) });
+    const creditAmt = splits ? round2(splits.filter((r) => r.method.credit).reduce((s, r) => s + r.amount, 0)) : (method.credit ? saleTotal : 0);
+    if (creditAmt > 0) tx.update(doc(db, "customers", customer.id), { balance: increment(creditAmt) });
     writeVoucher(tx, journalRef, journal, jvNo, "sale");
 
     const items = [
@@ -1302,8 +1400,10 @@ async function completeSale({ lines, billDisc = null, method, customer, tendered
       billDiscount: billDisc ? { name: billDisc.name || "", mode: billDisc.mode, value: Number(billDisc.value) || 0 } : null,
       net: saleNet, vat: goods.vat, total: saleTotal, cogs: cogsTotal, priceExtra,
       serviceFees: feesTotal, serviceCount: services.length, transfersIn, transfersOut, collect,
-      payment: method.key, paymentLabel: method.label,
-      tendered: paid, change: paid === null ? null : round2(paid - collect),
+      payment: splits ? "split" : method.key,
+      paymentLabel: splits ? splits.map((r) => `${r.method.label} ${money(r.amount)}`).join(" + ") : method.label,
+      payments: splits ? splits.map((r) => ({ key: r.method.key, label: r.method.label, amount: r.amount })) : null,
+      tendered: paid, change: paid === null ? null : round2(paid - changeBase),
       cashier: session.name, cashierUid: session.uid, journalId: journalRef.id,
       paymentAccount: method.account, approvalId: approvalId || null,
       createdAt: serverTimestamp(),
@@ -1320,8 +1420,8 @@ async function completeSale({ lines, billDisc = null, method, customer, tendered
           service: v.transfer ? `${v.serviceType === "cashout" ? "Cash-out" : v.serviceType === "cashin" ? "Cash-in" : "Recharge"} amount ${v.transfer}${v.phone ? ` · ${v.phone}` : ""}` : "",
         })),
       ],
-      paymentLabel: method.label, customerName: customer?.name || "Walk-in", floatBalances,
-      tendered: paid, change: paid === null ? null : round2(paid - collect), priceExtra,
+      paymentLabel: splits ? splits.map((r) => `${r.method.label} ${money(r.amount)}`).join(" + ") : method.label, customerName: customer?.name || "Walk-in", floatBalances,
+      tendered: paid, change: paid === null ? null : round2(paid - changeBase), priceExtra,
     };
   });
 }
