@@ -1949,3 +1949,14 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .splash .hero { zoom: 1.25; }
   .splash.style-dots .splash-core { min-width: 360px; }
 }
+
+/* Top bar clock: a clear chip on the right, shown on phones as well. */
+.topbar .clock {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text, inherit);
+  font-size: 15px; font-weight: 700; letter-spacing: .3px; white-space: nowrap;
+}
+.topbar .clock::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 3px rgba(20, 184, 166, .2); }
+@media (max-width: 900px) {
+  .topbar .clock { font-size: 13px; padding: 6px 9px; }
+}
