@@ -2671,3 +2671,35 @@ kbd { font: 700 11px/1 var(--app-font, inherit); padding: 4px 6px; border-radius
   .pv .product-grid.is-list .product-card { grid-template-columns: 44px minmax(0, 1fr) auto; }
   .pv .product-grid.is-list .pc-sub, .pv .product-grid.is-list .pc-exp, .pv .product-grid.is-list .pc-add { display: none; }
 }
+
+/* Sell screen v4: category rail, action bar with nine buttons, wallet tiles (per the latest reference) */
+.pv .pv-body { grid-template-columns: 190px minmax(0, 1fr) 380px; }
+.pv-rail { min-height: 0; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--pv-line); border-radius: 14px; padding: 8px; overflow: hidden; }
+.pv-rail .chips { flex-direction: column; overflow-y: auto; overflow-x: hidden; gap: 4px; }
+.pv-rail .chip { width: 100%; height: 42px; justify-content: space-between; border-radius: 12px; border-color: transparent; background: transparent; font-size: 13.5px; }
+.pv-rail .chip:hover:not(.active) { background: #f1f5f9; }
+.pv-rail .chip.active { background: var(--pv-teal); color: #fff; }
+.pv-cats { justify-content: space-between; }
+.pv-cats .sub-chips { flex: 1; }
+.pv .pt-cash { background: #1e3a8a; }
+.pv .pt-bkash { background: #e2136e; }
+.pv .pt-nagad { background: #f26522; }
+.pv .pt-alt { background: #475569; }
+.pv .pay-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pv .pay-now { background: linear-gradient(90deg, #0d9488, #0f766e); border-color: #0d9488; }
+.pv-dock { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+.pv .qa { flex-direction: column; gap: 3px; padding: 6px 4px; font-size: 12px; height: 58px; }
+.pv .qa span { line-height: 1.1; text-align: center; }
+.pv .qa.qa-sep { margin-left: 8px; }
+.pv .qa.primary { background: #0d9488; border-color: #0d9488; }
+.pv .qa svg { width: 20px; height: 20px; }
+@media (max-width: 1100px) {
+  .pv .pv-body { grid-template-columns: minmax(0, 1fr); }
+  .pv-rail { flex-direction: row; overflow-x: auto; }
+  .pv-rail .chips { flex-direction: row; }
+  .pv-rail .chip { width: auto; }
+}
+@media (max-width: 760px) {
+  .pv-dock { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .pv .qa.qa-sep { margin-left: 0; }
+}

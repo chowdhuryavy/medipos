@@ -19,6 +19,7 @@ const QA_ICONS = {
   discount: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M19 5L5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
   cash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>',
   card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+  other: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
   charge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>',
 };
 const LIST_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>';
@@ -97,15 +98,15 @@ export async function render(el) {
       </header>
 
       <div class="pv-body">
+        <aside class="pv-rail" aria-label="Categories"><div class="chips" id="p-cats" role="tablist"></div></aside>
         <section class="pv-left" aria-label="Product catalogue">
           <div class="pv-cats">
-            <div class="chips" id="p-cats" role="tablist"></div>
+            <div class="chips sub-chips" id="p-subs" aria-label="Sub-groups"></div>
             <div class="view-toggle" role="group" aria-label="View">
               <button type="button" data-view="grid" aria-label="Grid view" title="Grid">${GRID_ICON}</button>
               <button type="button" data-view="list" aria-label="List view" title="List">${LIST_ICON}</button>
             </div>
           </div>
-          <div class="chips sub-chips" id="p-subs" aria-label="Sub-groups"></div>
           ${settings.posServiceButtons ? `<div class="service-bar" role="group" aria-label="Services">
             <button class="svc-btn" data-svc="recharge">${icon("plus")}<span>Mobile recharge</span></button>
             <button class="svc-btn" data-svc="cashin">${icon("plus")}<span>Wallet cash-in</span></button>
@@ -131,11 +132,15 @@ export async function render(el) {
           <div class="product-grid" id="p-grid"></div>
           <div class="more-row" id="p-more-row" hidden><button type="button" class="btn ghost" id="p-more"></button></div>
           <nav class="pv-dock" id="p-actions" aria-label="Quick actions">
+            <button type="button" class="qa scan-btn" data-scan-into="#p-search" data-scan-enter>${icon("search")}<span>Scan barcode</span></button>
             <button type="button" class="qa" data-qa="search">${QA_ICONS.search}<span>Search</span><kbd>F2</kbd></button>
-            <button type="button" class="qa" data-qa="hold">${QA_ICONS.hold}<span>Open bill</span><kbd>F8</kbd></button>
-            <button type="button" class="qa" data-qa="bills">${QA_ICONS.bills}<span>Bills</span></button>
+            <button type="button" class="qa" data-qa="hold">${QA_ICONS.hold}<span>Hold bill</span><kbd>F8</kbd></button>
+            <button type="button" class="qa" data-qa="bills">${QA_ICONS.bills}<span>Retrieve bill</span></button>
             <button type="button" class="qa" data-qa="discount">${QA_ICONS.discount}<span>Discount</span><kbd>F6</kbd></button>
-            <button type="button" class="qa primary" data-qa="charge">${QA_ICONS.charge}<span>Pay</span><kbd>F4</kbd></button>
+            <button type="button" class="qa qa-sep" data-qa="cash">${QA_ICONS.cash}<span>Cash</span><kbd>F9</kbd></button>
+            <button type="button" class="qa" data-qa="card">${QA_ICONS.card}<span>Card</span><kbd>F10</kbd></button>
+            <button type="button" class="qa" data-qa="other">${QA_ICONS.other}<span>Other</span></button>
+            <button type="button" class="qa primary" data-qa="charge">${QA_ICONS.charge}<span>Complete</span><kbd>F4</kbd></button>
           </nav>
         </section>
 
@@ -313,7 +318,7 @@ export async function render(el) {
       <span class="pc-sub">${esc([p.sku, p.category || "General", p.subGroup].filter(Boolean).join(" · "))}</span>
       <span class="pc-foot"><strong>${money(p.salePrice)}</strong><span class="badge ${out ? "danger" : low ? "warn" : "ok"}">${out ? "Out of stock" : `${low ? "Low · " : ""}${stock} ${unit}`}</span></span>
       ${exp ? `<span class="pc-exp ${exp <= soonBy() ? "soon" : ""}">Exp ${esc(exp)}</span>` : ""}
-      <span class="pc-add">${icon("plus")}<span>Add</span></span>
+      <span class="pc-add">${icon("plus")}<span>Add to Bill</span></span>
     </button>`;
   }
 
@@ -386,7 +391,8 @@ export async function render(el) {
     $("#p-tiles").innerHTML = methods.filter((m) => !m.credit || creditOk).map((m) => {
       const isCash = m.key === cashKey();
       const isCard = !isCash && m.key === cardKey();
-      return `<button type="button" class="pt ${isCash ? "pt-cash" : isCard ? "pt-card" : "pt-alt"} ${m.key === st.pay ? "is-on" : ""}" data-pay="${esc(m.key)}" aria-pressed="${m.key === st.pay}">
+      const wallet = /bkash/i.test(m.label) ? "pt-bkash" : /nagad/i.test(m.label) ? "pt-nagad" : "pt-alt";
+      return `<button type="button" class="pt ${isCash ? "pt-cash" : isCard ? "pt-card" : wallet} ${m.key === st.pay ? "is-on" : ""}" data-pay="${esc(m.key)}" aria-pressed="${m.key === st.pay}">
         <span>${esc(m.label)}</span>${isCash ? "<kbd>F9</kbd>" : isCard ? "<kbd>F10</kbd>" : ""}</button>`;
     }).join("");
     $("#p-tiles").hidden = !lines.length;
@@ -1047,7 +1053,7 @@ export async function render(el) {
   const onKey = (e) => {
     if (!el.isConnected) return document.removeEventListener("keydown", onKey);
     if (document.getElementById("modal-root")?.children.length) return;
-    const act = { F2: () => $("#p-search").focus(), F4: () => $("#p-charge").click(), F6: openDiscount,
+    const act = { F2: () => $("#p-search").focus(), F3: () => $("#p-search").focus(), F4: () => $("#p-charge").click(), F6: openDiscount,
       F8: () => $("#p-hold").click(), F9: () => pickPay(cashKey()), F10: () => pickPay(cardKey()) }[e.key];
     if (!act) return;
     e.preventDefault();
@@ -1063,7 +1069,8 @@ export async function render(el) {
     const b = e.target.closest("[data-qa]");
     if (!b) return;
     const act = { search: () => $("#p-search").focus(), hold: () => $("#p-hold").click(), bills: () => $("#p-held").click(),
-      discount: openDiscount, cash: () => pickPay(cashKey()), card: () => pickPay(cardKey()), charge: () => $("#p-charge").click() }[b.dataset.qa];
+      discount: openDiscount, cash: () => pickPay(cashKey()), card: () => pickPay(cardKey()), charge: () => $("#p-charge").click(),
+      other: () => pickPay(methods.find((m) => !m.credit && m.key !== cashKey() && m.key !== cardKey())?.key) }[b.dataset.qa];
     act?.();
   });
   $("#p-sort").addEventListener("change", (e) => { pageView.sort = e.target.value; paintGrid(); });
