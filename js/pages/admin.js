@@ -32,6 +32,7 @@ const TABS = [
   ["health", "App health", "shield"],
   ["emailtest", "Email test", "send"],
   ["lists", "Lists & payments", "accounting"],
+  ["discounts", "Discounts", "accounting"],
   ["roles", "Role access", "shield"],
   ["branding", "Branding & email", "image"],
   ["reports", "Scheduled reports", "reports"],
@@ -52,7 +53,7 @@ export async function render(el) {
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
-  const views = { users: viewUsers, locked: viewLocked, settings: viewSettings, versions: viewVersions, health: viewHealth, emailtest: viewEmailTest, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit, buttons: viewButtonStyle };
+  const views = { users: viewUsers, locked: viewLocked, settings: viewSettings, versions: viewVersions, health: viewHealth, emailtest: viewEmailTest, lists: viewLists, discounts: viewDiscounts, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit, buttons: viewButtonStyle };
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
@@ -535,6 +536,61 @@ async function applyListChanges({ orig, state, ids }) {
     await batch.commit();
   }
   return ops.length;
+}
+
+/* ───────── Discounts the Sell screen offers ───────── */
+async function viewDiscounts(body) {
+  const snap = await getDocs(collection(db, "discounts")).catch(() => ({ docs: [] }));
+  const list = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const valueText = (d) => (d.mode === "pct" ? `${d.value}%` : money(d.value));
+  body.innerHTML = `
+    <section class="card">
+      <header class="card-head"><h3>Discounts</h3><button class="btn primary sm" id="dc-new">New discount</button></header>
+      <p class="muted small">Cashiers pick these on the Sell screen. A whole-bill discount applies to the bill; an item discount applies to one product line. A percentage or amount can be typed in on the screen too. Anything above the cashier limit in Shop &amp; rules still needs an administrator's approval.</p>
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Name</th><th>Applies to</th><th>Type</th><th class="r">Value</th><th>Status</th><th></th></tr></thead>
+        <tbody>${list.length ? list.map((d) => `<tr>
+          <td>${esc(d.name)}</td><td>${d.scope === "item" ? "One item" : "Whole bill"}</td><td>${d.mode === "pct" ? "Percentage" : "Amount"}</td>
+          <td class="r">${esc(valueText(d))}</td><td>${d.active === false ? "Off" : "On"}</td>
+          <td class="r"><button class="btn ghost sm" data-dc-edit="${esc(d.id)}">Edit</button></td></tr>`).join("")
+          : `<tr><td colspan="6" class="muted">No discounts yet.</td></tr>`}</tbody>
+      </table></div>
+    </section>`;
+
+  const edit = (d) => openModal(d ? "Edit discount" : "New discount", `
+    <form id="dc-form" class="form-grid">
+      <label class="span-2">Name<input name="name" required maxlength="40" value="${esc(d?.name || "")}" /></label>
+      <label>Applies to<select name="scope">
+        <option value="bill" ${d?.scope !== "item" ? "selected" : ""}>Whole bill</option>
+        <option value="item" ${d?.scope === "item" ? "selected" : ""}>One item</option></select></label>
+      <label>Type<select name="mode">
+        <option value="pct" ${d?.mode !== "amt" ? "selected" : ""}>Percentage</option>
+        <option value="amt" ${d?.mode === "amt" ? "selected" : ""}>Amount</option></select></label>
+      <label>Value<input name="value" type="number" inputmode="decimal" min="0.01" step="0.01" required value="${d?.value ?? ""}" /></label>
+      <label class="check"><input name="active" type="checkbox" ${d?.active !== false ? "checked" : ""} /> Active</label>
+      <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+    </form>`, (mb, close) => {
+    mb.querySelector("[data-cancel]").addEventListener("click", close);
+    onSubmit(mb.querySelector("#dc-form"), async (e) => {
+      const f = new FormData(e.target);
+      const name = String(f.get("name") || "").trim();
+      const mode = f.get("mode") === "amt" ? "amt" : "pct";
+      const value = Math.round((Number(f.get("value")) || 0) * 100) / 100;
+      if (!name) return toast("Name the discount", "error");
+      if (!(value > 0)) return toast("Enter a value above 0", "error");
+      if (mode === "pct" && value > 100) return toast("A percentage cannot be above 100", "error");
+      const scope = f.get("scope") === "item" ? "item" : "bill";
+      const data = { name, scope, mode, value, active: f.get("active") === "on", updatedAt: serverTimestamp() };
+      if (d) await setDoc(doc(db, "discounts", d.id), data, { merge: true });
+      else await addDoc(collection(db, "discounts"), { ...data, createdAt: serverTimestamp() });
+      await audit(d ? "discount.update" : "discount.create", { name, value, mode, scope });
+      close();
+      toast("Discount saved", "success");
+      await viewDiscounts(body);
+    });
+  });
+  body.querySelector("#dc-new").addEventListener("click", () => edit(null));
+  body.querySelectorAll("[data-dc-edit]").forEach((b) => b.addEventListener("click", () => edit(list.find((x) => x.id === b.dataset.dcEdit))));
 }
 
 async function viewLists(body) {

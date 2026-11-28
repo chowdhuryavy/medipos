@@ -337,6 +337,12 @@ service cloud.firestore {
     }
 
     // Everything else is closed.
+    // Discounts the administrator creates: every signed-in staff member reads them, only administrators change them.
+    match /discounts/{id} {
+      allow read: if isActive();
+      allow create, update, delete: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
