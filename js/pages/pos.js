@@ -75,6 +75,7 @@ export async function render(el) {
           <button class="btn ghost sm" id="p-clear" title="Empty this bill">${icon("x")}<span>Clear</span></button>
           <span class="kbd-hint">F2 search · F4 charge · F8 hold</span>
         </div>
+        <div class="bill-body">
         <label>Customer
           <select id="p-customer">
             <option value="">Walk-in customer</option>
@@ -86,6 +87,8 @@ export async function render(el) {
         <p class="muted small price-rule">${allowChange
           ? "You can raise a price. It can never go below the lowest price shown. Service fees can be changed."
           : "Prices are fixed by the shop. Ask an administrator to change them."}</p>
+        </div>
+        <div class="bill-foot">
         <div class="totals" id="p-totals"></div>
         <div class="form-row" id="p-payrow">
           <label>Discount %<input id="p-disc" type="number" inputmode="decimal" min="0" max="100" step="0.5" value="0" /></label>
@@ -103,6 +106,7 @@ export async function render(el) {
         <div class="quick-cash" id="p-quick" hidden></div>
         <div class="change-due" id="p-change" aria-live="polite"></div>
         <button class="btn primary block xl" id="p-charge">${icon("check")}<span>Charge</span></button>
+        </div>
       </aside>
     </div>
     <div class="mobile-charge" id="p-mobile"><span id="p-mobile-total"></span><button class="btn primary" id="p-mobile-btn">Review & charge</button></div>`;

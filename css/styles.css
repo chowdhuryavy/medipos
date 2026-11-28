@@ -2194,3 +2194,21 @@ html[data-lang="bn"] body { line-height: 1.6; }
 
 /* Busy primary buttons (Create product, Save, Approve…) show the spinner. The shine on primary buttons must not replace it. */
 .btn.primary.loading::after { content: ""; position: static; left: auto; top: auto; bottom: auto; width: 14px; height: 14px; flex: none; background: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; }
+
+/* ───────── Sell screen: a bill line that fits a narrow panel, and a bill whose total and Charge button stay in view ───────── */
+.bill-line { grid-template-columns: auto minmax(90px, 1fr) auto auto; gap: 8px 10px; }
+.bill-line > .bl-info { grid-column: 1 / 4; grid-row: 1; }
+.bill-line > .hover-danger { grid-column: 4; grid-row: 1; justify-self: end; }
+.bill-line > .qty { grid-column: 1; grid-row: 2; }
+.bill-line > .bl-price { grid-column: 2; grid-row: 2; min-width: 0; }
+.bill-line > .bl-total { grid-column: 3 / 5; grid-row: 2; justify-self: end; white-space: nowrap; }
+.bill-line .bl-info strong { overflow-wrap: anywhere; }
+.bill-line .bl-info small { overflow-wrap: anywhere; }
+.bill-body { display: grid; gap: 12px; min-height: 0; }
+.bill-foot { display: grid; gap: 10px; }
+@media (min-width: 901px) {
+  .pos-bill { display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 100px); }
+  .pos-bill .bill-body { flex: 1 1 auto; overflow-y: auto; padding-right: 4px; align-content: start; }
+  .pos-bill .bill-foot { flex: none; padding-top: 10px; border-top: 1px dashed var(--border); background: var(--surface); }
+  .pos-bill .bill-lines { max-height: none; }
+}
