@@ -79,6 +79,15 @@ function showSetup() {
     </section>`;
 }
 
+// Counts a wrong password on the server. After 5, the account is locked until an administrator unlocks it.
+async function countWrongPassword(email) {
+  try {
+    const out = await post("/api/auth/login-failed", { email });
+    if (out.locked) return "This account is locked after too many wrong passwords. Ask an administrator to unlock it.";
+  } catch { /* offline: show the normal message */ }
+  return "Wrong email or password.";
+}
+
 function friendlyError(err) {
   const map = {
     "auth/invalid-credential": "Wrong email or password.",
@@ -167,7 +176,8 @@ function showLogin(message = "", tone = "error") {
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err) {
-      showLogin(friendlyError(err));
+      const wrong = ["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found"].includes(err?.code);
+      showLogin(wrong ? await countWrongPassword(email) : friendlyError(err));
     }
   });
 }
@@ -716,6 +726,11 @@ async function handleAuthChange(user) {
       await signOut(auth);
       return;
     }
+    if (p.lockedAt) {
+      pendingMessage = "This account is locked after too many wrong passwords. Ask an administrator to unlock it.";
+      await signOut(auth);
+      return;
+    }
     // Load the saved role list first, so roles the admin created (not only the built-in ones) are recognised.
     await withTimeout(loadSettings()).catch((err) => {
       if (err.timeout) throw err; // a slow connection is not a permissions problem
@@ -726,6 +741,8 @@ async function handleAuthChange(user) {
       await signOut(auth);
       return;
     }
+    // A correct sign-in clears any wrong-password count from earlier attempts.
+    if ((p.failedLogins || 0) > 0) post("/api/auth/login-ok", {}, { secure: true }).catch(() => { /* try again next sign-in */ });
     // Temporary password: nothing else is available until the user sets their own.
     if (p.mustChangePassword === true) {
       showForcePasswordChange(user);

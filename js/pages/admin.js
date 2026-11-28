@@ -4,7 +4,7 @@ import { checkForUpdate } from "../updates.js";
 
 import {
   auth, db, initializeApp, deleteApp, getAuth, createUserWithEmailAndPassword, signOut,
-  sendPasswordResetEmail, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, query, where, orderBy, limit, serverTimestamp, writeBatch,
+  sendPasswordResetEmail, collection, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteField,
 } from "../firebase.js";
 import { firebaseConfig } from "../config.js";
 import { nextExpenseCode, expenseCategories } from "../expense-categories.js";
@@ -26,6 +26,7 @@ import { REPORTS } from "../report-tables.js";
 
 const TABS = [
   ["users", "Staff", "userPlus"],
+  ["locked", "Locked accounts", "lock"],
   ["settings", "Shop & rules", "building"],
   ["versions", "App version", "sync"],
   ["health", "App health", "shield"],
@@ -51,7 +52,7 @@ export async function render(el) {
     </div>
     <div id="adm-body"></div>`;
   const body = el.querySelector("#adm-body");
-  const views = { users: viewUsers, settings: viewSettings, versions: viewVersions, health: viewHealth, emailtest: viewEmailTest, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit, buttons: viewButtonStyle };
+  const views = { users: viewUsers, locked: viewLocked, settings: viewSettings, versions: viewVersions, health: viewHealth, emailtest: viewEmailTest, lists: viewLists, roles: viewRoles, branding: viewBranding, reports: viewScheduledReports, backup: viewBackup, integrations: viewIntegrations, audit: viewAudit, buttons: viewButtonStyle };
   const go = async (tab) => {
     el.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     body.innerHTML = `<div class="skeleton"></div>`;
@@ -126,6 +127,45 @@ async function renderStaffCard(host, reload) {
       reload();
     }
   });
+}
+
+// Staff locked after 5 wrong passwords. An administrator unlocks them here.
+async function viewLocked(body) {
+  const snap = await getDocs(collection(db, "users"));
+  const locked = [];
+  snap.forEach((d) => { const p = d.data(); if (p.lockedAt) locked.push({ uid: d.id, ...p }); });
+  const when = (ms) => (ms ? new Date(ms).toLocaleString() : "");
+  body.innerHTML = `
+    <section class="card">
+      <div class="toolbar">
+        <div>
+          <h3>Locked accounts</h3>
+          <p class="muted small">A staff member is locked after 5 wrong passwords. They cannot sign in or read data until you unlock them here. Unlocking also clears the wrong-password count.</p>
+        </div>
+      </div>
+      ${locked.length ? `
+      <div class="table-wrap"><table class="mx-table">
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Locked at</th><th class="c" aria-label="Actions"></th></tr></thead>
+        <tbody>${locked.map((u) => `
+          <tr>
+            <td><strong>${esc(u.name || "Staff")}</strong></td>
+            <td class="small">${esc(u.email || "")}</td>
+            <td class="small">${esc(roles[u.role]?.label || u.role || "")}</td>
+            <td class="small muted">${esc(when(u.lockedAt))}</td>
+            <td class="c"><button class="btn primary sm" type="button" data-unlock="${esc(u.uid)}" data-name="${esc(u.name || u.email || "Staff")}">${icon("check")}<span>Unlock</span></button></td>
+          </tr>`).join("")}</tbody>
+      </table></div>` : `<p class="muted">No locked accounts.</p>`}
+    </section>`;
+  body.querySelectorAll("[data-unlock]").forEach((btn) => btn.addEventListener("click", async () => {
+    await withBusy(btn, async () => {
+      await updateDoc(doc(db, "users", btn.dataset.unlock), {
+        active: true, failedLogins: 0, lockedAt: deleteField(), lockedReason: deleteField(),
+      });
+      await audit("user.unlock", { uid: btn.dataset.unlock, name: btn.dataset.name });
+      toast(`${btn.dataset.name} is unlocked`, "success");
+      await viewLocked(body);
+    });
+  }));
 }
 
 async function viewUsers(body) {
