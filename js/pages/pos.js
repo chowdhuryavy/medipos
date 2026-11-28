@@ -350,36 +350,64 @@ export async function render(el) {
   const discountText = (d) => !d ? "" : d.mode === "pct" ? `${d.value}%` : money(d.value);
   function discountControls(scope, current) {
     const list = presets.filter((d) => d.scope === scope);
+    const applied = current
+      ? `<span class="disc-now"><b>${esc(current.name || "Discount")}</b> · ${esc(discountText(current))}</span>`
+      : `<span class="disc-now muted">No discount applied</span>`;
     return `
       <div class="disc-box">
-        <div class="disc-presets">${list.length ? list.map((d) => `<button type="button" class="chip ${current?.presetId === d.id ? "active" : ""}" data-preset="${esc(d.id)}">${esc(d.name)} · ${esc(discountText(d))}</button>`).join("")
-          : `<span class="muted small">No ${scope === "item" ? "item" : "bill"} discounts yet. The administrator creates them.</span>`}</div>
-        <div class="disc-open">
-          <label>Open %<input type="number" inputmode="decimal" min="0" max="100" step="0.5" data-open-pct placeholder="%" /></label>
-          <label>Open amount<input type="number" inputmode="decimal" min="0" step="0.01" data-open-amt placeholder="amount" /></label>
+        <div class="disc-section">
+          <span class="field-label">Saved discounts</span>
+          <div class="disc-presets">${list.length ? list.map((d) => `<button type="button" class="chip ${current?.presetId === d.id ? "active" : ""}" data-preset="${esc(d.id)}">${esc(d.name)} · ${esc(discountText(d))}</button>`).join("")
+            : `<span class="muted small">No ${scope === "item" ? "item" : "bill"} discounts yet. The administrator creates them.</span>`}</div>
+        </div>
+        <div class="disc-section">
+          <span class="field-label">Custom</span>
+          <div class="disc-open">
+            <button type="button" class="btn ghost" data-open-kind="pct">Open %</button>
+            <button type="button" class="btn ghost" data-open-kind="amt">Open amount</button>
+          </div>
         </div>
         <div class="disc-actions">
-          <span class="disc-now">${current ? `Applied: ${esc(current.name || "Discount")} · ${esc(discountText(current))}` : "No discount"}</span>
-          <button type="button" class="btn ghost sm" data-disc-clear>Clear</button>
+          ${applied}
+          <button type="button" class="btn ghost sm" data-disc-clear ${current ? "" : "disabled"}>Clear</button>
         </div>
       </div>`;
   }
-  function bindDiscountControls(root, onSet) {
+  // Open % and open amount ask for the value in a small dialog, and only when the button is pressed.
+  function openCustomDiscount(kind, onSet, afterwards) {
+    const isPct = kind === "pct";
+    openModal(isPct ? "Open % discount" : "Open amount discount", `
+      <form id="od-form" class="item-adjust">
+        <label>${isPct ? "Percentage off" : "Amount off"}
+          <input id="od-val" type="number" inputmode="decimal" min="0" ${isPct ? 'max="100" step="0.5"' : 'step="0.01"'} placeholder="${isPct ? "e.g. 10" : "e.g. 50"}" required />
+        </label>
+        <p class="muted small">${isPct ? "Taken off the price as a percentage, from 0 to 100." : "Taken off the price as a fixed amount."}</p>
+        <div class="form-actions">
+          <button type="button" class="btn ghost" data-od-cancel>Cancel</button>
+          <button type="submit" class="btn primary">Apply discount</button>
+        </div>
+      </form>`, (body, close) => {
+        const input = body.querySelector("#od-val");
+        const done = () => { close(); if (afterwards) afterwards(); };
+        body.querySelector("[data-od-cancel]").addEventListener("click", done);
+        body.querySelector("#od-form").addEventListener("submit", (e) => {
+          e.preventDefault();
+          const v = Number(input.value);
+          if (isPct && !(v > 0 && v <= 100)) return toast("Enter a percentage between 0 and 100", "error");
+          if (!isPct && !(v > 0)) return toast("Enter an amount above 0", "error");
+          onSet({ name: isPct ? "Open %" : "Open amount", mode: isPct ? "pct" : "amt", value: isPct ? v : round2(v) });
+          done();
+        });
+        setTimeout(() => input.focus(), 30);
+      }, { center: true });
+  }
+  function bindDiscountControls(root, onSet, afterwards) {
     root.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
       const d = presets.find((x) => x.id === b.dataset.preset);
       if (d) onSet({ presetId: d.id, name: d.name, mode: d.mode, value: Number(d.value) });
     }));
     root.querySelector("[data-disc-clear]").addEventListener("click", () => onSet(null));
-    root.querySelector("[data-open-pct]").addEventListener("change", (e) => {
-      const v = Number(e.target.value);
-      if (!(v > 0 && v <= 100)) return toast("Enter a percentage between 0 and 100", "error");
-      onSet({ name: "Open %", mode: "pct", value: v });
-    });
-    root.querySelector("[data-open-amt]").addEventListener("change", (e) => {
-      const v = Number(e.target.value);
-      if (!(v > 0)) return toast("Enter an amount above 0", "error");
-      onSet({ name: "Open amount", mode: "amt", value: round2(v) });
-    });
+    root.querySelectorAll("[data-open-kind]").forEach((b) => b.addEventListener("click", () => openCustomDiscount(b.dataset.openKind, onSet, afterwards)));
   }
   // Item discounts: one row per product on the bill; each opens its own discount dialog.
   function paintItemDiscounts() {
@@ -445,7 +473,7 @@ export async function render(el) {
         body.querySelector("#ia-dec").addEventListener("click", () => { change(cur, -1); paintBill(); draw(); });
         body.querySelector("#ia-inc").addEventListener("click", () => { change(cur, 1); paintBill(); draw(); });
         body.querySelector("#ia-price").addEventListener("change", (e) => { setPrice(cur, e.target.value); paintBill(); draw(); });
-        bindDiscountControls(body.querySelector(".disc-box"), (d) => { line.disc = d; paintBill(); draw(); });
+        bindDiscountControls(body.querySelector(".disc-box"), (d) => { const l = st.cart.get(cur); if (l) l.disc = d; paintBill(); }, () => openItem(cur));
         body.querySelector("#ia-remove").addEventListener("click", () => { removeLine(cur); close(); });
         body.querySelector("#ia-done").addEventListener("click", close);
       };
