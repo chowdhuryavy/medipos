@@ -11,7 +11,7 @@ try {
   /* storage unavailable or corrupt: use defaults */
 }
 // Show the cached shop name and logo on the tab straight away, before the network answers.
-document.title = branding.shopName || branding.appName || "MediPOS";
+if (branding.shopName) document.title = branding.shopName;
 
 export async function loadBranding() {
   try {
@@ -30,7 +30,7 @@ export async function loadBranding() {
   }
   // The shop name from Settings is the name shown everywhere.
   if (branding.shopName) branding.appName = branding.shopName;
-  document.title = branding.appName || "MediPOS";
+  if (branding.shopName) document.title = branding.shopName;
   applyBrandIcons();
   return branding;
 }
