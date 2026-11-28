@@ -791,7 +791,8 @@ async function handleAuthChange(user) {
     buildShell();
     startIdleLogout((message) => { pendingMessage = message; });
     // A reload returns to the same page. Any other sign-in opens the dashboard.
-    const back = takeReturnPage().replace(/^#\/?/, "");
+    // A new tab or a link to a page opens that page, if this person may see it.
+    const back = (takeReturnPage() || location.hash).replace(/^#\/?/, "");
     const home = back && effectivePages().includes(back) ? back : (can("dashboard") ? "dashboard" : effectivePages()[0]);
     if (location.hash !== `#/${home}`) location.hash = `#/${home}`;
     else route();

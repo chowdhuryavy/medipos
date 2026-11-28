@@ -23,4 +23,5 @@ setTimeout(() => {
 
 // Load the app. A failure to load it shows its real message on this screen.
 import "./required-marks.js";
+import "./session-tabs.js";
 import("./app.js").catch(showBootError);
