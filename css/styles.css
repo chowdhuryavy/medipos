@@ -1750,3 +1750,11 @@ html[data-lang="bn"] body { line-height: 1.6; }
   .login-screen.has-side .login-card .btn.primary.xl:hover:not(:disabled) { filter: brightness(1.05); }
   .login-screen.has-side .login-card .link-btn { color: #0f766e; }
 }
+
+/* Loading screen on desktop: the logo circle itself was fixed at 112px, so it stayed small */
+@media (min-width: 901px) {
+  .splash .round-logo { width: 220px; height: 220px; }
+  .splash .round-logo .brand-logo { width: 74%; }
+  .splash .round-logo .brand-mark { font-size: 0; }
+  .splash .round-logo .brand-mark .ico { width: 96px; height: 96px; }
+}
