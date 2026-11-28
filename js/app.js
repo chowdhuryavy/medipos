@@ -755,6 +755,7 @@ async function handleAuthChange(user) {
       return;
     }
     if (p.requireOtp === true && !(await withTimeout(codePassed(user)))) return showSignInCode(user);
+    const splashShownAt = Date.now();
     showSplash(root, "Loading your workspace…");
     const rolesExist = await withTimeout(loadSettings());
     if (session.role === "admin") await syncPublicBranding();
@@ -764,6 +765,8 @@ async function handleAuthChange(user) {
       await loadSettings();
     }
     Object.assign(session, { uid: user.uid, name: p.name || user.email, email: user.email, role: p.role, access: p.access || null });
+    // Keep the loading scene on screen long enough to be seen, even on a fast connection.
+    await new Promise((r) => setTimeout(r, Math.max(0, 2200 - (Date.now() - splashShownAt))));
     buildShell();
     startIdleLogout((message) => { pendingMessage = message; });
     // A reload returns to the same page. Any other sign-in opens the dashboard.
