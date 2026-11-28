@@ -17,6 +17,7 @@ import "./scanner.js";
 const PAGES = {
   dashboard: "Dashboard",
   pos: "Sell",
+  bills: "Bills",
   shift: "Cash shift",
   import: "Import products",
   activity: "Staff activity",
@@ -31,7 +32,7 @@ const PAGES = {
 };
 const PAGE_TITLE = { ...PAGES, pos: "Point of Sale", partners: "Customers & Suppliers", admin: "Administration" };
 const PAGE_ICON = {
-  dashboard: "dashboard", pos: "cart", inventory: "inventory", purchasing: "purchase",
+  dashboard: "dashboard", pos: "cart", bills: "cart", inventory: "inventory", purchasing: "purchase",
   partners: "partners", accounting: "accounting", reports: "reports", returns: "cart", admin: "admin",
   shift: "accounting", import: "inventory", prescriptions: "reports", activity: "partners",
 };
@@ -444,7 +445,7 @@ function navItems() {
 
 // Sidebar sections: pages are grouped by what people do with them. Pages not listed here go under "More".
 const NAV_GROUPS = [
-  ["Sell", ["dashboard", "pos", "shift", "prescriptions"]],
+  ["Sell", ["dashboard", "pos", "bills", "shift", "prescriptions"]],
   ["Stock & parties", ["inventory", "import", "purchasing", "partners"]],
   ["Money & reports", ["accounting", "reports"]],
 ];

@@ -1,5 +1,5 @@
 import { reserveJv, writeVoucher, postWithVoucher } from "../journal.js";
-import { db, collection, doc, getDocs, query, where, orderBy, limit, runTransaction, serverTimestamp, increment } from "../firebase.js";
+import { db, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, limit, runTransaction, serverTimestamp, increment } from "../firebase.js";
 import { post } from "../api.js";
 import { onAction, onSubmit, isPostable } from "../core.js";
 import { printReceipt } from "../print.js";
@@ -47,7 +47,7 @@ export async function render(el) {
     pay: methods.find((m) => !m.credit)?.key || methods[0]?.key || "cash",
     customerId: "",
     cart: new Map(), // product lines: "productId|unitKey"; service lines: "svc|n"
-    holds: [],
+    openId: null, // the open bill this cart was loaded from, if any
     svcSeq: 0,
   };
 
@@ -74,9 +74,9 @@ export async function render(el) {
         <header class="card-head"><h3>${icon("cart")} Current bill</h3><span class="badge" id="p-count">0 items</span></header>
         <p class="bill-meta muted small">${esc(session.name || "")} · ${esc(todayISO())}</p>
         <div class="bill-actions">
-          <button class="btn ghost sm" id="p-hold" title="Hold this bill (F8)">${icon("pause")}<span>Hold</span></button>
-          <button class="btn ghost sm" id="p-held" title="Resume a held bill">${icon("refresh")}<span>Held <b id="p-held-n">0</b></span></button>
-          <button class="btn ghost sm" id="p-clear" title="Empty this bill">${icon("x")}<span>Clear</span></button>
+          <button class="btn ghost sm" id="p-hold" title="Keep this bill open to finish later (F8)">${icon("pause")}<span>Open bill</span></button>
+          <button class="btn ghost sm" id="p-held" title="Open bills, closed bills and voids">${icon("refresh")}<span>Bills</span></button>
+          <button class="btn ghost sm" id="p-clear" title="Void this bill with a reason">${icon("x")}<span>Void bill</span></button>
           <span class="kbd-hint">F2 search · F4 charge · F8 hold</span>
         </div>
         <div class="bill-body">
@@ -293,7 +293,6 @@ export async function render(el) {
       $("#p-change").textContent = "";
       $("#p-change").className = "change-due";
     }
-    $("#p-held-n").textContent = st.holds.length;
 
     // Payment methods as tap chips (the hidden select keeps the value for the rest of the screen).
     $("#p-paychips").innerHTML = methods.filter((m) => !m.credit || creditOk).map((m) =>
@@ -461,7 +460,9 @@ export async function render(el) {
   }
 
   function removeLine(key) {
+    const l = st.cart.get(key);
     st.cart.delete(key);
+    if (l) logItemVoid(l);
     paintBill();
   }
 
@@ -501,11 +502,35 @@ export async function render(el) {
     paintBill();
   }
 
-  function hold() {
-    if (!st.cart.size) return toast("Add products before holding a bill", "error");
-    st.holds.push({ cart: cloneCart(st.cart), billDisc: st.billDisc, customerId: st.customerId, pay: st.pay, at: new Date().toLocaleTimeString() });
+  // Open bills are saved in the database: they stay open after a reload and can be finished on any till.
+  const billRecord = () => ({
+    lines: [...st.cart.values()].map((l) => ({ ...l })),
+    billDisc: st.billDisc || null,
+    customerId: st.customerId || "",
+    customerName: customers.find((c) => c.id === st.customerId)?.name || "Walk-in",
+    pay: st.pay,
+  });
+  async function saveOpenBill() {
+    const data = { ...billRecord(), status: "open", byName: session.name, byUid: session.uid, updatedAt: serverTimestamp() };
+    if (st.openId) await updateDoc(doc(db, "openBills", st.openId), data);
+    else {
+      const ref = await addDoc(collection(db, "openBills"), { ...data, createdAt: serverTimestamp() });
+      st.openId = ref.id;
+    }
+  }
+  const lineSummary = (lines) => lines.map((l) => ({
+    name: isService(l) ? l.name : byId[l.id]?.name || "item",
+    qty: l.qty,
+    unit: isService(l) ? "service" : unitByKey(byId[l.id], l.unitKey).name,
+    price: l.price,
+    total: round2(l.price * l.qty),
+  }));
+  async function hold() {
+    if (!st.cart.size) return toast("Add products before opening a bill", "error");
+    try { await saveOpenBill(); } catch (err) { return toast(err.message, "error"); }
+    st.openId = null;
     clearBill();
-    toast(`Bill held (${st.holds.length} on hold)`, "success");
+    toast("Bill kept open. Find it under Bills, Open.", "success");
   }
 
   function clearBill() {
@@ -513,34 +538,69 @@ export async function render(el) {
     paintBill();
   }
 
-  function openHeld() {
-    if (!st.holds.length) return toast("No bills are on hold", "info");
-    const nameOf = (l) => (isService(l) ? l.name : byId[l.id]?.name || "item");
-    openModal("Held bills", `
-      <div class="stack">
-        ${st.holds.map((h, i) => {
-          const lines = [...h.cart.values()].map((l) => `${isService(l) ? "" : l.qty + " × "}${esc(nameOf(l))}`).join(", ");
-          return `<div class="held-row"><div><strong>Held at ${esc(h.at)}</strong><small>${lines}</small></div>
-            <div class="row-actions"><button class="btn primary sm" data-resume="${i}">Resume</button><button class="btn ghost sm hover-danger" data-discard="${i}">Discard</button></div></div>`;
-        }).join("")}
-      </div>`, (body, close) => {
-      body.querySelectorAll("[data-resume]").forEach((b) => b.addEventListener("click", () => {
-        const h = st.holds.splice(Number(b.dataset.resume), 1)[0];
-        if (st.cart.size) st.holds.push({ cart: cloneCart(st.cart), billDisc: st.billDisc, customerId: st.customerId, pay: st.pay, at: new Date().toLocaleTimeString() });
-        st.cart = cloneCart(h.cart); st.billDisc = h.billDisc || null; st.customerId = h.customerId; st.pay = h.pay;
-        $("#p-customer").value = st.customerId; $("#p-pay").value = st.pay;
-        paintBill(); close();
-      }));
-      body.querySelectorAll("[data-discard]").forEach((b) => b.addEventListener("click", () => {
-        st.holds.splice(Number(b.dataset.discard), 1);
-        paintBill(); close();
-        toast("Held bill discarded", "info");
-      }));
+  // Voiding asks for a reason. Every void is kept under Bills, Void.
+  function askReason(title, onOk) {
+    openModal(title, `
+      <form id="rs-form" class="form-grid">
+        <label class="span-2">Reason<textarea name="reason" required rows="3" minlength="3" placeholder="Why is this being voided?"></textarea></label>
+        <div class="form-actions span-2"><button type="button" class="btn ghost" data-cancel>Back</button><button class="btn primary" type="submit">Void</button></div>
+      </form>`, (mb, close) => {
+      mb.querySelector("[data-cancel]").addEventListener("click", close);
+      onSubmit(mb.querySelector("#rs-form"), async (e) => {
+        const reason = String(new FormData(e.target).get("reason") || "").trim();
+        if (reason.length < 3) return toast("Write the reason (at least 3 letters).", "error");
+        await onOk(reason);
+        close();
+      });
     });
   }
+  function voidBill() {
+    if (!st.cart.size) return;
+    askReason("Void this bill", async (reason) => {
+      const lines = cartLines();
+      const total = billTotals(lines).saleTotal;
+      const source = st.openId ? "open bill" : "bill";
+      await addDoc(collection(db, "voidedBills"), {
+        source, ref: st.openId || "", reason, lines: lineSummary([...st.cart.values()]), total,
+        byName: session.name, byUid: session.uid, createdAt: serverTimestamp(),
+      });
+      if (st.openId) await deleteDoc(doc(db, "openBills", st.openId)).catch(() => {});
+      await audit("bill.void", { source, total, reason });
+      st.openId = null;
+      clearBill();
+      toast("Bill voided", "info");
+    });
+  }
+  // Removing a line is kept as a void too, so every item taken off a bill can be seen.
+  function logItemVoid(l) {
+    const summary = lineSummary([l]);
+    addDoc(collection(db, "voidedBills"), {
+      source: "item", ref: st.openId || "", reason: "Item removed from the bill", lines: summary, total: summary[0]?.total || 0,
+      byName: session.name, byUid: session.uid, createdAt: serverTimestamp(),
+    }).catch(() => {});
+  }
 
-  // Held bills must not share line objects with the live cart.
-  const cloneCart = (m) => new Map([...m].map(([k, v]) => [k, { ...v }]));
+  // Open bills, from the Bills page: the bill is loaded here, and the bill on the screen is kept open first.
+  async function resumeBill(id) {
+    try {
+      const snap = await getDoc(doc(db, "openBills", id));
+      if (!snap.exists()) return toast("That open bill is no longer there", "error");
+      if (st.cart.size) await saveOpenBill();
+      const b = snap.data();
+      st.cart = new Map((b.lines || []).map((l) => [l.key, { ...l }]));
+      st.billDisc = b.billDisc || null;
+      st.customerId = b.customerId || "";
+      st.pay = b.pay || st.pay;
+      st.openId = id;
+      $("#p-customer").value = st.customerId;
+      $("#p-pay").value = st.pay;
+      paintBill();
+      paintGrid();
+      toast("Open bill loaded", "success");
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  }
 
   // Recharge, cash-in and cash-out. The operator or wallet comes from the admin's lists.
   function openServiceForm(type) {
@@ -671,8 +731,11 @@ export async function render(el) {
   $("#p-pay").addEventListener("change", () => { st.pay = $("#p-pay").value; paintBill(); });
   $("#p-tender").addEventListener("input", paintBill);
   $("#p-hold").addEventListener("click", hold);
-  $("#p-held").addEventListener("click", openHeld);
-  $("#p-clear").addEventListener("click", clearBill);
+  $("#p-held").addEventListener("click", async () => {
+    try { if (st.cart.size) await saveOpenBill(); } catch (err) { return toast(err.message, "error"); }
+    location.hash = "#/bills";
+  });
+  $("#p-clear").addEventListener("click", voidBill);
   onAction($("#p-charge"), charge);
   $("#p-mobile-btn").addEventListener("click", () => {
     $("#p-bill").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -717,6 +780,7 @@ export async function render(el) {
       await audit("sale", { invoiceNo: sale.invoiceNo, total: sale.total, payment: method.key, services: sale.serviceCount });
       for (const l of lines) if (!isService(l)) byId[l.id].stock = (Number(byId[l.id].stock) || 0) - l.pieces;
       Object.assign(floats, sale.floatBalances || {});
+      if (st.openId) { await deleteDoc(doc(db, "openBills", st.openId)).catch(() => {}); st.openId = null; }
       afterSale(lines, sale);
       clearBill();
       paintGrid();
@@ -801,6 +865,8 @@ export async function render(el) {
   paintCats();
   paintGrid();
   paintBill();
+  const resumeId = sessionStorage.getItem("medipos.resumeBill");
+  if (resumeId) { sessionStorage.removeItem("medipos.resumeBill"); resumeBill(resumeId); }
 }
 
 // Asks an administrator to approve a discount. The server checks their password and returns a short-lived approval.

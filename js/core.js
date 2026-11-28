@@ -95,9 +95,9 @@ export function applyAppFont() {
 export const WRITE_AREAS = ["pos", "inventory", "purchasing", "partners", "accounting"];
 
 export const DEFAULT_ROLES = {
-  admin:       { label: "Administrator", pages: ["dashboard", "pos", "shift", "returns", "inventory", "purchasing", "partners", "accounting", "reports", "admin"], write: [...WRITE_AREAS] },
-  pharmacist:  { label: "Pharmacist",    pages: ["dashboard", "pos", "shift", "returns", "inventory", "purchasing", "partners", "reports"], write: ["pos", "inventory", "purchasing", "partners"] },
-  cashier:     { label: "Cashier",       pages: ["dashboard", "pos", "shift", "returns", "partners"], write: ["pos", "partners"] },
+  admin:       { label: "Administrator", pages: ["dashboard", "pos", "bills", "shift", "returns", "inventory", "purchasing", "partners", "accounting", "reports", "admin"], write: [...WRITE_AREAS] },
+  pharmacist:  { label: "Pharmacist",    pages: ["dashboard", "pos", "bills", "shift", "returns", "inventory", "purchasing", "partners", "reports"], write: ["pos", "inventory", "purchasing", "partners"] },
+  cashier:     { label: "Cashier",       pages: ["dashboard", "pos", "bills", "shift", "returns", "partners"], write: ["pos", "partners"] },
   storekeeper: { label: "Storekeeper",   pages: ["inventory", "purchasing", "partners"], write: ["inventory", "purchasing"] },
   accountant:  { label: "Accountant",    pages: ["dashboard", "accounting", "reports", "purchasing", "partners"], write: ["accounting"] },
 };
@@ -185,8 +185,11 @@ export async function loadSettings() {
     const add = [];
     if (pages.includes("pos") && !pages.includes("shift")) add.push("shift");
     if (pages.includes("pos") && !pages.includes("prescriptions")) add.push("prescriptions");
+    if (pages.includes("pos") && !pages.includes("bills")) add.push("bills");
     if (pages.includes("inventory") && !pages.includes("import")) add.push("import");
     if (add.length) roles[key].pages = [...pages, ...add];
+    // A saved role with its own per-screen actions gets Bills with the same actions as the sale screen.
+    if (roles[key].actions && !roles[key].actions.bills && roles[key].actions.pos) roles[key].actions.bills = [...roles[key].actions.pos];
   }
   fmtCache = null;
   return r.exists();

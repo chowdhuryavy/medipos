@@ -337,6 +337,17 @@ service cloud.firestore {
     }
 
     // Everything else is closed.
+    // Open bills: kept by the till until they are closed (charged) or voided.
+    match /openBills/{id} {
+      allow read: if can('pos', 'view');
+      allow create, update, delete: if can('pos', 'add');
+    }
+    // Voids: every bill, open bill, item or sale voided, with its reason. Kept for the record: no change or delete.
+    match /voidedBills/{id} {
+      allow read: if can('pos', 'view') || can('returns', 'view') || can('reports', 'view');
+      allow create: if can('pos', 'add');
+      allow update, delete: if false;
+    }
     // Discounts the administrator creates: every signed-in staff member reads them, only administrators change them.
     match /discounts/{id} {
       allow read: if isActive();
