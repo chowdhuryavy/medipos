@@ -81,7 +81,7 @@ export function scanCode(onCode) {
           reader = new Html5Qrcode("scan-view", { verbose: false });
           await reader.start(
             { facingMode: "environment" },
-            { fps: 10, qrbox: (w, h) => ({ width: Math.round(Math.min(w, h) * 0.8), height: Math.round(Math.min(w, h) * 0.5) }) },
+            { fps: 10, aspectRatio: 1.333 },
             (text) => found(text),
             () => {}
           );
