@@ -2184,3 +2184,7 @@ html[data-lang="bn"] body { line-height: 1.6; }
   #toast-root { left: 12px; right: 12px; justify-items: stretch; }
   .toast { max-width: none; width: 100%; }
 }
+
+/* Camera view for the bundled barcode library (iPhone, Firefox and other browsers). */
+.scan-view { width: 100%; border-radius: 18px; overflow: hidden; background: #000; }
+.scan-view video { width: 100%; max-height: 60vh; object-fit: cover; display: block; }
