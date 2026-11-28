@@ -13,8 +13,24 @@ export const LOADING_STYLES = {
   aurora: { name: "Doctor", desc: "A doctor bobs under a colour-shifting name." },
   bar: { name: "Medicine", desc: "A medicine bottle fills as the bar moves." },
   clinic: { name: "Clinic", desc: "A doctor with a stethoscope, a medicine bottle and pills, all moving together." },
+  care: { name: "Care Orbit", desc: "A doctor at the centre with a swinging stethoscope; medicines orbit around." },
 };
 export const normalizeStyle = (s) => (LOADING_STYLES[s] ? s : "orbit");
+
+/** The medicines that orbit the doctor, placed around a circle; each one stays upright as it turns. */
+const CARE_ICONS = [
+  `<svg viewBox="0 0 36 18" width="30" height="15"><rect width="36" height="18" rx="9" fill="#fff"/><path d="M18 0 H9 A9 9 0 0 0 9 18 H18 Z" fill="#14b8a6"/></svg>`,
+  `<svg viewBox="0 0 80 100" width="26" height="32"><rect x="26" y="2" width="28" height="12" rx="3" fill="#0f766e"/><rect x="14" y="14" width="52" height="82" rx="12" fill="#e0f2f1" stroke="#0f766e" stroke-width="4"/><rect x="18" y="40" width="44" height="52" rx="9" fill="#5eead4"/><path d="M40 52 V76 M28 64 H52" stroke="#fff" stroke-width="7" stroke-linecap="round"/></svg>`,
+  `<svg viewBox="0 0 40 40" width="28" height="28"><path d="M16 4 H24 V16 H36 V24 H24 V36 H16 V24 H4 V16 H16 Z" fill="#ef4444"/></svg>`,
+  `<svg viewBox="0 0 40 40" width="28" height="28"><circle cx="20" cy="20" r="16" fill="#f59e0b"/><path d="M20 4 V36" stroke="#fff" stroke-width="3"/></svg>`,
+];
+const CARE_RADIUS = 104;
+const careItems = CARE_ICONS.map((svg, i) => {
+  const r = (i * 90) * Math.PI / 180;
+  const x = 130 + CARE_RADIUS * Math.sin(r) - 25;
+  const y = 130 - CARE_RADIUS * Math.cos(r) - 25;
+  return `<span class="care-item" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px">${svg}</span>`;
+}).join("");
 
 const logoDisc = () => `<div class="logo-disc">${logoHtml(icon("pos"), "brand-mark big")}</div>`;
 
@@ -58,6 +74,14 @@ const HERO = {
       <svg class="cl-pill p1" viewBox="0 0 36 18"><rect width="36" height="18" rx="9" fill="#fff"/><path d="M18 0 H9 A9 9 0 0 0 9 18 H18 Z" fill="#14b8a6"/></svg>
       <svg class="cl-pill p2" viewBox="0 0 36 18"><rect width="36" height="18" rx="9" fill="#fff"/><path d="M18 0 H9 A9 9 0 0 0 9 18 H18 Z" fill="#f59e0b"/></svg>
       <svg class="cl-ecg" viewBox="0 0 300 30"><path d="M0 15 H90 L100 15 L108 3 L118 27 L128 9 L136 15 H300"/></svg>
+    </div>`,
+  care: () => `<div class="scene scene-care" aria-hidden="true">
+      <span class="care-pulse"></span><span class="care-pulse p2"></span>
+      <div class="care-orbit">${careItems}</div>
+      <div class="care-core">
+        <svg class="care-doc" viewBox="0 0 120 130" aria-hidden="true"><path d="M18 130 L22 84 Q24 72 40 68 L60 80 L80 68 Q96 72 98 84 L102 130 Z" fill="#fff"/><path d="M60 80 L54 100 L60 130 L66 100 Z" fill="#14b8a6"/><circle cx="60" cy="40" r="22" fill="#fde4cf"/><path d="M38 36 Q40 14 60 14 Q80 14 82 36 Q74 26 60 26 Q46 26 38 36 Z" fill="#1f2937"/><circle cx="52" cy="40" r="2.5" fill="#1f2937"/><circle cx="68" cy="40" r="2.5" fill="#1f2937"/><path d="M52 50 Q60 56 68 50" fill="none" stroke="#1f2937" stroke-width="2.5" stroke-linecap="round"/><rect x="75" y="84" width="4" height="14" fill="#ef4444"/><rect x="72" y="87" width="10" height="4" fill="#ef4444"/></svg>
+        <svg class="care-steth" viewBox="0 0 80 80" aria-hidden="true"><path d="M22 6 V34 A18 18 0 0 0 58 34 V6" fill="none" stroke="#334155" stroke-width="4" stroke-linecap="round"/><circle cx="22" cy="6" r="4" fill="#334155"/><circle cx="58" cy="6" r="4" fill="#334155"/><path d="M58 34 C58 56 78 56 78 41" fill="none" stroke="#334155" stroke-width="4" stroke-linecap="round"/><circle cx="78" cy="34" r="7" fill="#14b8a6" stroke="#334155" stroke-width="3"/></svg>
+      </div>
     </div>`,
 };
 
